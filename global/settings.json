@@ -3,39 +3,5 @@
     "ANTHROPIC_BASE_URL": "http://localhost:8080",
     "ANTHROPIC_AUTH_TOKEN": "dummy-gateway-token",
     "ANTHROPIC_CUSTOM_HEADERS": "x-portkey-metadata: {\"_user\":\"diogo.pereira-marques@roche.com\",\"ona_user_id\":\"019d0332-cb44-724b-ad3f-525da52a87d4\",\"tool\":\"claude\"}"
-  },
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash /Users/pereid22/.claude/hooks/post-write-validate.sh",
-            "timeout": 30
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "prompt",
-            "prompt": "Before stopping, run through this checklist. If any item fails, continue working until it passes:\n\n1. TESTS: Have the project tests been run since the last code change? If not, run them now using the test command from CLAUDE.md (or auto-detect: npm test / pytest / cargo test / go test ./...). Are they all passing?\n\n2. TYPECHECK: Does the project typecheck cleanly? (tsc --noEmit / mypy / cargo check). If not, fix the errors.\n\n3. LINT: Are there any lint errors? If so, fix them.\n\n4. COMPLETENESS: Is the task actually done? Re-read the original request and verify every part was addressed.\n\n5. STALE CODE: Did you leave any TODO, console.log, debug statements, or commented-out code?\n\nOnly stop if all checks pass. If anything fails, fix it and re-run the relevant check."
-          }
-        ]
-      }
-    ],
-    "SubagentStop": [
-      {
-        "hooks": [
-          {
-            "type": "prompt",
-            "prompt": "Before this subagent stops, verify:\n\n1. Was the assigned task fully completed? State what was done with concrete evidence (file paths changed, test output, etc.).\n2. Did all tests pass? Show the test output.\n3. Are there any unresolved issues or TODOs left from this task?\n\nIf the task is incomplete or tests are failing, continue working."
-          }
-        ]
-      }
-    ]
   }
 }

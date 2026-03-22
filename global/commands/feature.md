@@ -6,7 +6,9 @@ allowed-tools: Agent, Bash, Read, Glob, Grep
 You are orchestrating a feature planning workflow.
 
 Check `$ARGUMENTS`:
-- If it starts with `propose`, strip the word "propose" and run the **Propose flow** below.
+- If it starts with `propose`, strip `propose` and run the **Propose flow** below.
+- If it starts with `push`, run the **Push flow** below.
+- If it starts with `merge checkout`, run the **Merge checkout flow** below.
 - Otherwise, run the **Full flow** below.
 
 ---
@@ -16,6 +18,18 @@ Check `$ARGUMENTS`:
 A lightweight path for jotting down ideas without switching context.
 
 Draft the issue title and body, iterate with the user until they confirm, then invoke gh-agent directly with `checkout=false` so no local branch switch occurs.
+
+---
+
+## Push flow (`/feature push`)
+
+Invoke gh-agent with `merge` to create a pull request from the current branch against the default branch.
+
+---
+
+## Merge checkout flow (`/feature merge checkout`)
+
+Invoke gh-agent with `merge approve checkout` to merge the open PR, pull the default branch, check it out locally, and delete the feature branch.
 
 ---
 

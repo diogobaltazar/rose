@@ -2,7 +2,7 @@
 
 rose is a scaffolding tool that installs and manages Claude Code configuration. This repo IS the source of truth for that configuration.
 
-## Critical rule: edit the source, not ~/.claude
+## Critical rule: edit the source code, not ~/.claude
 
 When working inside this repo, any changes to Claude definitions — agents, commands, personas, hooks, settings — must be made to the source files here, **not** to `~/.claude` directly.
 
@@ -23,10 +23,10 @@ global/        # Installed to ~/.claude/ by `rose install`
 ├── hooks/
 ├── agents/
 └── commands/
-template/      # Copied into projects by `rose init`
-registry/      # Imported into projects by `rose add`
-commands/      # rose CLI command implementations (Python)
-cli.py         # Typer entrypoint
+src/rose/      # Python CLI package
+├── cli.py     # Typer entrypoint
+└── commands/  # Command implementations
+pyproject.toml
 Dockerfile
 compose.yml
 ```

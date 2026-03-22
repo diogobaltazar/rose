@@ -27,8 +27,15 @@ def install(
         show_default=False,
     ),
     force: bool = typer.Option(False, "--force", "-f", help="Overwrite existing files"),
+    reset: bool = typer.Option(False, "--reset", help="Wipe target directory before installing"),
 ):
     """Install global Claude Code config onto the host (~/.claude)."""
+
+    if reset:
+        if claude_dir.exists():
+            shutil.rmtree(claude_dir)
+        claude_dir.mkdir(parents=True, exist_ok=True)
+        force = True
 
     console.print()
     console.print(Panel("[bold magenta]rose install[/bold magenta]", expand=False))

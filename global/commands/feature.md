@@ -1,6 +1,6 @@
 ---
-description: "Plan and scaffold a new feature. Runs an analyst conversation, then creates a GitHub issue and branch. Use 'propose <title>' to skip analysis and just note the idea (no local checkout)."
-allowed-tools: Agent, Bash, Read, Glob, Grep
+description: "Plan and scaffold a new feature. Runs an analyst conversation, then creates a GitHub issue, branch, and worktree. Use 'propose <title>' to skip analysis and just note the idea (no local checkout)."
+allowed-tools: Agent, Bash, Read, Glob, Grep, EnterWorktree, ExitWorktree
 ---
 
 You are orchestrating a feature planning workflow.
@@ -29,46 +29,35 @@ Invoke gh-agent with `merge` to create a pull request from the current branch ag
 
 ## Merge checkout flow (`/feature merge checkout`)
 
-Invoke gh-agent with `merge approve checkout` to merge the open PR, pull the default branch, check it out locally, and delete the feature branch.
+1. Invoke gh-agent with `merge approve checkout` to merge the open PR.
+2. Call `ExitWorktree` with `action=remove` to return to the main directory and remove the worktree.
+3. Pull the default branch:
+   ```bash
+   git pull
+   ```
 
 ---
 
 ## Full flow (`/feature <idea>`)
 
-### Step 1: Check for existing feature agents
-
-Before doing anything, check whether `.claude/commands/` already contains a command file matching the feature slug (lowercase, hyphenated form of the feature idea). If it does, this is a **reassessment run** — skip to Step 4.
-
-### Step 2: Analysis
+### Step 1: Analysis
 
 Invoke the analyst-agent with the feature idea: $ARGUMENTS
 
-### Step 3: GitHub handoff
+### Step 2: GitHub handoff
 
-Once the user has confirmed the feature description with the analyst-agent, invoke the gh-agent with the approved description (checkout=true).
+Once the user has confirmed the feature description with the analyst-agent:
 
-### Step 4: Scaffold or reassess feature agents
+1. Invoke gh-agent with the approved description and `checkout=false`. Capture the branch name returned (e.g. `feat/42-my-feature`).
+2. Call `EnterWorktree` with `name=<branch-name>` — this creates a worktree and switches the session into it.
+3. Inside the worktree, rename the branch to match and push:
+   ```bash
+   git branch -m <branch-name>
+   git push -u origin HEAD
+   ```
 
-**On every `/feature` run** — whether this is a new feature or an existing one — invoke `project-conf-agent` with the following instructions:
-
-> "Scaffold (or reassess) the feature agents for: <feature title>
->
-> Feature description: <confirmed description from analyst, or the original $ARGUMENTS if reassessing>
->
-> Feature slug: <slug>
->
-> If `.claude/commands/<slug>.md` does not exist, scaffold the full set:
-> - `.claude/commands/<slug>.md` — orchestrating command
-> - `.claude/agents/<slug>-analyst.md`
-> - `.claude/agents/<slug>-engineer.md`
-> - `.claude/agents/<slug>-tester.md`
->
-> If those files already exist, reassess the feature's complexity against the current codebase and update the `model` fields if the complexity tier has changed. Report what changed and why.
->
-> In both cases, assess complexity and choose models deliberately before writing."
-
-### Step 5: Done
+### Step 3: Done
 
 Report to the user:
-- The GitHub issue URL and branch name (if this was a new feature)
-- The files created or updated by `project-conf-agent`
+- The GitHub issue URL and branch name
+- That the session is now inside the worktree and ready to work

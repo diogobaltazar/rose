@@ -1,6 +1,6 @@
 ---
 name: project-conf-agent
-description: Creates project-specific Claude configuration — feature commands, specialist agents with model selection, CLAUDE.md additions — inside the current project's .claude/ directory. Inspects the project stack and assesses complexity before generating anything.
+description: Creates project-specific Claude configuration — dedicated feature skills (command + analyst/engineer/tester agents), CLAUDE.md additions — inside the current project's .claude/ directory. Invoked via /project config when a feature graduates to a first-class project concern. Inspects the project stack and assesses complexity before generating anything.
 model: opus
 tools: Read, Glob, Grep, Write, Edit, Bash
 ---

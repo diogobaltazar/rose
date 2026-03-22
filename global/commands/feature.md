@@ -35,40 +35,15 @@ Invoke gh-agent with `merge approve checkout` to merge the open PR, pull the def
 
 ## Full flow (`/feature <idea>`)
 
-### Step 1: Check for existing feature agents
-
-Before doing anything, check whether `.claude/commands/` already contains a command file matching the feature slug (lowercase, hyphenated form of the feature idea). If it does, this is a **reassessment run** — skip to Step 4.
-
-### Step 2: Analysis
+### Step 1: Analysis
 
 Invoke the analyst-agent with the feature idea: $ARGUMENTS
 
-### Step 3: GitHub handoff
+### Step 2: GitHub handoff
 
 Once the user has confirmed the feature description with the analyst-agent, invoke the gh-agent with the approved description (checkout=true).
 
-### Step 4: Scaffold or reassess feature agents
-
-**On every `/feature` run** — whether this is a new feature or an existing one — invoke `project-conf-agent` with the following instructions:
-
-> "Scaffold (or reassess) the feature agents for: <feature title>
->
-> Feature description: <confirmed description from analyst, or the original $ARGUMENTS if reassessing>
->
-> Feature slug: <slug>
->
-> If `.claude/commands/<slug>.md` does not exist, scaffold the full set:
-> - `.claude/commands/<slug>.md` — orchestrating command
-> - `.claude/agents/<slug>-analyst.md`
-> - `.claude/agents/<slug>-engineer.md`
-> - `.claude/agents/<slug>-tester.md`
->
-> If those files already exist, reassess the feature's complexity against the current codebase and update the `model` fields if the complexity tier has changed. Report what changed and why.
->
-> In both cases, assess complexity and choose models deliberately before writing."
-
-### Step 5: Done
+### Step 3: Done
 
 Report to the user:
-- The GitHub issue URL and branch name (if this was a new feature)
-- The files created or updated by `project-conf-agent`
+- The GitHub issue URL and branch name

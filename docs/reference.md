@@ -59,6 +59,20 @@ Key-value pairs injected as environment variables into every Claude Code session
 
 ---
 
+## CLI (`rose`)
+
+The `rose` CLI manages the global config installation. It runs inside the rose Docker container and mounts `~/.claude` from the host.
+
+| Command | Description |
+|---------|-------------|
+| `rose install` | Copy global config from the image into `~/.claude/` |
+| `rose reinstall` | Wipe `~/.claude/` and reinstall from scratch |
+| `rose uninstall` | Remove the installed global config from `~/.claude/` |
+
+Project-level configuration (scaffolding `.claude/` inside a project, configuring agents and commands) is handled by Claude itself via the `/project` slash command — not the CLI.
+
+---
+
 ## Agents
 
 Agents are subprocesses that Claude can spawn to handle specific tasks. They run as independent Claude instances with their own tool access and system prompt.
@@ -180,24 +194,25 @@ User                     /feature                              gh-agent
 
 
 /feature <idea>                              (full flow)
-User         /feature      analyst-agent    gh-agent    project-conf-agent
- │               │                │             │                │
- │  /feature     │                │             │                │
- │──────────────>│  invoke(idea)  │             │                │
- │               │───────────────>│             │                │
- │<────── questions / clarifications ───────────│                │
- │─────── answers ─────────────────────────────>│                │
- │<────── proposed description ─────────────────│                │
- │  confirm      │                │             │                │
- │──────────────────────────────>│             │                │
- │               │<─ approved ───│             │                │
- │               │  invoke(description, checkout=true)          │
- │               │──────────────────────────────────────────────>│ gh issue create
- │               │                             │                 │ git checkout -b
- │<──────────────────────── issue URL + branch ─────────────────│
- │               │  invoke(scaffold agents)    │                 │
- │               │─────────────────────────────────────────────>│
- │<──────────────────────── scaffolded files ───────────────────│
+User         /feature      analyst-agent        gh-agent      project-conf-agent
+ │               │                │                 │                  │
+ │  /feature     │                │                 │                  │
+ │──────────────>│  invoke(idea)  │                 │                  │
+ │               │───────────────>│                 │                  │
+ │<──── questions / clarifications ────────────────│                  │
+ │───── answers ───────────────────────────────────>│                  │
+ │<──── proposed description ──────────────────────│                  │
+ │  confirm      │                │                 │                  │
+ │──────────────────────────────>│                 │                  │
+ │               │<─ approved ───│                 │                  │
+ │               │  invoke(description, checkout=true)                │
+ │               │────────────────────────────────>│                  │
+ │               │                                 │ gh issue create  │
+ │               │                                 │ git checkout -b  │
+ │<──────────────────────── issue URL + branch ────│                  │
+ │               │  invoke(scaffold agents)         │                  │
+ │               │──────────────────────────────────────────────────>│
+ │<──────────────────────── scaffolded files ───────────────────────│
 
 
 /gh merge                                    (after work is done)

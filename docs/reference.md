@@ -213,6 +213,8 @@ Use $ARGUMENTS to capture anything the user types after the command name.
 | `analyst-agent` | Researches the codebase and web, asks clarifying questions, proposes and iterates on the feature description until the user confirms | Opus |
 | `gh-agent` | Creates the GitHub issue, determines the default branch, creates and checks out a `feat/<n>-<slug>` branch | Sonnet |
 
+> **Note — repo targeting is automatic.** `gh-agent` uses the `gh` CLI, which reads the `origin` remote of whichever git repository Claude is running in. You do not need to configure a target repo anywhere — opening Claude Code inside a project is sufficient for all issue and PR operations to target the correct GitHub repo.
+
 **Workflows:**
 
 ```

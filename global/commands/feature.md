@@ -1,6 +1,6 @@
 ---
-description: "Plan and scaffold a new feature. Runs an analyst conversation, then creates a GitHub issue and branch. Use 'propose <title>' to skip analysis and just note the idea (no local checkout)."
-allowed-tools: Agent, Bash, Read, Glob, Grep
+description: "Plan and scaffold a new feature. Runs an analyst conversation, then creates a GitHub issue, branch, and worktree. Use 'propose <title>' to skip analysis and just note the idea (no local checkout)."
+allowed-tools: Agent, Bash, Read, Glob, Grep, EnterWorktree, ExitWorktree
 ---
 
 You are orchestrating a feature planning workflow.
@@ -29,7 +29,12 @@ Invoke gh-agent with `merge` to create a pull request from the current branch ag
 
 ## Merge checkout flow (`/feature merge checkout`)
 
-Invoke gh-agent with `merge approve checkout` to merge the open PR, pull the default branch, check it out locally, and delete the feature branch.
+1. Invoke gh-agent with `merge approve checkout` to merge the open PR.
+2. Call `ExitWorktree` with `action=remove` to return to the main directory and remove the worktree.
+3. Pull the default branch:
+   ```bash
+   git pull
+   ```
 
 ---
 
@@ -41,9 +46,18 @@ Invoke the analyst-agent with the feature idea: $ARGUMENTS
 
 ### Step 2: GitHub handoff
 
-Once the user has confirmed the feature description with the analyst-agent, invoke the gh-agent with the approved description (checkout=true).
+Once the user has confirmed the feature description with the analyst-agent:
+
+1. Invoke gh-agent with the approved description and `checkout=false`. Capture the branch name returned (e.g. `feat/42-my-feature`).
+2. Call `EnterWorktree` with `name=<branch-name>` — this creates a worktree and switches the session into it.
+3. Inside the worktree, rename the branch to match and push:
+   ```bash
+   git branch -m <branch-name>
+   git push -u origin HEAD
+   ```
 
 ### Step 3: Done
 
 Report to the user:
 - The GitHub issue URL and branch name
+- That the session is now inside the worktree and ready to work

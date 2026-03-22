@@ -1,6 +1,6 @@
 ---
 name: gh-agent
-description: Handles GitHub operations. Two modes — (1) feature setup: creates a GitHub issue, creates a branch, and optionally creates a git worktree for isolated parallel development; accepts `checkout=false` to skip. (2) merge: `merge` creates a PR against the default branch (or updates an existing one, analysing new commits for uncovered issues); `merge approve checkout` merges it, pulls, checks out the default branch, and removes the feature worktree (requires admin).
+description: Handles GitHub operations. Two modes — (1) feature setup: creates a GitHub issue and a remote branch (no local checkout); worktree creation is handled by the caller. (2) merge: `merge` creates a PR against the default branch (or updates an existing one, analysing new commits for uncovered issues); `merge approve checkout` merges the PR (caller handles worktree exit and pull, requires admin).
 model: sonnet
 tools: Bash
 ---
@@ -17,8 +17,6 @@ GitHub operations use the `gh` CLI, which authenticates via keyring (set up with
 ---
 
 ## Feature Setup
-
-Check whether the caller passed `checkout=false`. If so, skip local checkout in Step 3.
 
 ### Step 1: Create the GitHub issue
 
@@ -42,34 +40,15 @@ Branch naming: `feat/<issue-number>-<kebab-case-slug-of-title>`
 
 ```bash
 git fetch origin
-```
-
-**If `checkout=true` (default):** create a git worktree in a sibling directory:
-```bash
-# Derive repo name from the repo root directory
-repo_name=$(basename "$(git rev-parse --show-toplevel)")
-worktree_path="../${repo_name}-worktrees/feat/<issue-number>-<slug>"
-
-# Check if a worktree for this branch already exists
-if git worktree list | grep -q "feat/<issue-number>-<slug>"; then
-  echo "Worktree already exists at $worktree_path"
-else
-  git worktree add "$worktree_path" -b feat/<issue-number>-<slug> origin/<default-branch>
-fi
-```
-
-**If `checkout=false`:** create the branch without switching to it:
-```bash
 git branch feat/<issue-number>-<slug> origin/<default-branch>
 git push origin feat/<issue-number>-<slug>
 ```
 
 ### Step 4: Confirm
 
-Inform the user:
+Inform the caller:
 - The GitHub issue URL
 - The branch name created
-- If `checkout=true`: the full worktree path — instruct the user to `cd` into it to begin work
 
 ---
 
@@ -226,30 +205,11 @@ gh pr edit --body "<updated body>"
 
 Report to the user which issues were added to the PR.
 
-### `merge approve checkout` — merge, pull, and return to default branch
+### `merge approve checkout` — merge the PR
 
 This requires admin privileges. Merge the open PR for the current branch:
 ```bash
 gh pr merge --merge --auto
 ```
 
-Switch to the default branch and pull:
-```bash
-git checkout <default-branch>
-git pull
-```
-
-Remove the feature worktree if one exists:
-```bash
-repo_name=$(basename "$(git rev-parse --show-toplevel)")
-branch_name=$(git rev-parse --abbrev-ref HEAD)  # captured before checkout
-worktree_path="../${repo_name}-worktrees/${branch_name}"
-
-if [ -d "$worktree_path" ]; then
-  git worktree remove "$worktree_path"
-fi
-```
-
-If `git worktree remove` fails (e.g. uncommitted changes remain in the worktree), report the failure and the worktree path clearly — do not force-remove.
-
-Confirm to the user that the PR was merged, the local repo is on the default branch, and whether the worktree was removed.
+Confirm to the caller that the PR was merged. The caller handles worktree exit and pulling the default branch.

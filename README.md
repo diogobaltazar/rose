@@ -378,7 +378,14 @@ User         /gh               gh-agent
  │───────────>│                    │
  │            │  invoke(merge)     │
  │            │───────────────────>│
- │            │                    │ gh pr create --base <default>
+ │            │                    │ git log (commits vs default)
+ │            │                    │ gh issue list (open issues)
+ │            │                    │ [analyse coverage]
+ │<── matches + proposed issues ───│
+ │  confirm / correct              │
+ │────────────────────────────────>│
+ │            │                    │ gh issue create (new issues)
+ │            │                    │ gh pr create --body "Closes #..."
  │<── PR URL ──────────────────────│
 
 

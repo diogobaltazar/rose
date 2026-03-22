@@ -1,7 +1,5 @@
 import typer
 from rose.commands.install import install
-from rose.commands.init import init
-from rose.commands.remove import remove
 from rose.commands.uninstall import uninstall
 from pathlib import Path
 
@@ -13,8 +11,6 @@ app = typer.Typer(
 )
 
 app.command()(install)
-app.command()(init)
-app.command()(remove)
 app.command()(uninstall)
 
 

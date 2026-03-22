@@ -1,5 +1,5 @@
 ---
-description: "GitHub operations on the current branch. Usage: /gh merge | /gh merge approve checkout"
+description: "GitHub operations on the current branch. Usage: /gh merge | /gh merge approve checkout | /gh issue <description>"
 allowed-tools: Agent, Bash
 ---
 
@@ -7,7 +7,17 @@ GitHub operations on the current repository.
 
 Operation: $ARGUMENTS
 
-Invoke gh-agent with the operation: $ARGUMENTS
+Parse `$ARGUMENTS`:
+- If it starts with `issue`, strip `issue` and run the **Issue flow** below.
+- Otherwise, invoke gh-agent with the full operation string.
+
+## Operations (non-issue)
 
 - `merge` — create a pull request from the current branch against the default branch
 - `merge approve checkout` — merge the open PR, pull the default branch, and check it out locally (requires admin privileges)
+
+## Issue flow (`/gh issue <description>`)
+
+Invoke gh-agent in feature-setup mode with the description provided. Pass `checkout=true` so a branch is created and checked out locally.
+
+No drafting, no iteration — just create the issue and branch immediately.

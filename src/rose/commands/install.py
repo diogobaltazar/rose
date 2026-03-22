@@ -14,7 +14,6 @@ ROSE_DIR = Path("/rose")
 GLOBAL_FILES = {
     "CLAUDE.md":     ("CLAUDE.md",     False),  # (src relative to /rose/global, is_dir)
     "settings.json": ("settings.json", False),
-    "hooks":         ("hooks",         True),
     "agents":        ("agents",        True),
     "commands":      ("commands",      True),
 }

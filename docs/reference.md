@@ -11,7 +11,7 @@ Claude Code has two distinct config locations that layer on top of each other:
 | **Global** | `~/.claude/` | Every Claude Code session on this machine |
 | **Project** | `<project>/.claude/` | Only when Claude is opened inside that project directory |
 
-Global config sets up the agent's baseline behaviours (hooks, global agents, slash commands). Project config adds project-specific context on top (component agents, `CLAUDE.md`).
+Global config sets up the agent's baseline behaviours (global agents, slash commands). Project config adds project-specific context on top (component agents, `CLAUDE.md`).
 
 ---
 
@@ -20,30 +20,28 @@ Global config sets up the agent's baseline behaviours (hooks, global agents, sla
 ```
 ~/.claude/
 ├── CLAUDE.md              # Global persona and tone (read every session)
-├── settings.json          # Core configuration: env vars, hooks
-├── hooks/
-│   └── post-write-validate.sh   # Shell script run after every file write
+├── settings.json          # Core configuration: env vars
 ├── agents/                # Global subagents available in every session
 │   ├── git-agent.md
 │   ├── analyst-agent.md
-│   └── gh-agent.md
+│   ├── gh-agent.md
+│   └── project-conf-agent.md
 └── commands/              # Slash commands available in every session
     ├── git.md
+    ├── gh.md
     ├── feature.md
-    ├── issue.md
-    └── commit.md
+    └── project.md
 ```
 
 ---
 
 ## `settings.json`
 
-The main config file. Supports two top-level keys: `env` and `hooks`.
+The main config file. Supports one top-level key: `env`.
 
 ```json
 {
-  "env": { ... },
-  "hooks": { ... }
+  "env": { ... }
 }
 ```
 
@@ -59,59 +57,19 @@ Key-value pairs injected as environment variables into every Claude Code session
 }
 ```
 
-### `hooks`
-
-Hooks let you attach shell commands or prompt injections to lifecycle events in the Claude Code session. There are four hook events:
-
-| Event | When it fires |
-|-------|---------------|
-| `PreToolUse` | Before Claude calls any tool |
-| `PostToolUse` | After Claude calls any tool |
-| `Stop` | When Claude is about to stop and return control to the user |
-| `SubagentStop` | When a subagent (spawned via the Agent tool) is about to stop |
-
-Each hook entry has a `matcher` (regex matched against the tool name, for tool-related events) and a list of hook definitions:
-
-```json
-"PostToolUse": [
-  {
-    "matcher": "Write|Edit",
-    "hooks": [
-      {
-        "type": "command",
-        "command": "bash ~/.claude/hooks/post-write-validate.sh",
-        "timeout": 30
-      }
-    ]
-  }
-]
-```
-
-**Hook types:**
-
-- `"type": "command"` — runs a shell command. The hook receives a JSON payload on stdin describing the event (tool name, input, output). Exit code controls behaviour:
-  - `0` — pass silently
-  - `2` — feed the hook's stderr back to Claude as an error to fix
-  - Any other non-zero — block the action and surface the error
-
-- `"type": "prompt"` — injects a prompt string into Claude's context at that lifecycle point. Used on `Stop` and `SubagentStop` to enforce checklists before Claude finishes.
-
 ---
 
-## `hooks/post-write-validate.sh`
+## CLI (`rose`)
 
-A `PostToolUse` hook that fires after every `Write` or `Edit` tool call. It:
+The `rose` CLI manages the global config installation. It runs inside the rose Docker container and mounts `~/.claude` from the host.
 
-1. Reads the JSON event from stdin and extracts `tool_input.file_path`
-2. Detects the file extension
-3. Runs the appropriate linter for that file type:
-   - `.ts/.tsx/.js/.jsx` → Biome (if `biome.json` exists) or ESLint
-   - `.py` → Ruff
-   - `.rs` → rustfmt
-   - `.go` → gofmt
-4. Exits `2` if there are errors, feeding them back to Claude to fix immediately
+| Command | Description |
+|---------|-------------|
+| `rose install` | Copy global config from the image into `~/.claude/` |
+| `rose reinstall` | Wipe `~/.claude/` and reinstall from scratch |
+| `rose uninstall` | Remove the installed global config from `~/.claude/` |
 
-This creates a tight feedback loop: Claude writes a file, it is linted instantly, and any errors are returned before Claude moves on to the next step.
+Project-level configuration (scaffolding `.claude/` inside a project, configuring agents and commands) is handled by Claude itself via the `/project` slash command — not the CLI.
 
 ---
 
@@ -157,13 +115,14 @@ Claude sees all available agents' `name` and `description` fields in its context
 |-------|-------------|
 | `git-agent` | Executes git operations sequentially (commit, push) |
 | `analyst-agent` | Researches codebase and web, asks clarifying questions, proposes feature descriptions |
-| `gh-agent` | Creates GitHub issues, manages branches |
+| `gh-agent` | Creates GitHub issues, manages branches and pull requests |
+| `project-conf-agent` | Inspects a project's stack and scaffolds or reassesses feature agents in `.claude/` |
 
 ---
 
 ## Commands (slash commands)
 
-Slash commands are user-invocable shortcuts. Typing `/commit` in a Claude Code session triggers the corresponding command file.
+Slash commands are user-invocable shortcuts. Typing `/git` in a Claude Code session triggers the corresponding command file.
 
 A command is a Markdown file with frontmatter:
 
@@ -196,15 +155,15 @@ Use $ARGUMENTS to capture anything the user types after the command name.
 | Command | What it does |
 |---------|-------------|
 | `/git` | Invokes `git-agent` to run git operations sequentially (commit, push) |
-| `/feature` | Orchestrates analysis → GitHub issue → branch checkout for a new feature |
-| `/issue` | Drafts and creates a GitHub issue, then branches and checks out |
-| `/commit` | Groups unstaged changes into commits with good semantics |
+| `/gh` | GitHub operations: `merge`, `merge approve checkout`, `issue <description>` |
+| `/feature` | Orchestrates analysis → GitHub issue → branch checkout → agent scaffolding for a new feature. Also: `push` creates the PR, `merge checkout` merges and returns to default |
+| `/project` | Project-level Claude configuration: `init` scaffolds `.claude/`, `config` invokes `project-conf-agent` |
 
 ---
 
 ## `/feature` — multi-agent workflow
 
-`/feature <idea>` orchestrates three participants — the user, `analyst-agent`, and `gh-agent` — to go from a rough idea to a ready-to-work branch.
+`/feature <idea>` orchestrates the user, `analyst-agent`, `gh-agent`, and `project-conf-agent` to go from a rough idea to a ready-to-work branch with scaffolded feature agents.
 
 **Agents involved:**
 
@@ -212,6 +171,7 @@ Use $ARGUMENTS to capture anything the user types after the command name.
 |-------|------|-------|
 | `analyst-agent` | Researches the codebase and web, asks clarifying questions, proposes and iterates on the feature description until the user confirms | Opus |
 | `gh-agent` | Creates the GitHub issue, determines the default branch, creates and checks out a `feat/<n>-<slug>` branch | Sonnet |
+| `project-conf-agent` | Inspects the project stack, assesses complexity, and scaffolds or reassesses feature-specific agents in `.claude/` | Sonnet |
 
 > **Note — repo targeting is automatic.** `gh-agent` uses the `gh` CLI, which reads the `origin` remote of whichever git repository Claude is running in. You do not need to configure a target repo anywhere — opening Claude Code inside a project is sufficient for all issue and PR operations to target the correct GitHub repo.
 
@@ -234,56 +194,58 @@ User                     /feature                              gh-agent
 
 
 /feature <idea>                              (full flow)
-User                /feature          analyst-agent              gh-agent
- │                      │                   │                       │
- │  /feature <idea>     │                   │                       │
- │─────────────────────>│  invoke(idea)     │                       │
- │                      │──────────────────>│ read CLAUDE.md,       │
- │                      │                   │ explore, research web  │
- │<──────── questions / clarifications ─────│                       │
- │─────────── answers ─────────────────────>│                       │
- │<──────── proposed description ───────────│                       │
- │  confirm             │                   │                       │
- │─────────────────────────────────────────>│                       │
- │                      │<─ approved ───────│                       │
- │                      │  invoke(description, checkout=true)       │
- │                      │──────────────────────────────────────────>│
- │                      │                   │  gh issue create      │
- │                      │                   │  git checkout -b      │
- │<──────────────── issue URL + branch ──────────────────────────────│
+User         /feature      analyst-agent        gh-agent      project-conf-agent
+ │               │                │                 │                  │
+ │  /feature     │                │                 │                  │
+ │──────────────>│  invoke(idea)  │                 │                  │
+ │               │───────────────>│                 │                  │
+ │<──── questions / clarifications ─────────────────│                  │
+ │───── answers ───────────────────────────────────>│                  │
+ │<──── proposed description ───────────────────────│                  │
+ │  confirm      │                │                 │                  │
+ │───────────────────────────────>│                 │                  │
+ │               │<─ approved ────│                 │                  │
+ │               │  invoke(description, checkout=true)                 │
+ │               │─────────────────────────────────>│                  │
+ │               │                                  │ gh issue create  │
+ │               │                                  │ git checkout -b  │
+ │<──────────────────────── issue URL + branch ─────│                  │
+ │               │  invoke(scaffold agents)         │                  │
+ │               │────────────────────────────────────────────────────>│
+ │<──────────────────────── feature work ──────────────────────────────│
+ 
 
 
-/gh merge                                    (after work is done)
-User         /gh               gh-agent
- │            │                    │
- │  merge     │                    │
- │───────────>│                    │
- │            │  invoke(merge)     │
- │            │───────────────────>│
- │            │                    │ git log (commits vs default)
- │            │                    │ gh issue list (open issues)
- │            │                    │ [analyse coverage]
+/feature push                                (create PR when work is done)
+User         /feature          gh-agent
+ │               │                 │
+ │  push         │                 │
+ │──────────────>│  invoke(merge)  │
+ │               │────────────────>│
+ │               │                 │ git log (commits vs default)
+ │               │                 │ gh issue list (open issues)
+ │               │                 │ [analyse coverage]
  │<── matches + proposed issues ───│
  │  confirm / correct              │
  │────────────────────────────────>│
- │            │                    │ gh issue create (new issues)
- │            │                    │ gh pr create --body "Closes #..."
+ │               │                 │ gh issue create (new issues)
+ │               │                 │ gh pr create --body "Closes #..."
  │<── PR URL ──────────────────────│
 
 
-/gh merge approve checkout                   (admin — merge and return to default)
-User         /gh               gh-agent
- │            │                    │
- │  merge     │                    │
- │  approve   │                    │
- │  checkout  │                    │
- │───────────>│  invoke(merge      │
- │            │  approve checkout) │
- │            │───────────────────>│
- │            │                    │ gh pr merge
- │            │                    │ git checkout <default>
- │            │                    │ git pull
- │<─ done ─────────────────────────│
+/feature merge checkout                      (merge after testing locally)
+User         /feature              gh-agent
+ │               │                     │
+ │  merge        │                     │
+ │  checkout     │                     │
+ │──────────────>│  invoke(merge       │
+ │               │  approve checkout)  │
+ │               │────────────────────>│
+ │               │                     │ gh pr merge
+ │               │                     │ git checkout <default>
+ │               │                     │ git pull
+ │               │                     │ git branch -d <feature>
+ │<─ done ─────────────────────────────│
 ```
 
 ---
@@ -330,5 +292,3 @@ src/
 - [ ] Linter passes
 - [ ] No console.log in production code
 ```
-
-The `Validation Commands` block is especially important: the `Stop` hook's prompt instructs Claude to run these commands before finishing any task. If they fail, Claude continues working until they pass.

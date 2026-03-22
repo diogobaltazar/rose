@@ -21,14 +21,14 @@ Group unstaged changes into logical commits with clear titles.
    ```
    - Imperative mood, lowercase, no period, max 72 chars
    - Scope is optional
-   - No body
+   - One-sentence body summarising what changed and why
 4. Present all proposed commits to the user for confirmation before executing
 5. For each confirmed commit, stage only its files explicitly and commit:
    ```bash
    git add <files>
    git commit -m "<title>"
    ```
-   Never use `git add -A`. Never use `--no-verify`. Never commit `.env` or secrets.
+   Never use `git add -A`. Never use `--no-verify`. Never commit `.env` or secrets. Never add a `Co-Authored-By` trailer. Include a very concise body summarising what changed and why.
 6. After all commits, show `git log --oneline -10`
 
 ### push

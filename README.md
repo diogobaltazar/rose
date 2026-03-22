@@ -1,13 +1,17 @@
 # rose
 
-Coding agent scaffolding tool. Bootstraps Claude Code super-agent config into any project.
+Installs and manages Claude Code configuration.
+
+## Prerequisites
+
+- **GitHub CLI** authenticated: `gh auth login` — rose uses `gh` (not SSH keys) for all GitHub operations (issue creation, branch management, token injection into Docker). Run this once per host before using rose.
 
 ## Setup
 
 Add this alias to your `~/.zshrc`:
 
 ```bash
-alias rose='docker run --rm -it \
+alias rose='mkdir -p "$HOME/.claude" && docker run --rm -it \
   -v "$(pwd):/project" \
   -v "$HOME/.claude:/claude" \
   -v "$HOME/.ssh:/root/.ssh:ro" \
@@ -20,42 +24,67 @@ Then reload:
 source ~/.zshrc
 ```
 
+### Developer setup
+
+If you're working on rose itself, set `ROSE_DEV` to the repo path. The alias will then use `docker compose` (which rebuilds on source changes) instead of the published image:
+
+```bash
+export ROSE_DEV="$HOME/source/rose"
+alias rose='mkdir -p "$HOME/.claude" && \
+  if [ -n "${ROSE_DEV:-}" ]; then \
+    GITHUB_TOKEN="$(gh auth token 2>/dev/null)" TARGET_PROJECT="$(pwd)" \
+      docker compose -f "$ROSE_DEV/compose.yml" run --rm rose; \
+  else \
+    docker run --rm -it \
+      -v "$(pwd):/project" \
+      -v "$HOME/.claude:/claude" \
+      -v "$HOME/.ssh:/root/.ssh:ro" \
+      -e GITHUB_TOKEN="$(gh auth token 2>/dev/null)" \
+      rose:latest; \
+  fi'
+```
+
+Unset `ROSE_DEV` (or don't set it) to use the published image like a regular client.
+
 ## Commands
 
 | Command | Does |
 |---|---|
 | `rose install` | Install global Claude config onto host (`~/.claude`) |
-| `rose reinstall` | Wipe `~/.claude` and reinstall from scratch (alias for `rose install --reset`) |
-| `rose init` | Bootstrap current project with `CLAUDE.md` + component agents |
+| `rose reinstall` | Wipe `~/.claude` and reinstall from scratch |
 | `rose remove` | Remove rose Claude setup from current project |
-| `rose add <name>` | Add a registry config to current project |
-| `rose register <path>` | Register a project agent into the rose registry via PR |
+| `rose uninstall` | Remove rose config from `~/.claude` |
 
 ### rose install
-Run once per host. Installs to `~/.claude`:
-- `settings.json` — hooks (feedback loops, auto-linting, stop checks)
-- `hooks/` — post-write validation script
-- `agents/` — global agents (commit-organizer, doc-verifier, code-health, tdd-enforcer)
-- `commands/` — slash commands (/commit, /verify, /docs, /health)
 
-```bash
-rose install                          # install into ~/.claude
-rose install --force                  # overwrite existing files
-rose install --reset                  # wipe ~/.claude and reinstall from scratch
-rose install --link ~/source/.claude  # install into ~/source/.claude and symlink ~/.claude to it
-rose reinstall                        # alias for rose install --reset
+Run once per host. Installs to `~/.claude`:
+
+```
+~/.claude/
+├── CLAUDE.md                       # global persona and tone
+├── settings.json                   # env vars + lifecycle hooks
+├── hooks/
+│   └── post-write-validate.sh      # lints every file after Write/Edit
+├── agents/
+│   ├── git-agent.md                # commit and push operations
+│   ├── analyst-agent.md            # feature analysis and scoping
+│   └── gh-agent.md                 # GitHub issue + branch creation
+└── commands/
+    ├── git.md                      # /git commit, /git push, /git commit push
+    ├── feature.md                  # /feature
+    ├── issue.md                    # /issue
+    └── commit.md                   # /commit
 ```
 
-### rose init
-Run once per project. Copies into current directory:
-- `CLAUDE.md` — fill in your stack and validation commands
-- `.claude/agents/` — component agents (auth, list-ui, rag)
-
 ```bash
-rose init
+rose install                # install into ~/.claude
+rose install --force        # overwrite existing files
+rose install --reset        # wipe ~/.claude and reinstall from scratch
+rose reinstall              # alias for rose install --reset
 ```
 
 ### rose remove
+
 Removes `.claude/agents/` and `CLAUDE.md` from the current project.
 
 ```bash
@@ -63,40 +92,30 @@ rose remove      # prompts for confirmation
 rose remove -y   # skip confirmation
 ```
 
-### rose add
-Import a named config from the registry into the current project.
+### rose uninstall
+
+Removes rose's global config from `~/.claude`.
 
 ```bash
-rose add fastapi
-rose add rag-milvus
-rose add fastapi --force   # overwrite existing agent
+rose uninstall      # prompts for confirmation
+rose uninstall -y   # skip confirmation
 ```
-
-### rose register
-Register a project agent into the rose registry by opening a PR.
-
-```bash
-rose register .claude/agents/rag.md
-rose register .claude/agents/rag.md --name rag-milvus
-```
-
-## Registry
-
-Built-in configs shipped with the image:
-
-| Name | Description |
-|---|---|
-| `fastapi` | FastAPI service agent |
-| `rag-milvus` | RAG pipeline with Milvus vector store |
 
 ## This repo IS the config
 
-All files under `.claude/` are the source of truth:
-- `.claude/template/` — copied by `rose init`
-- `.claude/global/` — installed by `rose install`
-- `.claude/registry/` — imported by `rose add`
+The `global/` directory is the source of truth. All definitions flow via `rose install`:
 
-To update config, edit files here and rebuild the image.
+```
+global/  →  rose install  →  ~/.claude/
+```
+
+Never edit `~/.claude` directly — changes are overwritten on the next `rose reinstall`.
+
+## Build
+
+```bash
+docker build -t rose .
+```
 
 ---
 
@@ -115,27 +134,25 @@ Claude Code has two distinct config locations that layer on top of each other:
 
 Global config sets up the agent's baseline behaviours (hooks, global agents, slash commands). Project config adds project-specific context on top (component agents, `CLAUDE.md`).
 
-Rose installs global config via `rose install` and project config via `rose init`.
-
 ---
 
 ### `~/.claude/` — global config tree
 
 ```
 ~/.claude/
+├── CLAUDE.md              # Global persona and tone (read every session)
 ├── settings.json          # Core configuration: env vars, hooks
 ├── hooks/
 │   └── post-write-validate.sh   # Shell script run after every file write
 ├── agents/                # Global subagents available in every session
-│   ├── commit-organizer.md
-│   ├── doc-verifier.md
-│   ├── code-health.md
-│   └── tdd-enforcer.md
+│   ├── git-agent.md
+│   ├── analyst-agent.md
+│   └── gh-agent.md
 └── commands/              # Slash commands available in every session
-    ├── commit.md
-    ├── verify.md
-    ├── docs.md
-    └── health.md
+    ├── git.md
+    ├── feature.md
+    ├── issue.md
+    └── commit.md
 ```
 
 ---
@@ -257,20 +274,11 @@ Claude sees all available agents' `name` and `description` fields in its context
 
 **Rose's global agents:**
 
-| Agent | Description | Tools |
-|-------|-------------|-------|
-| `commit-organizer` | Audits changes, groups by concern, writes Conventional Commit messages, commits after approval | Bash, Read, Glob, Grep |
-| `doc-verifier` | Checks docs match implementation; updates outdated docs in place | Read, Write, Edit, Glob, Grep, Bash |
-| `code-health` | Audits for dead code, duplication, and tech debt; produces a prioritised report without making changes | Read, Glob, Grep, Bash |
-| `tdd-enforcer` | Enforces RED → GREEN → REFACTOR cycle; writes failing test first, then minimal implementation | Read, Write, Edit, Bash, Glob, Grep |
-
-**Rose's project template agents** (copied by `rose init`, one per component):
-
-| Agent | Scope |
-|-------|-------|
-| `auth` | Login flows, sessions, JWT/OAuth, RBAC/ABAC, security hardening |
-| `list-ui` | List components, pagination, filtering, sorting |
-| `rag` | Retrieval-augmented generation, embeddings, vector store queries |
+| Agent | Description |
+|-------|-------------|
+| `git-agent` | Executes git operations sequentially (commit, push) |
+| `analyst-agent` | Researches codebase and web, asks clarifying questions, proposes feature descriptions |
+| `gh-agent` | Creates GitHub issues, manages branches |
 
 ---
 
@@ -297,7 +305,7 @@ Use $ARGUMENTS to capture anything the user types after the command name.
 | `description` | Shown in the `/` picker UI |
 | `allowed-tools` | Tools Claude may use when executing this command |
 
-**`$ARGUMENTS`** is replaced with everything the user typed after the command name. For example, `/health src/auth` sets `$ARGUMENTS` to `src/auth`.
+**`$ARGUMENTS`** is replaced with everything the user typed after the command name. For example, `/git commit push` sets `$ARGUMENTS` to `commit push`.
 
 **Command placement:**
 
@@ -308,10 +316,93 @@ Use $ARGUMENTS to capture anything the user types after the command name.
 
 | Command | What it does |
 |---------|-------------|
-| `/commit` | Invokes `commit-organizer` agent to audit, group, and commit changes |
-| `/verify` | Runs lint → typecheck → tests → doc check; fixes failures before reporting |
-| `/docs` | Invokes `doc-verifier` agent to sync docs with implementation |
-| `/health` | Invokes `code-health` agent to produce a prioritised audit report |
+| `/git` | Invokes `git-agent` to run git operations sequentially (commit, push) |
+| `/feature` | Orchestrates analysis → GitHub issue → branch checkout for a new feature |
+| `/issue` | Drafts and creates a GitHub issue, then branches and checks out |
+
+---
+
+### `/feature` — multi-agent workflow
+
+`/feature <idea>` orchestrates three participants — the user, `analyst-agent`, and `gh-agent` — to go from a rough idea to a ready-to-work branch.
+
+**Agents involved:**
+
+| Agent | Role | Model |
+|-------|------|-------|
+| `analyst-agent` | Researches the codebase and web, asks clarifying questions, proposes and iterates on the feature description until the user confirms | Opus |
+| `gh-agent` | Creates the GitHub issue, determines the default branch, creates and checks out a `feat/<n>-<slug>` branch | Sonnet |
+
+**Workflows:**
+
+```
+/feature propose <title>                     (lightweight — no analysis, no checkout)
+User                     /feature                              gh-agent
+ │                           │                                    │
+ │  propose <title>          │                                    │
+ │──────────────────────────>│                                    │
+ │<─── draft ────────────────│                                    │
+ │  iterate / approve        │                                    │
+ │──────────────────────────>│                                    │
+ │                           │  invoke(description, checkout=false)│
+ │                           │───────────────────────────────────>│
+ │                           │                                    │ gh issue create
+ │                           │                                    │ git branch + push
+ │<── issue URL + branch ─────────────────────────────────────────│
+
+
+/feature <idea>                              (full flow)
+User                /feature          analyst-agent              gh-agent
+ │                      │                   │                       │
+ │  /feature <idea>     │                   │                       │
+ │─────────────────────>│  invoke(idea)     │                       │
+ │                      │──────────────────>│ read CLAUDE.md,       │
+ │                      │                   │ explore, research web  │
+ │<──────── questions / clarifications ─────│                       │
+ │─────────── answers ─────────────────────>│                       │
+ │<──────── proposed description ───────────│                       │
+ │  confirm             │                   │                       │
+ │─────────────────────────────────────────>│                       │
+ │                      │<─ approved ───────│                       │
+ │                      │  invoke(description, checkout=true)       │
+ │                      │──────────────────────────────────────────>│
+ │                      │                   │  gh issue create      │
+ │                      │                   │  git checkout -b      │
+ │<──────────────── issue URL + branch ──────────────────────────────│
+
+
+/gh merge                                    (after work is done)
+User         /gh               gh-agent
+ │            │                    │
+ │  merge     │                    │
+ │───────────>│                    │
+ │            │  invoke(merge)     │
+ │            │───────────────────>│
+ │            │                    │ git log (commits vs default)
+ │            │                    │ gh issue list (open issues)
+ │            │                    │ [analyse coverage]
+ │<── matches + proposed issues ───│
+ │  confirm / correct              │
+ │────────────────────────────────>│
+ │            │                    │ gh issue create (new issues)
+ │            │                    │ gh pr create --body "Closes #..."
+ │<── PR URL ──────────────────────│
+
+
+/gh merge approve checkout                   (admin — merge and return to default)
+User         /gh               gh-agent
+ │            │                    │
+ │  merge     │                    │
+ │  approve   │                    │
+ │  checkout  │                    │
+ │───────────>│  invoke(merge      │
+ │            │  approve checkout) │
+ │            │───────────────────>│
+ │            │                    │ gh pr merge
+ │            │                    │ git checkout <default>
+ │            │                    │ git pull
+ │<─ done ─────────────────────────│
+```
 
 ---
 
@@ -347,11 +438,6 @@ src/
 ├── features/
 └── lib/
 
-## Component Ownership (Agents)
-| Component | Agent | Scope |
-|-----------|-------|-------|
-| Auth      | auth  | Login, sessions, permissions |
-
 ## Coding Standards
 - All public functions must have tests (TDD)
 - No `any` types in TypeScript
@@ -364,40 +450,3 @@ src/
 ```
 
 The `Validation Commands` block is especially important: the `Stop` hook's prompt instructs Claude to run these commands before finishing any task. If they fail, Claude continues working until they pass.
-
----
-
-### `<project>/.claude/` — project config tree
-
-```
-<project>/
-├── CLAUDE.md              # Persistent project context (read every session)
-└── .claude/
-    └── agents/            # Component agents for this project
-        ├── auth.md
-        ├── list-ui.md
-        └── rag.md
-```
-
-`rose init` copies this structure from the template. Edit `CLAUDE.md` to match your stack and delete or replace agent files to match your components.
-
----
-
-### The registry
-
-The registry is a collection of reusable agent configs for common technology components. `rose add <name>` copies a registry agent into the current project's `.claude/agents/`.
-
-Registry agents live in `.claude/registry/<name>/agent.md` inside the rose image. `rose register` opens a PR to add a new agent to the registry.
-
-Built-in registry agents:
-
-| Name | Technology |
-|------|-----------|
-| `fastapi` | FastAPI routes, Pydantic models, dependency injection, async patterns |
-| `rag-milvus` | RAG pipeline with Milvus vector store, embeddings, retrieval |
-
-## Build
-
-```bash
-docker build -t rose .
-```

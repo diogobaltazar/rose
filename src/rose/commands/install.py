@@ -12,7 +12,8 @@ console = Console()
 ROSE_DIR = Path("/rose")
 
 GLOBAL_FILES = {
-    "settings.json": ("settings.json", False),  # (src relative to /rose/global, is_dir)
+    "CLAUDE.md":     ("CLAUDE.md",     False),  # (src relative to /rose/global, is_dir)
+    "settings.json": ("settings.json", False),
     "hooks":         ("hooks",         True),
     "agents":        ("agents",        True),
     "commands":      ("commands",      True),
@@ -26,8 +27,15 @@ def install(
         show_default=False,
     ),
     force: bool = typer.Option(False, "--force", "-f", help="Overwrite existing files"),
+    reset: bool = typer.Option(False, "--reset", help="Wipe target directory before installing"),
 ):
     """Install global Claude Code config onto the host (~/.claude)."""
+
+    if reset:
+        if claude_dir.exists():
+            shutil.rmtree(claude_dir)
+        claude_dir.mkdir(parents=True, exist_ok=True)
+        force = True
 
     console.print()
     console.print(Panel("[bold magenta]rose install[/bold magenta]", expand=False))
@@ -70,11 +78,4 @@ def install(
         results.add_row("[green]✓[/green]", name, "installed")
 
     console.print(results)
-
-    console.print(Panel(
-        "[bold]Next steps[/bold]\n\n"
-        "Run [cyan]rose init[/cyan] in any project to bootstrap project-level config.",
-        border_style="dim",
-        expand=False,
-    ))
     console.print()

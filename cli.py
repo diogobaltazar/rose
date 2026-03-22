@@ -4,6 +4,7 @@ from commands.install import install
 from commands.remove import remove
 from commands.add import add
 from commands.register import register
+from commands.uninstall import uninstall
 
 app = typer.Typer(
     name="rose",
@@ -17,6 +18,7 @@ app.command()(init)
 app.command()(remove)
 app.command()(add)
 app.command()(register)
+app.command()(uninstall)
 
 if __name__ == "__main__":
     app()

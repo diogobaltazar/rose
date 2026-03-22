@@ -1,6 +1,6 @@
 # rose
 
-Coding agent scaffolding tool. Bootstraps Claude Code super-agent config into any project.
+Installs and manages Claude Code configuration.
 
 ## Prerequisites
 
@@ -51,13 +51,12 @@ Unset `ROSE_DEV` (or don't set it) to use the published image like a regular cli
 | Command | Does |
 |---|---|
 | `rose install` | Install global Claude config onto host (`~/.claude`) |
-| `rose reinstall` | Wipe `~/.claude` and reinstall from scratch (alias for `rose install --reset`) |
-| `rose init` | Bootstrap current project with `CLAUDE.md` + component agents |
+| `rose reinstall` | Wipe `~/.claude` and reinstall from scratch |
 | `rose remove` | Remove rose Claude setup from current project |
-| `rose add <name>` | Add a registry config to current project |
-| `rose register <path>` | Register a project agent into the rose registry via PR |
+| `rose uninstall` | Remove rose config from `~/.claude` |
 
 ### rose install
+
 Run once per host. Installs to `~/.claude`:
 
 ```
@@ -78,23 +77,14 @@ Run once per host. Installs to `~/.claude`:
 ```
 
 ```bash
-rose install                          # install into ~/.claude
-rose install --force                  # overwrite existing files
-rose install --reset                  # wipe ~/.claude and reinstall from scratch
-rose install --link ~/source/.claude  # install into ~/source/.claude and symlink ~/.claude to it
-rose reinstall                        # alias for rose install --reset
-```
-
-### rose init
-Run once per project. Copies into current directory:
-- `CLAUDE.md` — fill in your stack and validation commands
-- `.claude/agents/` — component agents (auth, list-ui, rag)
-
-```bash
-rose init
+rose install                # install into ~/.claude
+rose install --force        # overwrite existing files
+rose install --reset        # wipe ~/.claude and reinstall from scratch
+rose reinstall              # alias for rose install --reset
 ```
 
 ### rose remove
+
 Removes `.claude/agents/` and `CLAUDE.md` from the current project.
 
 ```bash
@@ -102,40 +92,30 @@ rose remove      # prompts for confirmation
 rose remove -y   # skip confirmation
 ```
 
-### rose add
-Import a named config from the registry into the current project.
+### rose uninstall
+
+Removes rose's global config from `~/.claude`.
 
 ```bash
-rose add fastapi
-rose add rag-milvus
-rose add fastapi --force   # overwrite existing agent
+rose uninstall      # prompts for confirmation
+rose uninstall -y   # skip confirmation
 ```
-
-### rose register
-Register a project agent into the rose registry by opening a PR.
-
-```bash
-rose register .claude/agents/rag.md
-rose register .claude/agents/rag.md --name rag-milvus
-```
-
-## Registry
-
-Built-in configs shipped with the image:
-
-| Name | Description |
-|---|---|
-| `fastapi` | FastAPI service agent |
-| `rag-milvus` | RAG pipeline with Milvus vector store |
 
 ## This repo IS the config
 
-These top-level directories are the source of truth:
-- `template/` — copied by `rose init`
-- `global/` — installed by `rose install`
-- `registry/` — imported by `rose add`
+The `global/` directory is the source of truth. All definitions flow via `rose install`:
 
-To update config, edit files here and rebuild the image.
+```
+global/  →  rose install  →  ~/.claude/
+```
+
+Never edit `~/.claude` directly — changes are overwritten on the next `rose reinstall`.
+
+## Build
+
+```bash
+docker build -t rose .
+```
 
 ---
 
@@ -154,8 +134,6 @@ Claude Code has two distinct config locations that layer on top of each other:
 
 Global config sets up the agent's baseline behaviours (hooks, global agents, slash commands). Project config adds project-specific context on top (component agents, `CLAUDE.md`).
 
-Rose installs global config via `rose install` and project config via `rose init`.
-
 ---
 
 ### `~/.claude/` — global config tree
@@ -168,8 +146,13 @@ Rose installs global config via `rose install` and project config via `rose init
 │   └── post-write-validate.sh   # Shell script run after every file write
 ├── agents/                # Global subagents available in every session
 │   ├── git-agent.md
+│   ├── analyst-agent.md
+│   └── gh-agent.md
 └── commands/              # Slash commands available in every session
-    ├── commit.md
+    ├── git.md
+    ├── feature.md
+    ├── issue.md
+    └── commit.md
 ```
 
 ---
@@ -291,17 +274,11 @@ Claude sees all available agents' `name` and `description` fields in its context
 
 **Rose's global agents:**
 
-| Agent | Description | Tools |
-|-------|-------------|-------|
-| `git-agent` | Executes git operations sequentially: commit (groups changes, Conventional Commits, no body) and push | Bash, Read, Glob, Grep |
-
-**Rose's project template agents** (copied by `rose init`, one per component):
-
-| Agent | Scope |
-|-------|-------|
-| `auth` | Login flows, sessions, JWT/OAuth, RBAC/ABAC, security hardening |
-| `list-ui` | List components, pagination, filtering, sorting |
-| `rag` | Retrieval-augmented generation, embeddings, vector store queries |
+| Agent | Description |
+|-------|-------------|
+| `git-agent` | Executes git operations sequentially (commit, push) |
+| `analyst-agent` | Researches codebase and web, asks clarifying questions, proposes feature descriptions |
+| `gh-agent` | Creates GitHub issues, manages branches |
 
 ---
 
@@ -425,11 +402,6 @@ src/
 ├── features/
 └── lib/
 
-## Component Ownership (Agents)
-| Component | Agent | Scope |
-|-----------|-------|-------|
-| Auth      | auth  | Login, sessions, permissions |
-
 ## Coding Standards
 - All public functions must have tests (TDD)
 - No `any` types in TypeScript
@@ -442,40 +414,3 @@ src/
 ```
 
 The `Validation Commands` block is especially important: the `Stop` hook's prompt instructs Claude to run these commands before finishing any task. If they fail, Claude continues working until they pass.
-
----
-
-### `<project>/.claude/` — project config tree
-
-```
-<project>/
-├── CLAUDE.md              # Persistent project context (read every session)
-└── .claude/
-    └── agents/            # Component agents for this project
-        ├── auth.md
-        ├── list-ui.md
-        └── rag.md
-```
-
-`rose init` copies this structure from the template. Edit `CLAUDE.md` to match your stack and delete or replace agent files to match your components.
-
----
-
-### The registry
-
-The registry is a collection of reusable agent configs for common technology components. `rose add <name>` copies a registry agent into the current project's `.claude/agents/`.
-
-Registry agents live in `registry/<name>/agent.md` inside the rose image. `rose register` opens a PR to add a new agent to the registry.
-
-Built-in registry agents:
-
-| Name | Technology |
-|------|-----------|
-| `fastapi` | FastAPI routes, Pydantic models, dependency injection, async patterns |
-| `rag-milvus` | RAG pipeline with Milvus vector store, embeddings, retrieval |
-
-## Build
-
-```bash
-docker build -t rose .
-```

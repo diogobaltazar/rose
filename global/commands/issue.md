@@ -1,11 +1,13 @@
 ---
 description: Draft, iterate on, and create a GitHub issue, then branch and checkout before implementing
-allowed-tools: Bash, Read, Glob, Grep
+allowed-tools: Agent, Bash, Read, Glob, Grep
 ---
 
 You are helping the user define a well-scoped GitHub issue before any implementation begins.
 
 Additional context or idea from user: $ARGUMENTS
+
+If `$ARGUMENTS` contains `checkout=false`, strip it from the idea text and set `checkout=false` for Step 3. Otherwise default to `checkout=true`.
 
 ## Steps
 
@@ -39,28 +41,16 @@ Show the draft to the user and ask: "Does this look right, or would you like to 
 
 Keep iterating — updating the draft in full each time — until the user explicitly approves it (e.g. "looks good", "ship it", "go ahead").
 
-### 3. Create the issue
+### 3. Hand off to gh-agent
 
-Once approved, run:
+Once approved, invoke the `gh-agent` via the Agent tool, passing:
+- The full issue title and body
+- `checkout=true` or `checkout=false` (from the flag parsed above)
 
-```
-gh issue create --title "<title>" --body "<body>"
-```
+gh-agent will create the GitHub issue, create the branch, and (if `checkout=true`) check it out locally. Wait for its confirmation before proceeding.
 
-Capture the issue URL and number from the output.
+### 4. Begin implementation (checkout=true only)
 
-### 4. Create and checkout the branch
+Only if `checkout=true`: now start writing code. Follow the project's Definition of Done throughout.
 
-Derive a slug from the title: lowercase, spaces to hyphens, strip special characters, max ~5 words.
-
-```
-git checkout -b {number}-{slug}
-```
-
-e.g. `git checkout -b 42-add-docker-compose`
-
-Confirm to the user: "Issue #{number} created. Branch `{number}-{slug}` checked out. Ready to implement."
-
-### 5. Begin implementation
-
-Only now start writing code. Follow the project's Definition of Done throughout.
+If `checkout=false`: confirm the issue and branch were created, and let the user know they can pick it up later.

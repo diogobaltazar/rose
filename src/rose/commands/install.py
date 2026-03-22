@@ -78,11 +78,4 @@ def install(
         results.add_row("[green]✓[/green]", name, "installed")
 
     console.print(results)
-
-    console.print(Panel(
-        "[bold]Next steps[/bold]\n\n"
-        "Run [cyan]rose init[/cyan] in any project to bootstrap project-level config.",
-        border_style="dim",
-        expand=False,
-    ))
     console.print()

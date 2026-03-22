@@ -4,22 +4,14 @@ RUN apk add --no-cache python3 py3-pip bash git github-cli
 
 WORKDIR /rose
 
-COPY requirements.txt .
-RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
-
-COPY cli.py .
-COPY commands/ commands/
-
-# rose init  — project template
-COPY template/ template/
+COPY pyproject.toml .
+COPY src/ src/
+RUN pip3 install --no-cache-dir --break-system-packages .
 
 # rose install — global Claude config
 COPY global/ global/
 
-# rose add — registry configs
-COPY registry/ registry/
-
 WORKDIR /project
 
-ENTRYPOINT ["python3", "/rose/cli.py"]
+ENTRYPOINT ["rose"]
 CMD ["--help"]

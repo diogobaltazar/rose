@@ -326,37 +326,6 @@ Use $ARGUMENTS to capture anything the user types after the command name.
 
 `/feature <idea>` orchestrates three participants — the user, `analyst-agent`, and `gh-agent` — to go from a rough idea to a ready-to-work branch.
 
-```
-User                     /feature (orchestrator)       analyst-agent              gh-agent
- │                               │                           │                       │
- │  /feature <idea>              │                           │                       │
- │──────────────────────────────>│                           │                       │
- │                               │  invoke(idea)             │                       │
- │                               │──────────────────────────>│                       │
- │                               │                           │ read CLAUDE.md,       │
- │                               │                           │ explore codebase,     │
- │                               │                           │ research web          │
- │                               │                           │                       │
- │<────────────────── questions / clarifications ────────────│                       │
- │─────────────────── answers ──────────────────────────────>│                       │
- │                    (as many rounds as needed)             │                       │
- │                               │                           │                       │
- │<──────────────── proposed feature description ────────────│                       │
- │                               │                           │                       │
- │  confirm / revise             │                           │                       │
- │──────────────────────────────────────────────────────────>│                       │
- │                               │                           │                       │
- │                               │<── approved description ──│                       │
- │                               │                           │                       │
- │                               │  invoke(description)                              │
- │                               │──────────────────────────────────────────────────>│
- │                               │                           │  gh issue create      │
- │                               │                           │  git fetch + checkout │
- │                               │                           │                       │
- │<──────────────────── issue URL + branch name ─────────────────────────────────────│
- │                               │                           │                       │
-```
-
 **Agents involved:**
 
 | Agent | Role | Model |
@@ -364,9 +333,69 @@ User                     /feature (orchestrator)       analyst-agent            
 | `analyst-agent` | Researches the codebase and web, asks clarifying questions, proposes and iterates on the feature description until the user confirms | Opus |
 | `gh-agent` | Creates the GitHub issue, determines the default branch, creates and checks out a `feat/<n>-<slug>` branch | Sonnet |
 
-**What you get at the end:**
-- A GitHub issue with the full feature description
-- A local branch `feat/<issue-number>-<slug>` checked out and ready to implement
+**Workflows:**
+
+```
+/feature propose <title>                     (lightweight — no analysis, no checkout)
+User                     /feature                              gh-agent
+ │                           │                                    │
+ │  propose <title>          │                                    │
+ │──────────────────────────>│                                    │
+ │<─── draft ────────────────│                                    │
+ │  iterate / approve        │                                    │
+ │──────────────────────────>│                                    │
+ │                           │  invoke(description, checkout=false)│
+ │                           │───────────────────────────────────>│
+ │                           │                                    │ gh issue create
+ │                           │                                    │ git branch + push
+ │<── issue URL + branch ─────────────────────────────────────────│
+
+
+/feature <idea>                              (full flow)
+User                /feature          analyst-agent              gh-agent
+ │                      │                   │                       │
+ │  /feature <idea>     │                   │                       │
+ │─────────────────────>│  invoke(idea)     │                       │
+ │                      │──────────────────>│ read CLAUDE.md,       │
+ │                      │                   │ explore, research web  │
+ │<──────── questions / clarifications ─────│                       │
+ │─────────── answers ─────────────────────>│                       │
+ │<──────── proposed description ───────────│                       │
+ │  confirm             │                   │                       │
+ │─────────────────────────────────────────>│                       │
+ │                      │<─ approved ───────│                       │
+ │                      │  invoke(description, checkout=true)       │
+ │                      │──────────────────────────────────────────>│
+ │                      │                   │  gh issue create      │
+ │                      │                   │  git checkout -b      │
+ │<──────────────── issue URL + branch ──────────────────────────────│
+
+
+/gh merge                                    (after work is done)
+User         /gh               gh-agent
+ │            │                    │
+ │  merge     │                    │
+ │───────────>│                    │
+ │            │  invoke(merge)     │
+ │            │───────────────────>│
+ │            │                    │ gh pr create --base <default>
+ │<── PR URL ──────────────────────│
+
+
+/gh merge approve checkout                   (admin — merge and return to default)
+User         /gh               gh-agent
+ │            │                    │
+ │  merge     │                    │
+ │  approve   │                    │
+ │  checkout  │                    │
+ │───────────>│  invoke(merge      │
+ │            │  approve checkout) │
+ │            │───────────────────>│
+ │            │                    │ gh pr merge
+ │            │                    │ git checkout <default>
+ │            │                    │ git pull
+ │<─ done ─────────────────────────│
+```
 
 ---
 

@@ -50,6 +50,22 @@ Each component has a dedicated agent thread. Consult the relevant agent for comp
 | RAG       | `rag` | Retrieval, embeddings, vector store |
 | Auth      | `auth` | Authentication, authorization, sessions |
 
+## Issue-First Workflow
+
+**Every piece of implementation work must go through a GitHub issue before code is written.**
+
+There are two ways this starts:
+
+1. **User runs `/issue`** — Claude drafts an issue based on the current conversation, iterates with the user until approved, then proceeds.
+2. **User describes something to implement** — If no `/issue` was run first, Claude proposes an issue draft before touching any code. Implementation only starts once the user approves it.
+
+In both cases, once the issue is approved:
+1. `gh issue create` to create the issue and capture its number
+2. `git checkout -b {number}-{slug}` (e.g. `42-add-docker-compose`)
+3. Then and only then: begin implementation
+
+Claude must never write implementation code before completing these steps.
+
 ## Coding Standards
 - Prefer composition over inheritance
 - All public functions must have tests before implementation (TDD)

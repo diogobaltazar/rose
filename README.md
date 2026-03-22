@@ -7,7 +7,7 @@ Coding agent scaffolding tool. Bootstraps Claude Code super-agent config into an
 Add this alias to your `~/.zshrc`:
 
 ```bash
-alias rose='docker run --rm -it \
+alias rose='mkdir -p "$HOME/.claude" && docker run --rm -it \
   -v "$(pwd):/project" \
   -v "$HOME/.claude:/claude" \
   -v "$HOME/.ssh:/root/.ssh:ro" \
@@ -19,6 +19,28 @@ Then reload:
 ```bash
 source ~/.zshrc
 ```
+
+### Developer setup
+
+If you're working on rose itself, set `ROSE_DEV` to the repo path. The alias will then use `docker compose` (which rebuilds on source changes) instead of the published image:
+
+```bash
+export ROSE_DEV="$HOME/source/rose"
+alias rose='mkdir -p "$HOME/.claude" && \
+  if [ -n "${ROSE_DEV:-}" ]; then \
+    GITHUB_TOKEN="$(gh auth token 2>/dev/null)" TARGET_PROJECT="$(pwd)" \
+      docker compose -f "$ROSE_DEV/compose.yml" run --rm rose; \
+  else \
+    docker run --rm -it \
+      -v "$(pwd):/project" \
+      -v "$HOME/.claude:/claude" \
+      -v "$HOME/.ssh:/root/.ssh:ro" \
+      -e GITHUB_TOKEN="$(gh auth token 2>/dev/null)" \
+      rose:latest; \
+  fi'
+```
+
+Unset `ROSE_DEV` (or don't set it) to use the published image like a regular client.
 
 ## Commands
 
@@ -33,10 +55,25 @@ source ~/.zshrc
 
 ### rose install
 Run once per host. Installs to `~/.claude`:
-- `settings.json` — hooks (feedback loops, auto-linting, stop checks)
-- `hooks/` — post-write validation script
-- `agents/` — global agents (commit-organizer, doc-verifier, code-health, tdd-enforcer)
-- `commands/` — slash commands (/commit, /verify, /docs, /health)
+
+```
+~/.claude/
+├── CLAUDE.md                       # global persona and tone
+├── settings.json                   # env vars + lifecycle hooks
+├── hooks/
+│   └── post-write-validate.sh      # lints every file after Write/Edit
+├── agents/
+│   ├── git-agent.md                # commit and push operations
+│   ├── doc-verifier.md             # syncs docs with implementation
+│   ├── code-health.md              # audits for dead code and tech debt
+│   └── tdd-enforcer.md             # enforces RED → GREEN → REFACTOR
+└── commands/
+    ├── git.md                      # /git commit, /git push, /git commit push
+    ├── verify.md                   # /verify
+    ├── docs.md                     # /docs
+    ├── health.md                   # /health
+    └── issue.md                    # /issue
+```
 
 ```bash
 rose install                          # install into ~/.claude
@@ -123,6 +160,7 @@ Rose installs global config via `rose install` and project config via `rose init
 
 ```
 ~/.claude/
+├── CLAUDE.md              # Global persona and tone (read every session)
 ├── settings.json          # Core configuration: env vars, hooks
 ├── hooks/
 │   └── post-write-validate.sh   # Shell script run after every file write
@@ -259,7 +297,7 @@ Claude sees all available agents' `name` and `description` fields in its context
 
 | Agent | Description | Tools |
 |-------|-------------|-------|
-| `commit-organizer` | Audits changes, groups by concern, writes Conventional Commit messages, commits after approval | Bash, Read, Glob, Grep |
+| `git-agent` | Executes git operations sequentially: commit (groups changes, Conventional Commits, no body) and push | Bash, Read, Glob, Grep |
 | `doc-verifier` | Checks docs match implementation; updates outdated docs in place | Read, Write, Edit, Glob, Grep, Bash |
 | `code-health` | Audits for dead code, duplication, and tech debt; produces a prioritised report without making changes | Read, Glob, Grep, Bash |
 | `tdd-enforcer` | Enforces RED → GREEN → REFACTOR cycle; writes failing test first, then minimal implementation | Read, Write, Edit, Bash, Glob, Grep |
@@ -308,7 +346,7 @@ Use $ARGUMENTS to capture anything the user types after the command name.
 
 | Command | What it does |
 |---------|-------------|
-| `/commit` | Invokes `commit-organizer` agent to audit, group, and commit changes |
+| `/git` | Invokes `git-agent` to run git operations sequentially (commit, push) |
 | `/verify` | Runs lint → typecheck → tests → doc check; fixes failures before reporting |
 | `/docs` | Invokes `doc-verifier` agent to sync docs with implementation |
 | `/health` | Invokes `code-health` agent to produce a prioritised audit report |

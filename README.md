@@ -233,7 +233,7 @@ rose config observe add ~/source/my-project
 
 ### rose config
 
-Managed on the host by the shell function. Config is stored at `~/.config/rose/config.json`.
+A CLI command that runs inside the rose container. Config is stored at `~/.config/rose/config.json` (mounted read-write into the container).
 
 ```bash
 rose config observe add ~/source/my-project     # register a project

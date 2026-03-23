@@ -3,5 +3,39 @@
     "ANTHROPIC_BASE_URL": "http://localhost:8080",
     "ANTHROPIC_AUTH_TOKEN": "dummy-gateway-token",
     "ANTHROPIC_CUSTOM_HEADERS": "x-portkey-metadata: {\"_user\":\"diogo.pereira-marques@roche.com\",\"ona_user_id\":\"019d0332-cb44-724b-ad3f-525da52a87d4\",\"tool\":\"claude\"}"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/log-session-start.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/log-tool-event.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/log-session-end.sh"
+          }
+        ]
+      }
+    ]
   }
 }

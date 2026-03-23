@@ -106,6 +106,96 @@ rose uninstall      # prompts for confirmation
 rose uninstall -y   # skip confirmation
 ```
 
+## Feature Lifecycle
+
+Rose implements a structured engineering workflow as a state machine. Every unit of work — feature, bug fix, dependency upgrade, or investigation — passes through the same pipeline.
+
+```mermaid
+stateDiagram-v2
+    direction TB
+
+    state "Entry Points" as entry {
+        E1: E1 — Feature idea
+        E2: E2 — Bug report
+        E3: E3 — Dependency upgrade
+        E4: E4 — Spike / investigation
+        E5: E5 — Autonomous pickup [future]
+    }
+
+    state "Requirements Pipeline" as pipeline {
+        R1: R1 — Clarify intent
+        R2: R2 — Requirements & acceptance criteria
+        R3: R3 — Issue matching
+        R4: R4 — Technical feasibility
+        R5: R5 — Spec reconciliation
+
+        R1 --> R2: user confirms intent
+        R1 --> R1: analyst asks follow-up
+        R2 --> R2: analyst refines criteria
+        R2 --> R3: user confirms requirements
+        R3 --> R3: analyst suggests overlaps
+        R3 --> R4: user validates issue mapping
+        R4 --> R2: feasibility concern revises requirements
+        R4 --> R5: feasible, proceed
+        R5 --> R5: conflict — user resolves
+    }
+
+    state decision <<choice>>
+
+    state "Investigation" as investigation {
+        W1: W1 — Write-up
+    }
+
+    state "Delivery Pipeline" as delivery {
+        D1: D1 — Issue creation
+        D2: D2 — Worktree setup
+        D3: D3 — Implementation
+        D4: D4 — Verification
+        D5: D5 — Commit sorting
+        D6: D6 — PR creation / update
+        D7: D7 — Adjacent work detection
+        P2: P2 — Merge PR
+
+        D1 --> D2
+        D2 --> D3
+        D3 --> D4
+        D4 --> D3: implementation failure
+        D4 --> D5: verification passes
+        D5 --> D6
+        D6 --> D7
+        D7 --> D1: separate unit — new issue
+        D7 --> P2: PR ready
+    }
+
+    S1: S1 — Stakeholder input [interrupt]
+    V1: V1 — State visualisation [future]
+
+    E1 --> R1
+    E2 --> R1
+    E3 --> R1
+    E4 --> R1
+    E5 --> R1
+
+    R5 --> decision
+    decision --> W1: investigation
+    decision --> D1: delivery
+    W1 --> [*]: write-up complete
+
+    D4 --> R2: requirement failure
+    P2 --> [*]: PR merged, issues closed
+
+    S1 --> R1
+    S1 --> R2
+    S1 --> R3
+    S1 --> R4
+    S1 --> R5
+    S1 --> D1
+    S1 --> D3
+    S1 --> D6
+```
+
+See [CLAUDE.md](CLAUDE.md) for the full process specification with actors, triggers, inputs, outputs, and exit conditions for each step.
+
 ## This repo IS the config
 
 The `global/` directory is the source of truth. All definitions flow via `rose install`:

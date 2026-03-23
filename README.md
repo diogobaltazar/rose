@@ -190,7 +190,9 @@ The dashboard runs at **http://localhost:5100**. It watches `~/.claude/logs/` fo
 Register projects to observe with `rose config` (see issue [#47](https://github.com/diogobaltazar/rose/issues/47)):
 
 ```bash
-rose config project add ~/source/my-project
+rose config observe add ~/source/my-project
+rose config observe remove ~/source/my-project
+rose config observe list
 ```
 
 ### rose uninstall

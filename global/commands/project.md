@@ -1,29 +1,39 @@
 ---
-description: "Project-level Claude configuration. Subcommands: config — add agents, skills, or CLAUDE.md entries to the current project's .claude/ directory."
-allowed-tools: Agent, Read, Glob, Grep, Bash
+description: "Project setup and spec management. Subcommands: init, spec update <specification>."
+allowed-tools: Agent, Read, Write, Bash, Glob
 ---
 
-You are orchestrating project-level Claude configuration.
+You are orchestrating project-level setup and specification management.
 
 Parse `$ARGUMENTS`:
-- If it starts with `config`, strip `config` and run the **Config flow** below.
-- Otherwise, tell the user the available subcommands: `config`.
+- If it starts with `init`, run the **Init flow** below.
+- If it starts with `spec update`, strip `spec update` and run the **Spec Update flow** below.
+- Otherwise, tell the user the available subcommands: `init`, `spec update <specification>`.
 
 ---
 
-## Config flow (`/project config <what you want>`)
+## Init flow (`/project init`)
 
-Invoke `project-conf-agent` with the user's request.
+Scaffold a `CLAUDE.md` and `.claude/` directory in the current working directory.
 
-The agent will:
-1. Inspect the current project (stack, existing `.claude/` contents)
-2. Converse with the user to understand what they want
-3. Create the appropriate files inside `.claude/` of the current project
+1. Check whether `CLAUDE.md` already exists. If it does and `--force` is not in `$ARGUMENTS`, inform the user and skip creating it.
+2. Check whether `.claude/settings.json` already exists. If it does and `--force` is not in `$ARGUMENTS`, inform the user and skip creating it.
+3. Create `CLAUDE.md` with the following minimal template (if it does not exist or `--force` is set):
+   ```markdown
+   # <project name>
 
-When the agent is done, summarise what was created for the user.
+   ## Product Specifications
 
-### Important context to pass to the agent
+   *(No specifications yet. Use `/project spec update <specification>` to add them.)*
+   ```
+   Use the current directory name as the project name.
+4. Create `.claude/settings.json` as an empty JSON object `{}` (if it does not exist or `--force` is set).
+5. Report what was created or skipped.
 
-- All writes go to `.claude/` in the current working directory — the project Claude is open in.
-- If Claude is running inside the rose repo, `.claude/` here means `rose/.claude/` — **not** `rose/global/`. Files written here are project-specific and are not installed globally by `rose install`.
-- Never modify `~/.claude/` or `rose/global/`.
+---
+
+## Spec Update flow (`/project spec update <specification>`)
+
+Invoke the analyst agent in **Spec Reconciliation mode** with the following instruction:
+
+"Read CLAUDE.md in the current directory. Incorporate the following specification into it, creating or updating sections as you see fit. There is no fixed schema — use your judgement to organise the content clearly. If a conflict exists with an existing specification, surface it to the user before making any changes. Specification: <the remaining arguments>"

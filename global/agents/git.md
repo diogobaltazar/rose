@@ -1,5 +1,5 @@
 ---
-name: git-agent
+name: git
 description: Executes git operations sequentially. Supported operations: commit, push. Example: "commit push" commits then pushes.
 model: sonnet
 tools: Bash, Read, Glob, Grep

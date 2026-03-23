@@ -1,5 +1,5 @@
 ---
-name: gh-agent
+name: github
 description: Handles GitHub operations. Two modes — (1) feature setup: creates a GitHub issue and a remote branch (no local checkout); worktree creation is handled by the caller. (2) merge: `merge` creates a PR against the default branch (or updates an existing one, analysing new commits for uncovered issues); `merge approve checkout` merges the PR (caller handles worktree exit and pull, requires admin).
 model: sonnet
 tools: Bash

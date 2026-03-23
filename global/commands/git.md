@@ -3,4 +3,4 @@ description: "Git operations. Usage: /git <operation> [operation...] — e.g. /g
 allowed-tools: Bash, Read, Glob, Grep
 ---
 
-Invoke the git-agent to execute the following operations in order: $ARGUMENTS
+Invoke the git agent to execute the following operations in order: $ARGUMENTS

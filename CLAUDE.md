@@ -22,7 +22,15 @@ global/        # Installed to ~/.claude/ by `rose install`
 ├── settings.json
 ├── hooks/
 ├── agents/
+│   ├── analyst.md      # Product analyst — feature analysis and spec reconciliation
+│   ├── engineer.md     # Implementation agent
+│   ├── github.md       # GitHub operations
+│   └── git.md          # Git operations
 └── commands/
+    ├── feature.md      # /feature workflow (propose, work, push, merge)
+    ├── github.md       # /github skill
+    ├── git.md          # /git skill
+    └── project.md      # /project skill (init, spec update)
 src/rose/      # Python CLI package
 ├── cli.py     # Typer entrypoint
 └── commands/  # Command implementations

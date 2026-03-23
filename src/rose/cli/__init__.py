@@ -1,8 +1,7 @@
 import typer
-from rose.commands.install import install
-from rose.commands.uninstall import uninstall
 from pathlib import Path
-
+from rose.cli.install import install
+from rose.cli.uninstall import uninstall
 app = typer.Typer(
     name="rose",
     help="Installs and manages Claude Code configuration.",

@@ -16,6 +16,7 @@ GLOBAL_FILES = {
     "settings.json": ("settings.json", False),
     "agents":        ("agents",        True),
     "commands":      ("commands",      True),
+    "hooks":         ("hooks",         True),
 }
 
 
@@ -77,4 +78,8 @@ def install(
         results.add_row("[green]✓[/green]", name, "installed")
 
     console.print(results)
+
+    logs_dir = claude_dir / "logs"
+    logs_dir.mkdir(exist_ok=True)
+    console.print(f"  [dim]logs/[/dim] ready at [cyan]{logs_dir}[/cyan]\n")
     console.print()

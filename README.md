@@ -75,6 +75,41 @@ rose() {
       echo "Symlink: ~/.claude -> $link_path"
     fi
 
+  elif [[ "$cmd" == "config" ]]; then
+    local domain="${2:-}" op="${3:-}" arg="${4:-}"
+    local config_file="$HOME/.config/rose/config.json"
+    mkdir -p "$(dirname "$config_file")"
+    case "$domain/$op" in
+      observe/add)
+        local path; path=$(python3 -c "import os; print(os.path.realpath('${arg/#\~/$HOME}'))")
+        python3 -c "
+import json; f='${config_file}'
+try: d=json.load(open(f))
+except: d={}
+ps=d.setdefault('projects',[])
+if '${path}' not in ps: ps.append('${path}'); json.dump(d,open(f,'w'),indent=2); print('Added: ${path}')
+else: print('Already registered: ${path}')
+"     ;;
+      observe/remove)
+        local path; path=$(python3 -c "import os; print(os.path.realpath('${arg/#\~/$HOME}'))")
+        python3 -c "
+import json; f='${config_file}'
+try: d=json.load(open(f))
+except: d={}
+ps=d.get('projects',[])
+if '${path}' in ps: ps.remove('${path}'); d['projects']=ps; json.dump(d,open(f,'w'),indent=2); print('Removed: ${path}')
+else: print('Not registered: ${path}')
+"     ;;
+      observe/list)
+        python3 -c "
+import json; f='${config_file}'
+try: ps=json.load(open(f)).get('projects',[])
+except: ps=[]
+print('\n'.join(ps) if ps else 'No projects registered. Use: rose config observe add <path>')
+"     ;;
+      *) echo "Usage: rose config observe <add|remove|list> [path]" ;;
+    esac
+
   elif [[ "$cmd" == "observe" ]]; then
     local subcmd="${2:-}"
     local dev_dir
@@ -143,6 +178,9 @@ Unset `ROSE_DEV` (or don't set it) to use the published image.
 | `rose observe stop` | Stop the dashboard containers |
 | `rose observe restart` | Restart the dashboard containers |
 | `rose observe status` | Show running (green) / down (red) status for each container |
+| `rose config observe add <path>` | Register a project for the dashboard to monitor |
+| `rose config observe remove <path>` | Deregister a project |
+| `rose config observe list` | List registered projects |
 
 ### rose install
 
@@ -187,13 +225,23 @@ rose observe status   # green ● running / red ● down per container
 
 The dashboard runs at **http://localhost:5100**. It watches `~/.claude/logs/` for active Claude sessions and renders the lifecycle state machine with the current step highlighted.
 
-Register projects to observe with `rose config` (see issue [#47](https://github.com/diogobaltazar/rose/issues/47)):
+Register projects to observe (see [rose config](#rose-config)):
 
 ```bash
 rose config observe add ~/source/my-project
-rose config observe remove ~/source/my-project
-rose config observe list
 ```
+
+### rose config
+
+Managed on the host by the shell function. Config is stored at `~/.config/rose/config.json`.
+
+```bash
+rose config observe add ~/source/my-project     # register a project
+rose config observe remove ~/source/my-project  # deregister
+rose config observe list                        # print registered projects
+```
+
+Paths are resolved to absolute form. `rose observe` will filter sessions to registered projects only; if no projects are registered it shows all active sessions.
 
 ### rose uninstall
 

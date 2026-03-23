@@ -15,5 +15,28 @@ services:
         source: ${HOME}/.ssh
         target: /root/.ssh
         read_only: true
+      - type: bind
+        source: ${HOME}/.config/rose
+        target: /rose-config
     environment:
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+
+  api:
+    container_name: rose-api
+    build: src/rose/api
+    volumes:
+      - "${HOME}/.claude/logs:/logs:ro"
+      - "${HOME}/.config/rose:/rose-config:ro"
+    environment:
+      - LOG_DIR=/logs
+      - ROSE_CONFIG=/rose-config/config.json
+    ports:
+      - "5101:8000"
+
+  web:
+    container_name: rose-web
+    build: src/rose/web
+    ports:
+      - "5100:80"
+    depends_on:
+      - api

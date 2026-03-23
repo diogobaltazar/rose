@@ -14,9 +14,28 @@ You are a GitHub operations agent. Determine your mode from the caller's instruc
 
 GitHub operations use the `gh` CLI, which authenticates via keyring (set up with `gh auth login`). Do not attempt SSH key authentication or HTTPS token prompts — `gh` and `git` with HTTPS remotes will authenticate automatically. If `gh auth status` shows an active account, you are ready to proceed.
 
+## Step logging
+
+At each step boundary, emit a structured event to the session log using inline Bash:
+
+```bash
+LOG_DIR="$HOME/.claude/logs/${CLAUDE_SESSION_ID:-unknown}"
+mkdir -p "$LOG_DIR"
+SEQ=$(( $(wc -l < "$LOG_DIR/events.jsonl" 2>/dev/null || echo 0) + 1 ))
+TS=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+printf '%s\n' "{\"ts\":\"$TS\",\"session_id\":\"${CLAUDE_SESSION_ID:-unknown}\",\"seq\":$SEQ,\"source\":\"agent\",\"agent\":\"github\",\"step\":\"STEP_CODE\",\"event\":\"EVENT_TYPE\",\"payload\":PAYLOAD_JSON}" >> "$LOG_DIR/events.jsonl"
+```
+
+Replace `STEP_CODE`, `EVENT_TYPE`, and `PAYLOAD_JSON` appropriately at each boundary as described below.
+
 ---
 
 ## Feature Setup
+
+Emit `step.enter` before issue creation (D1):
+```bash
+# STEP_CODE=D1, EVENT_TYPE=step.enter, PAYLOAD_JSON={"from": "decision"}
+```
 
 ### Step 1: Create the GitHub issue
 
@@ -44,6 +63,11 @@ git branch feat/<issue-number>-<slug> origin/<default-branch>
 git push origin feat/<issue-number>-<slug>
 ```
 
+Emit `step.exit` after the branch is pushed:
+```bash
+# STEP_CODE=D1, EVENT_TYPE=step.exit, PAYLOAD_JSON={"to": "D2", "outcome": "confirmed"}
+```
+
 ### Step 4: Confirm
 
 Inform the caller:
@@ -68,6 +92,11 @@ gh pr view --json number,url,baseRefName 2>/dev/null
 ---
 
 #### Create new PR flow
+
+Emit `step.enter` before PR creation (D6):
+```bash
+# STEP_CODE=D6, EVENT_TYPE=step.enter, PAYLOAD_JSON={"from": "D5"}
+```
 
 ##### Step 2 — Collect all commits on this branch
 ```bash
@@ -106,6 +135,11 @@ Proceed? (confirm or correct anything above)
 
 Wait for the user's response. Accept corrections — e.g. removing a false match, editing a proposed issue title, adding a missed issue number.
 
+When adjacent work is detected (D7), emit `step.enter`:
+```bash
+# STEP_CODE=D7, EVENT_TYPE=step.enter, PAYLOAD_JSON={"from": "D6"}
+```
+
 ##### Step 6 — Create new issues
 
 For each confirmed new issue:
@@ -113,6 +147,11 @@ For each confirmed new issue:
 gh issue create --title "<title>" --body "<description>"
 ```
 Capture each issue number.
+
+After resolution of adjacent work, emit `step.exit`:
+```bash
+# STEP_CODE=D7, EVENT_TYPE=step.exit, PAYLOAD_JSON={"to": "P2", "outcome": "confirmed"}
+```
 
 ##### Step 7 — Build PR body and create PR
 
@@ -131,11 +170,21 @@ gh pr create --base <default-branch> --title "<derived-title>" --body "<body>"
 
 Report the PR URL to the user.
 
+Emit `step.exit` after the PR is created:
+```bash
+# STEP_CODE=D6, EVENT_TYPE=step.exit, PAYLOAD_JSON={"to": "D7", "outcome": "confirmed"}
+```
+
 ---
 
 #### Update existing PR flow
 
 An open PR already exists. Only analyse commits added **since the PR was created**.
+
+Emit `step.enter` before PR update (D6):
+```bash
+# STEP_CODE=D6, EVENT_TYPE=step.enter, PAYLOAD_JSON={"from": "D5"}
+```
 
 ##### Step 2 — Find the PR creation point
 
@@ -186,9 +235,19 @@ Proceed? (confirm or correct anything above)
 
 Wait for the user's response.
 
+When adjacent work is detected (D7), emit `step.enter`:
+```bash
+# STEP_CODE=D7, EVENT_TYPE=step.enter, PAYLOAD_JSON={"from": "D6"}
+```
+
 ##### Step 7 — Create new issues
 ```bash
 gh issue create --title "<title>" --body "<description>"
+```
+
+After resolution of adjacent work, emit `step.exit`:
+```bash
+# STEP_CODE=D7, EVENT_TYPE=step.exit, PAYLOAD_JSON={"to": "P2", "outcome": "confirmed"}
 ```
 
 ##### Step 8 — Update PR body
@@ -205,11 +264,26 @@ gh pr edit --body "<updated body>"
 
 Report to the user which issues were added to the PR.
 
+Emit `step.exit` after the PR is updated:
+```bash
+# STEP_CODE=D6, EVENT_TYPE=step.exit, PAYLOAD_JSON={"to": "D7", "outcome": "confirmed"}
+```
+
 ### `merge approve checkout` — merge the PR
+
+Emit `step.enter` before merging (P2):
+```bash
+# STEP_CODE=P2, EVENT_TYPE=step.enter, PAYLOAD_JSON={"from": "D7"}
+```
 
 This requires admin privileges. Merge the open PR for the current branch:
 ```bash
 gh pr merge --merge --auto
+```
+
+Emit `step.exit` after the merge is confirmed:
+```bash
+# STEP_CODE=P2, EVENT_TYPE=step.exit, PAYLOAD_JSON={"to": null, "outcome": "confirmed"}
 ```
 
 Confirm to the caller that the PR was merged. The caller handles worktree exit and pulling the default branch.

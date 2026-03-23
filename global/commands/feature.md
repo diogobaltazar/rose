@@ -1,5 +1,5 @@
 ---
-description: "Feature workflow. Subcommands: propose <title>, work <description>, push, merge, merge checkout. Bare '/feature <description>' is an alias for '/feature work <description>'."
+description: "Feature workflow. Subcommands: propose <title>, work <description>, push, merge, merge checkout. Bare '/feature <description>' runs the full planning flow."
 allowed-tools: Agent, Bash, Read, Glob, Grep, EnterWorktree, ExitWorktree
 ---
 
@@ -12,7 +12,7 @@ Check `$ARGUMENTS`:
 - If it starts with `merge checkout`, run the **Merge checkout flow** below.
 - If it starts with `merge`, run the **Merge flow** below.
 - If `$ARGUMENTS` is empty, print usage and stop.
-- Otherwise (bare description with no subcommand), treat as `/feature work $ARGUMENTS` and run the **Work flow**.
+- Otherwise (bare description with no subcommand), run the **Full planning flow** below.
 
 ---
 
@@ -64,25 +64,44 @@ Invoke the github agent with `merge` to create a pull request from the current b
 
 ---
 
-## Full planning flow (`/feature <idea>` — no subcommand, treated as work)
+## Full planning flow (`/feature <description>` — no subcommand)
 
-### Step 1: Analysis
+### Step 0 — Entry point detection
 
-Invoke the analyst agent in **Feature Analysis mode** with the feature idea.
+Classify the user's description by scanning for keywords:
+- **E2** if the description contains any of: `bug`, `broken`, `error`, `failing`, `fix`
+- **E3** if the description contains any of: `upgrade`, `bump`, `dependency`, `version`
+- **E4** if the description contains any of: `investigate`, `research`, `spike`, `explore`, `question`
+- **E1** otherwise (default)
 
-### Step 2: GitHub handoff
+### Step 1 — Invoke analyst in Feature Analysis mode
 
-Once the user has confirmed the feature description with the analyst:
+Invoke the analyst agent in **Feature Analysis mode**, passing:
+- The user's description
+- The detected entry point code (E1, E2, E3, or E4)
+- Instruction to execute R1 → R2 → R3 → R4 → R5 in order, then return either:
+  - `"investigation"` + a write-up (W1)
+  - `"delivery"` + the reconciled specification
 
-1. Invoke the github agent with the approved description and `checkout=false`. Capture the branch name returned (e.g. `feat/42-my-feature`).
-2. Call `EnterWorktree` with `name=<branch-name>` — this creates a worktree and switches the session into it.
-3. Inside the worktree, rename the branch to match and push:
-   ```bash
-   git branch -m <branch-name>
-   git push -u origin HEAD
-   ```
+### Step 2 — Decision gate
 
-### Step 3: Done
+- If the analyst returns `"investigation"`: the pipeline ends. Report the write-up to the user.
+- If the analyst returns `"delivery"`: continue to Step 3.
+
+### Step 3 — D1: GitHub feature setup
+
+Invoke the github agent in **Feature Setup** mode with the confirmed spec. Capture the issue URL and branch name returned.
+
+### Step 4 — D2: Enter worktree
+
+Call `EnterWorktree` with `name=<branch-name>` to create a worktree and switch the session into it. Inside the worktree, rename the branch to match and push:
+
+```bash
+git branch -m <branch-name>
+git push -u origin HEAD
+```
+
+### Step 5 — Report
 
 Report to the user:
 - The GitHub issue URL and branch name

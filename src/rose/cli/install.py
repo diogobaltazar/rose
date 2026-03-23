@@ -16,6 +16,7 @@ GLOBAL_FILES = {
     "settings.json": ("settings.json", False),
     "agents":        ("agents",        True),
     "commands":      ("commands",      True),
+    "hooks":         ("hooks",         True),
 }
 
 
@@ -38,7 +39,7 @@ def install(
 
     console.print()
     console.print(Panel("[bold magenta]rose install[/bold magenta]", expand=False))
-    console.print(f"  Target: [cyan]{claude_dir}[/cyan]\n")
+    console.print(f"  Target: [cyan]~/.claude[/cyan]\n")
 
     if not claude_dir.exists():
         console.print(f"  [red]Error:[/red] {claude_dir} does not exist.\n")
@@ -77,4 +78,5 @@ def install(
         results.add_row("[green]✓[/green]", name, "installed")
 
     console.print(results)
+
     console.print()

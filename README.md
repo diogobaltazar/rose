@@ -8,36 +8,129 @@ Installs and manages Claude Code configuration.
 
 ## Setup
 
-Add this function to your `~/.zshrc`:
+Add the following to your `~/.zshrc` and reload with `source ~/.zshrc`:
 
 ```bash
+# Set ROSE_DEV to your rose source path to build from source on every run.
+export ROSE_DEV="$HOME/rose"
+
+_rose_build_if_changed() {
+  local hash_file="${XDG_CACHE_HOME:-$HOME/.cache}/rose/build_hash"
+  local current_hash
+  current_hash=$(find "$ROSE_DEV" \
+    \( -name "*.py" -o -name "*.md" -o -name "*.json" -o -name "*.sh" -o -name "Dockerfile" -o -name "requirements.txt" \) \
+    -not -path "*/.git/*" \
+    | sort | xargs shasum -a 256 2>/dev/null | shasum -a 256 | cut -d' ' -f1)
+
+  if [[ "$(cat "$hash_file" 2>/dev/null)" != "$current_hash" ]]; then
+    docker compose -f "$ROSE_DEV/compose.yml" build rose > /dev/null 2>&1
+    mkdir -p "$(dirname "$hash_file")"
+    echo "$current_hash" > "$hash_file"
+  fi
+}
+
 rose() {
-  docker run --rm -it \
-    -v "$(pwd):/project" \
-    -v "$HOME/.claude:/claude" \
-    -v "$HOME/.ssh:/root/.ssh:ro" \
-    -e GITHUB_TOKEN="$(gh auth token 2>/dev/null)" \
-    rose:latest "$@"
+  local cmd="${1:-help}"
+
+  if [[ "$cmd" == "install" || "$cmd" == "reinstall" ]]; then
+    shift
+    local link_path=""
+    local reset=false
+    local extra_args=()
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --link)  link_path="${2/#\~/$HOME}"; shift 2 ;;
+        --reset) reset=true; shift ;;
+        *)       extra_args+=("$1"); shift ;;
+      esac
+    done
+    [[ "$cmd" == "reinstall" ]] && reset=true
+
+    local mount_path="${link_path:-$HOME/.claude}"
+
+    if [[ "$reset" == true ]]; then
+      local real_path="$mount_path"
+      [[ -L "$mount_path" ]] && real_path="$(readlink "$mount_path")"
+      echo "Resetting ${real_path}..."
+      rm -rf "${real_path:?}"
+    fi
+
+    mkdir -p "$mount_path"
+
+    if [[ -n "${ROSE_DEV:-}" ]]; then
+      _rose_build_if_changed
+      TARGET_PROJECT="$(pwd)" GITHUB_TOKEN="$(gh auth token 2>/dev/null)" \
+        docker compose --progress quiet -f "$ROSE_DEV/compose.yml" run --rm rose install "${extra_args[@]}"
+    else
+      docker run --rm -it \
+        -v "$(pwd):/project" \
+        -v "$mount_path:/claude" \
+        -v "$HOME/.ssh:/root/.ssh:ro" \
+        -e GITHUB_TOKEN="$(gh auth token 2>/dev/null)" \
+        rose:latest install "${extra_args[@]}"
+    fi
+
+    if [[ -n "$link_path" ]]; then
+      ln -sf "$link_path" "$HOME/.claude"
+      echo "Symlink: ~/.claude -> $link_path"
+    fi
+
+  elif [[ "$cmd" == "observe" ]]; then
+    local subcmd="${2:-}"
+    local dev_dir
+    # Auto-detect: prefer cwd if it looks like a rose source tree
+    if [[ -f "$(pwd)/compose.yml" && -d "$(pwd)/src/rose" ]]; then
+      dev_dir="$(pwd)"
+    else
+      dev_dir="${ROSE_DEV:-}"
+    fi
+    local compose_file="${dev_dir:+$dev_dir/}compose.yml"
+    case "$subcmd" in
+      start)
+        mkdir -p "$HOME/.claude/logs" "$HOME/.config/rose"
+        echo "Starting rose observe at http://localhost:5100 ..."
+        docker compose -f "$compose_file" up --build --detach api web
+        ;;
+      stop)
+        docker compose -f "$compose_file" stop api web
+        ;;
+      restart)
+        docker compose -f "$compose_file" restart api web
+        ;;
+      status)
+        for name in rose-api rose-web; do
+          if docker ps --filter "name=^${name}$" --filter "status=running" --format "{{.Names}}" | grep -q "^${name}$"; then
+            printf "\033[32m●\033[0m %s running\n" "$name"
+          else
+            printf "\033[31m●\033[0m %s down\n" "$name"
+          fi
+        done
+        ;;
+      *)
+        echo "Usage: rose observe <start|stop|restart|status>"
+        ;;
+    esac
+
+  else
+    if [[ -n "${ROSE_DEV:-}" ]]; then
+      _rose_build_if_changed
+      TARGET_PROJECT="$(pwd)" GITHUB_TOKEN="$(gh auth token 2>/dev/null)" \
+        docker compose --progress quiet -f "$ROSE_DEV/compose.yml" run --rm rose "$cmd" "${@:2}"
+    else
+      docker run --rm -it \
+        -v "$(pwd):/project" \
+        -v "$HOME/.claude:/claude" \
+        -v "$HOME/.ssh:/root/.ssh:ro" \
+        -e GITHUB_TOKEN="$(gh auth token 2>/dev/null)" \
+        rose:latest "$cmd" "${@:2}"
+    fi
+  fi
 }
 ```
 
-Then reload:
+The function auto-detects rose source trees: if the current directory contains `compose.yml` and `src/rose/`, it uses that directory — no need to update `ROSE_DEV` when switching between the main repo and worktrees.
 
-```bash
-source ~/.zshrc
-```
-
-### Developer setup
-
-If you're working on rose itself, set `ROSE_DEV` to the repo path. The function will use `docker compose` (which rebuilds on source changes) instead of the published image:
-
-```bash
-export ROSE_DEV="$HOME/rose"
-```
-
-The `rose` shell function auto-detects rose source trees: if the current directory contains `compose.yml` and `src/rose/`, it uses that directory automatically — no need to update `ROSE_DEV` when switching between the main repo and worktrees.
-
-Unset `ROSE_DEV` (or don't set it) to use the published image like a regular client.
+Unset `ROSE_DEV` (or don't set it) to use the published image.
 
 ## Commands
 
@@ -45,11 +138,11 @@ Unset `ROSE_DEV` (or don't set it) to use the published image like a regular cli
 |---|---|
 | `rose install` | Install global Claude config onto host (`~/.claude`) |
 | `rose reinstall` | Wipe `~/.claude` and reinstall from scratch |
-| `rose remove` | Remove rose Claude setup from current project |
 | `rose uninstall` | Remove rose config from `~/.claude` |
-| `rose observe` | Start the live session dashboard at `http://localhost:5100` |
-
-`rose observe` is handled by the shell function — it runs `docker compose up api web` directly on the host and cannot be invoked from inside the rose container.
+| `rose observe start` | Start the live session dashboard at `http://localhost:5100` (detached) |
+| `rose observe stop` | Stop the dashboard containers |
+| `rose observe restart` | Restart the dashboard containers |
+| `rose observe status` | Show running (green) / down (red) status for each container |
 
 ### rose install
 
@@ -57,19 +150,22 @@ Run once per host. Installs to `~/.claude`:
 
 ```
 ~/.claude/
-├── CLAUDE.md                       # global persona and tone
-├── settings.json                   # env vars + lifecycle hooks
+├── CLAUDE.md        # global persona and tone
+├── settings.json    # env vars + lifecycle hooks
 ├── hooks/
-│   └── post-write-validate.sh      # lints every file after Write/Edit
+│   ├── log-session-start.sh   # writes meta.json + session.start event
+│   ├── log-tool-event.sh      # appends tool.call events (PostToolUse)
+│   └── log-session-end.sh     # derives outcome + session.end (Stop)
 ├── agents/
-│   ├── git-agent.md                # commit and push operations
-│   ├── analyst-agent.md            # feature analysis and scoping
-│   └── gh-agent.md                 # GitHub issue + branch creation
+│   ├── analyst.md   # R1–R5, W1, decision gate
+│   ├── engineer.md  # D3–D4
+│   ├── github.md    # D1, D6, D7, P2
+│   └── git.md       # D5
 └── commands/
-    ├── git.md                      # /git commit, /git push, /git commit push
-    ├── feature.md                  # /feature
-    ├── issue.md                    # /issue
-    └── commit.md                   # /commit
+    ├── feature.md   # /feature — full lifecycle orchestrator
+    ├── github.md    # /github
+    ├── git.md       # /git
+    └── project.md   # /project
 ```
 
 ```bash
@@ -78,13 +174,23 @@ rose install --force  # overwrite existing files
 rose reinstall        # wipe ~/.claude and reinstall from scratch
 ```
 
-### rose remove
+### rose observe
 
-Removes `.claude/agents/` and `CLAUDE.md` from the current project.
+`rose observe` is handled by the shell function — it runs `docker compose` directly on the host (Docker is not available inside the rose container).
 
 ```bash
-rose remove      # prompts for confirmation
-rose remove -y   # skip confirmation
+rose observe start    # build and start rose-api + rose-web, detached
+rose observe stop     # stop containers
+rose observe restart  # restart containers
+rose observe status   # green ● running / red ● down per container
+```
+
+The dashboard runs at **http://localhost:5100**. It watches `~/.claude/logs/` for active Claude sessions and renders the lifecycle state machine with the current step highlighted.
+
+Register projects to observe with `rose config` (see issue [#47](https://github.com/diogobaltazar/rose/issues/47)):
+
+```bash
+rose config project add ~/source/my-project
 ```
 
 ### rose uninstall

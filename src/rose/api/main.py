@@ -131,3 +131,48 @@ async def websocket_endpoint(websocket: WebSocket):
         await watch_logs()
     except Exception:
         pass
+
+
+@app.websocket("/ws/events/{session_id}")
+async def event_stream(websocket: WebSocket, session_id: str):
+    from fastapi import WebSocketDisconnect
+    await websocket.accept()
+    events_file = LOG_DIR / session_id / "events.jsonl"
+
+    # Send all existing events
+    if events_file.exists():
+        with events_file.open() as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    try:
+                        await websocket.send_text(line)
+                    except Exception:
+                        return
+
+    # Watch for new lines
+    last_size = events_file.stat().st_size if events_file.exists() else 0
+
+    async def watch_new_lines():
+        nonlocal last_size
+        async for _ in awatch(str(events_file.parent)):
+            if not events_file.exists():
+                continue
+            new_size = events_file.stat().st_size
+            if new_size <= last_size:
+                continue
+            with events_file.open() as f:
+                f.seek(last_size)
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        try:
+                            await websocket.send_text(line)
+                        except Exception:
+                            return
+            last_size = new_size
+
+    try:
+        await watch_new_lines()
+    except Exception:
+        pass

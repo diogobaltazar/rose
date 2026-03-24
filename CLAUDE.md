@@ -218,7 +218,7 @@ Agents emit structured logs as they move through the lifecycle. Hooks capture th
     └── meta.json      # session metadata; written at start, updated at end
 ```
 
-`session-id` is `$CLAUDE_SESSION_ID`, available in every hook environment. One directory per session.
+`session-id` is extracted from the `session_id` field of the JSON payload that Claude Code passes on stdin to every hook. `log-session-start.sh` also writes the active session ID to `~/.claude/logs/.active-session` so that agents (which do not receive hook stdin) can discover the correct log directory. One directory per session.
 
 ---
 
@@ -281,14 +281,15 @@ Every event shares this envelope:
 
 ### How agents emit step events
 
-Every agent emits `step.enter` and `step.exit` via inline Bash at each step boundary:
+Every agent emits `step.enter` and `step.exit` via inline Bash at each step boundary. Agents do not receive hook stdin, so they read the active session ID from the breadcrumb file written by `log-session-start.sh`:
 
 ```bash
-LOG_DIR="$HOME/.claude/logs/${CLAUDE_SESSION_ID:-unknown}"
+SESSION_ID=$(cat "$HOME/.claude/logs/.active-session" 2>/dev/null || echo "unknown")
+LOG_DIR="$HOME/.claude/logs/$SESSION_ID"
 mkdir -p "$LOG_DIR"
 SEQ=$(( $(wc -l < "$LOG_DIR/events.jsonl" 2>/dev/null || echo 0) + 1 ))
 TS=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
-printf '%s\n' "{\"ts\":\"$TS\",\"session_id\":\"${CLAUDE_SESSION_ID:-unknown}\",\"seq\":$SEQ,\"source\":\"agent\",\"agent\":\"<name>\",\"step\":\"<code>\",\"event\":\"step.enter\",\"payload\":{\"from\":null}}" >> "$LOG_DIR/events.jsonl"
+printf '%s\n' "{\"ts\":\"$TS\",\"session_id\":\"$SESSION_ID\",\"seq\":$SEQ,\"source\":\"agent\",\"agent\":\"<name>\",\"step\":\"<code>\",\"event\":\"step.enter\",\"payload\":{\"from\":null}}" >> "$LOG_DIR/events.jsonl"
 ```
 
 Agents use inline Bash rather than an external script — the hook layer handles the tool-call stream; agents handle step boundaries.
@@ -301,9 +302,9 @@ Three hooks in `global/hooks/` are bound in `settings.json`:
 
 | Hook script | Bound to | Does |
 |-------------|----------|------|
-| `log-session-start.sh` | `PreToolUse` (fires once via sentinel) | Creates log dir, writes `meta.json`, emits `session.start` |
-| `log-tool-event.sh` | `PostToolUse` | Appends `tool.call` event for every tool invocation |
-| `log-session-end.sh` | `Stop` | Derives outcome from last `step.exit`, appends `session.end`, updates `meta.json` |
+| `log-session-start.sh` | `PreToolUse` (fires once via sentinel) | Reads `session_id` from stdin JSON; creates log dir, writes `meta.json`, writes `.active-session` breadcrumb, emits `session.start` |
+| `log-tool-event.sh` | `PostToolUse` | Reads stdin JSON once, extracts both `session_id` and tool payload; appends `tool.call` event |
+| `log-session-end.sh` | `Stop` | Reads `session_id` from stdin JSON; derives outcome from last `step.exit`, appends `session.end`, updates `meta.json` |
 
 ---
 

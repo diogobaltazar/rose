@@ -4,20 +4,16 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>rose observe</title>
-  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body>
-  <div id="layout">
-    <aside id="sidebar">
-      <h1>rose observe</h1>
-      <div id="project-list"></div>
-    </aside>
-    <main id="diagram-panel">
-      <div id="diagram-placeholder">Select an issue to view the lifecycle diagram.</div>
-      <div id="diagram-container"></div>
-    </main>
-  </div>
-  <script src="app.js"></script>
+  <div id="root"></div>
+  <script type="text/babel" src="app.js"></script>
 </body>
 </html>

@@ -1,5 +1,21 @@
 const { useState, useEffect, useRef, useMemo } = React;
 
+// ─── Actor colours ────────────────────────────────────────────────────────────
+
+const ACTOR_COLOURS = {
+  analyst:     '#f59e0b',   // amber/gold
+  engineer:    '#38bdf8',   // sky blue
+  git:         '#fb923c',   // orange
+  github:      '#a78bfa',   // purple
+  orchestrator:'#4ade80',   // green
+  user:        '#f87171',   // coral/rose
+  _default:    '#4b5563',   // muted grey
+};
+
+function actorColour(actor) {
+  return ACTOR_COLOURS[actor] ?? ACTOR_COLOURS._default;
+}
+
 // ─── Step metadata ────────────────────────────────────────────────────────────
 
 const STEP_LABELS = {
@@ -116,16 +132,18 @@ function branchSlug(branch) {
 }
 
 function deriveActiveStep(events) {
-  const stack = [];
+  // Returns { step, agent } for the most recent open step.enter, or { step: null, agent: null }.
+  const stack = []; // each entry: { step, agent }
   for (const e of events) {
     if (e.event === 'step.enter') {
       const s = e.step || e.payload?.step;
-      if (s) stack.push(s);
+      if (s) stack.push({ step: s, agent: e.agent || null });
     } else if (e.event === 'step.exit' && stack.length) {
       stack.pop();
     }
   }
-  return stack[stack.length - 1] ?? null;
+  const top = stack[stack.length - 1];
+  return top ? { step: top.step, agent: top.agent } : { step: null, agent: null };
 }
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
@@ -149,6 +167,7 @@ function Sidebar({ sessions, selectedId, onSelect }) {
           {list.map(s => {
             const num  = s.issue && s.issue !== 'null' ? `#${s.issue} ` : '';
             const slug = branchSlug(s.branch) || s.session_id.slice(0, 8);
+            const isRose = s.entry_point === 'E5';
             return (
               <div
                 key={s.session_id}
@@ -156,7 +175,8 @@ function Sidebar({ sessions, selectedId, onSelect }) {
                 onClick={() => onSelect(s.session_id)}
               >
                 <span className="pulse-dot" />
-                <span>{num}{slug}</span>
+                <span className="issue-row-label">{num}{slug}</span>
+                {isRose && <span className="rose-icon" title="Rose-initiated (E5)">&#x2605;</span>}
               </div>
             );
           })}
@@ -168,27 +188,29 @@ function Sidebar({ sessions, selectedId, onSelect }) {
 
 // ─── State Machine ────────────────────────────────────────────────────────────
 
-function SMNode({ code, active }) {
+function SMNode({ code, activeStep, activeAgent }) {
   const { cx, cy } = SM[code];
-  const on = active === code;
+  const on = activeStep === code;
+  const colour = on ? actorColour(activeAgent) : null;
+
+  const rectStyle = on
+    ? { fill: colour, stroke: colour }
+    : {};
+  const textStyle = on
+    ? { fill: '#050814' }
+    : {};
+
   return (
-    <g className={on ? 'sm-node-active' : ''}>
-      <rect x={cx-NW/2} y={cy-NH/2} width={NW} height={NH} className="sm-node-rect" rx={0} />
-      <text x={cx} y={cy-4}  textAnchor="middle" className="sm-node-code">{code}</text>
-      <text x={cx} y={cy+8}  textAnchor="middle" className="sm-node-desc">{STEP_LABELS[code]||''}</text>
+    <g className={on ? 'sm-node-active' : ''} style={on ? { '--node-colour': colour } : {}}>
+      <rect x={cx-NW/2} y={cy-NH/2} width={NW} height={NH} className="sm-node-rect" rx={0}
+        style={rectStyle} />
+      <text x={cx} y={cy-4}  textAnchor="middle" className="sm-node-code" style={textStyle}>{code}</text>
+      <text x={cx} y={cy+8}  textAnchor="middle" className="sm-node-desc" style={textStyle}>{STEP_LABELS[code]||''}</text>
     </g>
   );
 }
 
-function line(x1,y1,x2,y2,cls) {
-  return <line x1={x1} y1={y1} x2={x2} y2={y2} className={cls||'sm-edge'} markerEnd="url(#sm-arr)" />;
-}
-
-function curve(d, cls) {
-  return <path d={d} className={cls||'sm-edge'} markerEnd="url(#sm-arr)" fill="none" />;
-}
-
-function StateMachine({ activeStep }) {
+function StateMachine({ activeStep, activeAgent }) {
   return (
     <svg viewBox="0 0 380 660" style={{width:'100%', maxWidth:380, overflow:'visible'}}>
       <defs>
@@ -277,7 +299,9 @@ function StateMachine({ activeStep }) {
       <circle cx={nc('P2')} cy={nb('P2')+22} r={5} className="sm-terminal" />
 
       {/* Nodes (drawn last, on top of edges) */}
-      {Object.keys(SM).map(code => <SMNode key={code} code={code} active={activeStep} />)}
+      {Object.keys(SM).map(code =>
+        <SMNode key={code} code={code} activeStep={activeStep} activeAgent={activeAgent} />
+      )}
     </svg>
   );
 }
@@ -315,7 +339,7 @@ function eventToRow(evt) {
   }
 }
 
-function SequenceDiagram({ events }) {
+function SequenceDiagram({ events, activeAgent }) {
   const containerRef = useRef(null);
 
   useEffect(() => {
@@ -359,34 +383,74 @@ function SequenceDiagram({ events }) {
     font:    'IBM Plex Mono, Courier New, monospace',
   };
 
+  const activeColour = actorColour(activeAgent);
+
   function rowY(i) { return HDR_H + i * ROW_H + ROW_H / 2; }
+
+  // Per-actor lifeline colour: active actor gets their colour; others stay dim.
+  function lifelineColour(actor) {
+    return actor === activeAgent ? activeColour : C.dim;
+  }
+
+  // Arrow/return colour: use actor colour when the involved actor is the active one.
+  function arrowColour(from, to, isReturn) {
+    const involvedActor = isReturn ? from : to;
+    if (involvedActor === activeAgent) return activeColour;
+    return isReturn ? C.return : C.arrow;
+  }
 
   return (
     <div id="sequence-panel" ref={containerRef}>
       <svg width={SEQ_W} height={totalH} style={{display:'block', minWidth:SEQ_W}}>
         <defs>
-          {/* Filled arrowhead */}
+          {/* Per-actor filled arrowheads */}
+          {ACTORS.map(a => {
+            const col = lifelineColour(a);
+            return (
+              <marker key={`seq-f-${a}`} id={`seq-f-${a}`}
+                markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+                <path d="M0,0 L7,3.5 L0,7 z" fill={col} />
+              </marker>
+            );
+          })}
+          {/* Per-actor open arrowheads */}
+          {ACTORS.map(a => {
+            const col = lifelineColour(a);
+            return (
+              <marker key={`seq-o-${a}`} id={`seq-o-${a}`}
+                markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+                <path d="M0,0 L7,4 L0,8" fill="none" stroke={col} strokeWidth="1.2" />
+              </marker>
+            );
+          })}
+          {/* Fallback markers */}
           <marker id="seq-f" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
             <path d="M0,0 L7,3.5 L0,7 z" fill={C.arrow} />
           </marker>
-          {/* Open arrowhead */}
           <marker id="seq-o" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
             <path d="M0,0 L7,4 L0,8" fill="none" stroke={C.return} strokeWidth="1.2" />
           </marker>
         </defs>
 
         {/* Actor headers */}
-        {ACTORS.map(a => (
-          <g key={a}>
-            <text x={ax(a)} y={26} textAnchor="middle"
-              style={{fill:C.dimText, fontFamily:C.font, fontSize:9, letterSpacing:'0.12em'}}>
-              {a}
-            </text>
-            {/* Lifeline */}
-            <line x1={ax(a)} y1={40} x2={ax(a)} y2={totalH}
-              stroke={C.dim} strokeWidth={1} strokeDasharray="4 4" />
-          </g>
-        ))}
+        {ACTORS.map(a => {
+          const isActive = a === activeAgent;
+          const col = isActive ? activeColour : C.dimText;
+          return (
+            <g key={a}>
+              <text x={ax(a)} y={26} textAnchor="middle"
+                style={{fill:col, fontFamily:C.font, fontSize:9, letterSpacing:'0.12em',
+                        fontWeight: isActive ? 700 : 400}}>
+                {a}
+              </text>
+              {/* Lifeline */}
+              <line x1={ax(a)} y1={40} x2={ax(a)} y2={totalH}
+                stroke={lifelineColour(a)}
+                strokeWidth={isActive ? 1.5 : 1}
+                strokeDasharray="4 4" />
+            </g>
+          );
+        })}
 
         {/* Header rule */}
         <line x1={0} y1={40} x2={SEQ_W} y2={40} stroke={C.border} strokeWidth={1} />
@@ -395,9 +459,10 @@ function SequenceDiagram({ events }) {
         {bars.map((b, i) => {
           const y1 = HDR_H + b.startRow * ROW_H;
           const y2 = b.endRow != null ? HDR_H + b.endRow * ROW_H + ROW_H/2 : totalH - 24;
+          const barColour = b.actor === activeAgent ? activeColour : C.accent;
           return (
             <rect key={i} x={ax(b.actor)-4} y={y1} width={8} height={y2-y1}
-              fill={C.accent} fillOpacity={0.13} />
+              fill={barColour} fillOpacity={0.13} />
           );
         })}
 
@@ -435,12 +500,15 @@ function SequenceDiagram({ events }) {
 
           if (row.kind === 'self') {
             const x = ax(row.actor);
+            const selfCol = row.actor === activeAgent ? activeColour : C.dim;
             return (
               <g key={i}>
                 <path d={`M${x} ${cy-7} L${x+22} ${cy-7} L${x+22} ${cy+7} L${x} ${cy+7}`}
-                  stroke={C.dim} strokeWidth={1} fill="none" markerEnd="url(#seq-f)" />
+                  stroke={selfCol} strokeWidth={1} fill="none"
+                  markerEnd={`url(#seq-f-${row.actor})`} />
                 <text x={x+26} y={cy+4}
-                  style={{fill:C.dimText, fontFamily:C.font, fontSize:9}}>
+                  style={{fill: row.actor === activeAgent ? activeColour : C.dimText,
+                          fontFamily:C.font, fontSize:9}}>
                   {row.label}
                 </text>
               </g>
@@ -453,15 +521,20 @@ function SequenceDiagram({ events }) {
             if (fx === tx) return null;
             const isRet = row.kind === 'return';
             const mid   = (fx + tx) / 2;
+            const lineCol = arrowColour(row.from, row.to, isRet);
+            // Use per-actor marker for the destination (arrow) or source (return)
+            const markerActor = isRet ? row.from : row.to;
+            const markerId = isRet ? `seq-o-${markerActor}` : `seq-f-${markerActor}`;
             return (
               <g key={i}>
                 <line x1={fx} y1={cy} x2={tx} y2={cy}
-                  stroke={isRet ? C.return : C.arrow} strokeWidth={1}
-                  markerEnd={isRet ? 'url(#seq-o)' : 'url(#seq-f)'}
+                  stroke={lineCol} strokeWidth={1}
+                  markerEnd={`url(#${markerId})`}
                   strokeDasharray={isRet ? '4 3' : undefined}
                 />
                 <text x={mid} y={cy-5} textAnchor="middle"
-                  style={{fill:C.text, fontFamily:C.font, fontSize:9}}>
+                  style={{fill: lineCol === C.return || lineCol === C.arrow ? C.text : lineCol,
+                          fontFamily:C.font, fontSize:9}}>
                   {row.label}
                 </text>
               </g>
@@ -481,17 +554,17 @@ function App() {
   const sessions   = useSessions();
   const [selId, setSelId] = useState(null);
   const events     = useEventStream(selId);
-  const activeStep = useMemo(() => deriveActiveStep(events), [events]);
+  const { step: activeStep, agent: activeAgent } = useMemo(() => deriveActiveStep(events), [events]);
 
   return (
     <div id="layout">
       <Sidebar sessions={sessions} selectedId={selId} onSelect={setSelId} />
       <div id="main">
         <div id="state-panel">
-          <StateMachine activeStep={activeStep} />
+          <StateMachine activeStep={activeStep} activeAgent={activeAgent} />
         </div>
         {selId
-          ? <SequenceDiagram events={events} />
+          ? <SequenceDiagram events={events} activeAgent={activeAgent} />
           : <div id="sequence-panel"><div className="placeholder">select a session</div></div>
         }
       </div>

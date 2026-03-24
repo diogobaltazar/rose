@@ -37,8 +37,7 @@ global/        # Installed to ~/.claude/ by `rose install`
 src/rose/cli/  # Typer entrypoint (package)
 ├── __init__.py     # app definition, command registration
 ├── install.py      # rose install
-├── uninstall.py    # rose uninstall
-└── observe.py      # rose observe
+└── uninstall.py    # rose uninstall
 src/rose/api/  # FastAPI backend for observe dashboard
 ├── Dockerfile
 ├── requirements.txt

@@ -58,12 +58,11 @@ body {
 
 .issue-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   padding: 7px 16px;
   cursor: pointer;
   color: var(--text);
-  font-size: 11px;
   border-left: 2px solid transparent;
   transition: background 0.1s;
 }
@@ -73,15 +72,48 @@ body {
   border-left-color: var(--accent);
   color: var(--text-bright);
 }
+.issue-row--ended { opacity: 0.55; }
+.issue-row--ended.selected { opacity: 1; }
 
-.pulse-dot {
+.issue-row-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.issue-row-title {
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.issue-row-sub {
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 0.08em;
+  margin-top: 2px;
+}
+.issue-row.selected .issue-row-sub { color: inherit; opacity: 0.6; }
+
+.sidebar-empty {
+  padding: 16px;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.status-dot {
   width: 6px;
   height: 6px;
-  background: #22c55e;
   border-radius: 50%;
   flex-shrink: 0;
-  animation: pulse 2s ease-in-out infinite;
+  margin-top: 4px;
 }
+
+.status-dot--active        { background: #22c55e; animation: pulse 2s ease-in-out infinite; }
+.status-dot--delivery      { background: #22c55e; opacity: 0.45; }
+.status-dot--investigation { background: #3b82f6; opacity: 0.55; }
+.status-dot--abandoned     { background: #6b7280; opacity: 0.45; }
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }

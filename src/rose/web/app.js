@@ -131,6 +131,24 @@ function branchSlug(branch) {
   return m ? m[1] : (branch || '');
 }
 
+function sessionTitle(s) {
+  const num  = s.issue && s.issue !== 'null' && s.issue !== null ? `#${s.issue}` : null;
+  const slug = branchSlug(s.branch).replace(/-/g, ' ');
+  if (num && slug) return `${num} ${slug}`;
+  if (num)         return num;
+  if (slug)        return slug;
+  return s.session_id.slice(0, 8);
+}
+
+function sessionSubline(s) {
+  if (s.status === 'in_progress') {
+    if (s.current_step) return `${s.current_step} · ${STEP_LABELS[s.current_step] || ''}`;
+    return 'running';
+  }
+  const map = { delivery: 'delivered', investigation: 'write-up', abandoned: 'abandoned', in_progress: 'interrupted' };
+  return map[s.outcome] || 'ended';
+}
+
 function deriveActiveStep(events) {
   // Returns { step, agent } for the most recent open step.enter, or { step: null, agent: null }.
   const stack = []; // each entry: { step, agent }
@@ -148,40 +166,58 @@ function deriveActiveStep(events) {
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 
+function StatusDot({ status, outcome }) {
+  if (status === 'in_progress') return <span className="status-dot status-dot--active" />;
+  const cls = outcome === 'delivery'      ? 'status-dot--delivery'
+            : outcome === 'investigation' ? 'status-dot--investigation'
+            : 'status-dot--abandoned';
+  return <span className={`status-dot ${cls}`} />;
+}
+
 function Sidebar({ sessions, selectedId, onSelect }) {
   const byRepo = useMemo(() => {
     const m = {};
-    Object.values(sessions).forEach(s => {
-      const k = s.repository || 'unknown';
-      (m[k] = m[k] || []).push(s);
-    });
+    Object.values(sessions)
+      .sort((a, b) => {
+        // Active first, then by started_at descending.
+        if (a.status !== b.status) return a.status === 'in_progress' ? -1 : 1;
+        if (a.started_at && b.started_at) return a.started_at > b.started_at ? -1 : 1;
+        return 0;
+      })
+      .forEach(s => {
+        const k = s.repository || 'unknown';
+        (m[k] = m[k] || []).push(s);
+      });
     return m;
   }, [sessions]);
+
+  const isEmpty = Object.keys(byRepo).length === 0;
 
   return (
     <aside id="sidebar">
       <h1>rose observe</h1>
-      {Object.entries(byRepo).map(([repo, list]) => (
-        <div className="project" key={repo}>
-          <div className="project-title">{repoName(repo)}</div>
-          {list.map(s => {
-            const num  = s.issue && s.issue !== 'null' ? `#${s.issue} ` : '';
-            const slug = branchSlug(s.branch) || s.session_id.slice(0, 8);
-            const isRose = s.entry_point === 'E5';
-            return (
+      {isEmpty
+        ? <div className="sidebar-empty">no sessions</div>
+        : Object.entries(byRepo).map(([repo, list]) => (
+          <div className="project" key={repo}>
+            <div className="project-title">{repoName(repo)}</div>
+            {list.map(s => (
               <div
                 key={s.session_id}
-                className={`issue-row${s.session_id === selectedId ? ' selected' : ''}`}
+                className={`issue-row${s.session_id === selectedId ? ' selected' : ''}${s.status !== 'in_progress' ? ' issue-row--ended' : ''}`}
                 onClick={() => onSelect(s.session_id)}
               >
-                <span className="pulse-dot" />
-                <span className="issue-row-label">{num}{slug}</span>
-                {isRose && <span className="rose-icon" title="Rose-initiated (E5)">&#x2605;</span>}
+                <StatusDot status={s.status} outcome={s.outcome} />
+                <div className="issue-row-content">
+                  <span className="issue-row-title">{sessionTitle(s)}</span>
+                  <span className="issue-row-sub">{sessionSubline(s)}</span>
+                </div>
+                {s.entry_point === 'E5' && <span className="rose-icon" title="Rose-initiated (E5)">&#x2605;</span>}
               </div>
-            );
-          })}
-        </div>
-      ))}
+            ))}
+          </div>
+        ))
+      }
     </aside>
   );
 }

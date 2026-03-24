@@ -4,8 +4,8 @@
   --bg:          #050814;
   --bg-surface:  #0d1117;
   --bg-sidebar:  #080c18;
-  --border:      #1a2035;
-  --text-dim:    #4b5563;
+  --border:      #2e3f6e;
+  --text-dim:    #64748b;
   --text:        #94a3b8;
   --text-bright: #e2e8f0;
   --accent:      #f59e0b;
@@ -20,7 +20,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 #layout { display: flex; height: 100vh; }
@@ -31,7 +31,6 @@ body {
   width: 220px;
   min-width: 220px;
   background: var(--bg-sidebar);
-  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -100,7 +99,7 @@ body {
 #state-panel {
   width: 380px;
   min-width: 320px;
-  border-right: 1px solid var(--border);
+  border-right: 1px solid rgba(100,130,200,0.18);
   overflow-y: auto;
   overflow-x: auto;
   background: var(--bg);

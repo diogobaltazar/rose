@@ -37,8 +37,7 @@ global/        # Installed to ~/.claude/ by `rose install`
 src/rose/cli/  # Typer entrypoint (package)
 ├── __init__.py     # app definition, command registration
 ├── install.py      # rose install
-├── uninstall.py    # rose uninstall
-└── observe.py      # rose observe
+└── uninstall.py    # rose uninstall
 src/rose/api/  # FastAPI backend for observe dashboard
 ├── Dockerfile
 ├── requirements.txt
@@ -198,9 +197,12 @@ Every unit of work passes through a single pipeline regardless of entry point. T
 - **Output:** Redirection to the appropriate pipeline step
 - **Notes:** S1 is an interrupt, not a step. It can arrive at any moment and redirect anywhere. The analyst or engineer acknowledges and resumes from the redirected point.
 
-**[V1] State visualisation** *(future)*
+**[V1] State visualisation**
 - One state machine per user-initiated interaction; one per rose-initiated interaction (E5).
-- Highlights current node for user and active agent nodes simultaneously.
+- Each actor (analyst, engineer, git, github, orchestrator, user) is assigned a distinct colour from a shared palette.
+- The active step node is rendered in the colour of the actor currently working that step.
+- The sequence diagram uses the same palette: the active actor's lifeline and arrows are highlighted in their colour.
+- Both panels use the palette simultaneously -- colour is the primary visual cue for "who is doing what."
 - Preference for off-the-shelf tooling over custom build.
 
 ---
@@ -230,6 +232,7 @@ Written once at `session.start`, updated at `session.end`.
 {
   "session_id": "abc123",
   "interaction_id": "feat/42-my-feature",
+  "title": "Add meaningful session titles to sidebar",
   "entry_point": "E1",
   "started_at": "2026-03-23T10:00:00.000Z",
   "ended_at": "2026-03-23T10:45:00.000Z",
@@ -237,6 +240,8 @@ Written once at `session.start`, updated at `session.end`.
   "outcome": "delivery | investigation | abandoned | null"
 }
 ```
+
+`title` is a mutable field. It is set initially by the session-start hook and may be updated by agents as the session progresses (see *Session title resolution* below).
 
 ---
 
@@ -308,12 +313,32 @@ Three hooks in `global/hooks/` are bound in `settings.json`:
 
 ---
 
+### Session title resolution
+
+Each sidebar entry in the observe dashboard shows a `title` drawn from `meta.json`. The title improves over the session's lifetime as more context becomes available. Resolution priority (highest wins):
+
+1. **Feature title from R2** — the analyst agent writes a concise feature title to `meta.json` once requirements are confirmed. This is the canonical title for any session that reaches R2.
+2. **GitHub issue title** — if an issue is linked (i.e. `interaction_id` contains an issue number), the API resolves the issue title via `gh issue view`. Cached in `meta.json` at D1.
+3. **First user message preview** — the session-start hook captures the opening prompt (truncated to 60 characters) as the provisional title. Always available; used for sessions that never reach R2.
+4. **Branch name** — used only if the branch is not `main` or `master` and no message preview is available.
+5. **Truncated session ID** — last resort.
+
+**Who may update `title`:**
+- `log-session-start.sh` — writes the provisional title from the first user message at session open.
+- Analyst agent — overwrites with the confirmed feature title at R2.
+- GitHub agent — overwrites with the GitHub issue title at D1.
+
+The sidebar never shows a raw branch name for sessions on `main`. If no better title exists, it shows the first 60 characters of the opening prompt.
+
+---
+
 ### What the observability app will consume
 
-A future app tails `events.jsonl` and:
-- Highlights the current step node (most recent `step.enter` with no matching `step.exit`)
-- Shows active agents on their nodes
-- Renders a scrollable event stream in a side panel
+The observe dashboard (`rose observe`) tails `events.jsonl` and:
+- Highlights the current step node (most recent `step.enter` with no matching `step.exit`) in the colour of the actor working that step
+- Shows active agents on their nodes, colour-coded by actor
+- Renders a scrollable, colour-coded sequence diagram in the right panel
+- Uses a shared actor-colour palette across both the state machine and sequence diagram
 
 Format: newline-delimited JSON, append-only. Any `tail -f`-based reader works with no setup. Preference for off-the-shelf tooling over a custom build.
 

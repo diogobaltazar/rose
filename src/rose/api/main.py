@@ -1,7 +1,6 @@
 import asyncio
 import json
 import os
-import time
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket
@@ -59,24 +58,32 @@ def _derive_current_step(events_file: Path) -> str | None:
     return stack[-1] if stack else None
 
 
-def _is_active(events_file: Path, threshold: int = 600) -> bool:
+def _has_session_end(events_file: Path) -> bool:
+    """Return True if events.jsonl contains a session.end event."""
     try:
-        return (time.time() - events_file.stat().st_mtime) < threshold
+        with events_file.open() as f:
+            for line in f:
+                try:
+                    if json.loads(line.strip()).get("event") == "session.end":
+                        return True
+                except (json.JSONDecodeError, AttributeError):
+                    continue
     except OSError:
-        return False
+        pass
+    return False
 
 
 def _load_session(session_dir: Path) -> dict | None:
     meta_file = session_dir / "meta.json"
     events_file = session_dir / "events.jsonl"
-    if not meta_file.exists():
+    if not meta_file.exists() or not events_file.exists():
         return None
     try:
         meta = json.loads(meta_file.read_text())
     except (json.JSONDecodeError, OSError):
         return None
-    if not events_file.exists() or not _is_active(events_file):
-        return None
+    # Derive status from events — avoids race with meta.json update on session end.
+    status = "completed" if _has_session_end(events_file) else "in_progress"
     return {
         "session_id": meta.get("session_id", session_dir.name),
         "repository": meta.get("repository", "unknown"),
@@ -84,7 +91,10 @@ def _load_session(session_dir: Path) -> dict | None:
         "issue": meta.get("issue", None),
         "entry_point": meta.get("entry_point", None),
         "current_step": _derive_current_step(events_file),
-        "status": "active",
+        "outcome": meta.get("outcome", None),
+        "started_at": meta.get("started_at", None),
+        "status": status,
+        "title": meta.get("title", None),
     }
 
 
@@ -121,7 +131,7 @@ async def websocket_endpoint(websocket: WebSocket):
         async for changes in awatch(str(LOG_DIR)):
             for _change_type, path in changes:
                 path = Path(path)
-                if path.name != "events.jsonl":
+                if path.name not in ("events.jsonl", "meta.json"):
                     continue
                 session_dir = path.parent
                 session = _load_session(session_dir)

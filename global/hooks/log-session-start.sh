@@ -10,6 +10,24 @@ set -euo pipefail
 # Read stdin once; session_id lives in the JSON payload, not in env.
 STDIN_PAYLOAD=$(cat)
 SESSION_ID=$(echo "$STDIN_PAYLOAD" | python3 -c "import sys,json; print(json.load(sys.stdin).get('session_id','unknown'))" 2>/dev/null || echo "unknown")
+TITLE=$(echo "$STDIN_PAYLOAD" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+msg = ''
+for key in ('message','user_message','input'):
+    val = d.get(key, '')
+    if isinstance(val, str) and val.strip():
+        msg = val.strip()
+        break
+    if isinstance(val, list):
+        for item in val:
+            if isinstance(item, dict) and item.get('type') == 'text':
+                msg = item.get('text','').strip()
+                break
+        if msg:
+            break
+print(msg[:60])
+" 2>/dev/null || echo "")
 
 LOG_DIR="${HOME}/.claude/logs/${SESSION_ID}"
 META_FILE="${LOG_DIR}/meta.json"
@@ -36,7 +54,8 @@ cat > "$META_FILE" <<EOF
   "outcome": null,
   "repository": "${REPO}",
   "branch": "${BRANCH}",
-  "issue": "${ISSUE}"
+  "issue": "${ISSUE}",
+  "title": "${TITLE}"
 }
 EOF
 

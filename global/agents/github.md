@@ -40,7 +40,14 @@ Emit `step.enter` before issue creation (D1):
 
 ### Step 1: Create the GitHub issue
 
-Extract the feature title from the description. Create the issue:
+Extract the feature title from the description. Every issue body must follow this structure:
+
+- **Problem** — what is wrong or missing, and why it matters
+- **Options considered** — a trade-off table covering at least two alternatives (mechanism, benefit, drawback). Always present even when one option is obvious.
+- **Proposal** — the chosen approach and the reasoning that eliminates the alternatives
+- **Acceptance criteria** — a checklist of verifiable outcomes
+
+Create the issue:
 
 ```bash
 gh issue create --title "<title>" --body "<full description>"

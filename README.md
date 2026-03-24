@@ -91,13 +91,13 @@ rose() {
       start)
         mkdir -p "$HOME/.claude/logs" "$HOME/.config/rose"
         echo "Starting rose observe at http://localhost:5100 ..."
-        docker compose -f "$compose_file" up --build --detach api web
+        docker compose -p rose -f "$compose_file" up --build --detach api web
         ;;
       stop)
-        docker compose -f "$compose_file" stop api web
+        docker compose -p rose -f "$compose_file" stop api web
         ;;
       restart)
-        docker compose -f "$compose_file" restart api web
+        docker compose -p rose -f "$compose_file" restart api web
         ;;
       status)
         for name in rose-api rose-web; do

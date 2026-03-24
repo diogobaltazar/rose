@@ -232,6 +232,7 @@ Written once at `session.start`, updated at `session.end`.
 {
   "session_id": "abc123",
   "interaction_id": "feat/42-my-feature",
+  "title": "Add meaningful session titles to sidebar",
   "entry_point": "E1",
   "started_at": "2026-03-23T10:00:00.000Z",
   "ended_at": "2026-03-23T10:45:00.000Z",
@@ -239,6 +240,8 @@ Written once at `session.start`, updated at `session.end`.
   "outcome": "delivery | investigation | abandoned | null"
 }
 ```
+
+`title` is a mutable field. It is set initially by the session-start hook and may be updated by agents as the session progresses (see *Session title resolution* below).
 
 ---
 
@@ -307,6 +310,25 @@ Three hooks in `global/hooks/` are bound in `settings.json`:
 | `log-session-start.sh` | `PreToolUse` (fires once via sentinel) | Reads `session_id` from stdin JSON; creates log dir, writes `meta.json`, writes `.active-session` breadcrumb, emits `session.start` |
 | `log-tool-event.sh` | `PostToolUse` | Reads stdin JSON once, extracts both `session_id` and tool payload; appends `tool.call` event |
 | `log-session-end.sh` | `Stop` | Reads `session_id` from stdin JSON; derives outcome from last `step.exit`, appends `session.end`, updates `meta.json` |
+
+---
+
+### Session title resolution
+
+Each sidebar entry in the observe dashboard shows a `title` drawn from `meta.json`. The title improves over the session's lifetime as more context becomes available. Resolution priority (highest wins):
+
+1. **Feature title from R2** — the analyst agent writes a concise feature title to `meta.json` once requirements are confirmed. This is the canonical title for any session that reaches R2.
+2. **GitHub issue title** — if an issue is linked (i.e. `interaction_id` contains an issue number), the API resolves the issue title via `gh issue view`. Cached in `meta.json` at D1.
+3. **First user message preview** — the session-start hook captures the opening prompt (truncated to 60 characters) as the provisional title. Always available; used for sessions that never reach R2.
+4. **Branch name** — used only if the branch is not `main` or `master` and no message preview is available.
+5. **Truncated session ID** — last resort.
+
+**Who may update `title`:**
+- `log-session-start.sh` — writes the provisional title from the first user message at session open.
+- Analyst agent — overwrites with the confirmed feature title at R2.
+- GitHub agent — overwrites with the GitHub issue title at D1.
+
+The sidebar never shows a raw branch name for sessions on `main`. If no better title exists, it shows the first 60 characters of the opening prompt.
 
 ---
 

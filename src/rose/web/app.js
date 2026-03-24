@@ -132,11 +132,12 @@ function branchSlug(branch) {
 }
 
 function sessionTitle(s) {
-  const num  = s.issue && s.issue !== 'null' && s.issue !== null ? `#${s.issue}` : null;
-  const slug = branchSlug(s.branch).replace(/-/g, ' ');
-  if (num && slug) return `${num} ${slug}`;
-  if (num)         return num;
-  if (slug)        return slug;
+  // Resolution priority: explicit title field > branch slug > truncated session ID.
+  // The title field itself is written by the hook (first user message) and may be
+  // overwritten by agents with a feature title or GitHub issue title.
+  if (s.title && s.title.trim()) return s.title.trim();
+  const slug = branchSlug(s.branch);
+  if (slug) return slug.replace(/-/g, ' ');
   return s.session_id.slice(0, 8);
 }
 

@@ -94,6 +94,7 @@ def _load_session(session_dir: Path) -> dict | None:
         "outcome": meta.get("outcome", None),
         "started_at": meta.get("started_at", None),
         "status": status,
+        "title": meta.get("title", None),
     }
 
 

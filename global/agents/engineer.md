@@ -12,11 +12,12 @@ You are a senior software engineer. You receive a confirmed feature specificatio
 At each step boundary, emit a structured event to the session log using inline Bash:
 
 ```bash
-LOG_DIR="$HOME/.claude/logs/${CLAUDE_SESSION_ID:-unknown}"
+SESSION_ID=$(cat "$HOME/.claude/logs/.active-session" 2>/dev/null || echo "unknown")
+LOG_DIR="$HOME/.claude/logs/${SESSION_ID}"
 mkdir -p "$LOG_DIR"
 SEQ=$(( $(wc -l < "$LOG_DIR/events.jsonl" 2>/dev/null || echo 0) + 1 ))
 TS=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
-printf '%s\n' "{\"ts\":\"$TS\",\"session_id\":\"${CLAUDE_SESSION_ID:-unknown}\",\"seq\":$SEQ,\"source\":\"agent\",\"agent\":\"engineer\",\"step\":\"STEP_CODE\",\"event\":\"EVENT_TYPE\",\"payload\":PAYLOAD_JSON}" >> "$LOG_DIR/events.jsonl"
+printf '%s\n' "{\"ts\":\"$TS\",\"session_id\":\"${SESSION_ID}\",\"seq\":$SEQ,\"source\":\"agent\",\"agent\":\"engineer\",\"step\":\"STEP_CODE\",\"event\":\"EVENT_TYPE\",\"payload\":PAYLOAD_JSON}" >> "$LOG_DIR/events.jsonl"
 ```
 
 Replace `STEP_CODE`, `EVENT_TYPE`, and `PAYLOAD_JSON` appropriately at each boundary as described below.

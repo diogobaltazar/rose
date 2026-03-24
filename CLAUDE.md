@@ -197,9 +197,12 @@ Every unit of work passes through a single pipeline regardless of entry point. T
 - **Output:** Redirection to the appropriate pipeline step
 - **Notes:** S1 is an interrupt, not a step. It can arrive at any moment and redirect anywhere. The analyst or engineer acknowledges and resumes from the redirected point.
 
-**[V1] State visualisation** *(future)*
+**[V1] State visualisation**
 - One state machine per user-initiated interaction; one per rose-initiated interaction (E5).
-- Highlights current node for user and active agent nodes simultaneously.
+- Each actor (analyst, engineer, git, github, orchestrator, user) is assigned a distinct colour from a shared palette.
+- The active step node is rendered in the colour of the actor currently working that step.
+- The sequence diagram uses the same palette: the active actor's lifeline and arrows are highlighted in their colour.
+- Both panels use the palette simultaneously -- colour is the primary visual cue for "who is doing what."
 - Preference for off-the-shelf tooling over custom build.
 
 ---
@@ -309,10 +312,11 @@ Three hooks in `global/hooks/` are bound in `settings.json`:
 
 ### What the observability app will consume
 
-A future app tails `events.jsonl` and:
-- Highlights the current step node (most recent `step.enter` with no matching `step.exit`)
-- Shows active agents on their nodes
-- Renders a scrollable event stream in a side panel
+The observe dashboard (`rose observe`) tails `events.jsonl` and:
+- Highlights the current step node (most recent `step.enter` with no matching `step.exit`) in the colour of the actor working that step
+- Shows active agents on their nodes, colour-coded by actor
+- Renders a scrollable, colour-coded sequence diagram in the right panel
+- Uses a shared actor-colour palette across both the state machine and sequence diagram
 
 Format: newline-delimited JSON, append-only. Any `tail -f`-based reader works with no setup. Preference for off-the-shelf tooling over a custom build.
 

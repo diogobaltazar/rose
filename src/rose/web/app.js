@@ -365,8 +365,8 @@ function eventToRow(evt) {
       return { kind:'return', from:agent||'orchestrator', to:'user',
                label:(payload?.preview||'').slice(0,46) };
     case 'tool.call':
-      return { kind:'self',   actor:agent||'orchestrator',
-               label:payload?.tool||'tool' };
+    case 'tool.result':
+      return null;
     case 'interrupt.s1':
       return { kind:'interrupt', text:`S1 · ${payload?.note||'stakeholder input'}` };
     case 'error':
@@ -376,7 +376,7 @@ function eventToRow(evt) {
   }
 }
 
-function SequenceDiagram({ events, activeAgent }) {
+function SequenceDiagram({ events, activeAgent, activeStep }) {
   const containerRef = useRef(null);
 
   useEffect(() => {
@@ -480,6 +480,13 @@ function SequenceDiagram({ events, activeAgent }) {
                         fontWeight: isActive ? 700 : 400}}>
                 {a}
               </text>
+              {isActive && activeStep && (
+                <text x={ax(a)} y={40} textAnchor="middle"
+                  className="seq-status-pulse"
+                  style={{fill:activeColour, fontFamily:C.font, fontSize:8, fontWeight:700}}>
+                  {activeStep}
+                </text>
+              )}
               {/* Lifeline */}
               <line x1={ax(a)} y1={40} x2={ax(a)} y2={totalH}
                 stroke={lifelineColour(a)}
@@ -535,23 +542,6 @@ function SequenceDiagram({ events, activeAgent }) {
             );
           }
 
-          if (row.kind === 'self') {
-            const x = ax(row.actor);
-            const selfCol = row.actor === activeAgent ? activeColour : C.dim;
-            return (
-              <g key={i}>
-                <path d={`M${x} ${cy-7} L${x+22} ${cy-7} L${x+22} ${cy+7} L${x} ${cy+7}`}
-                  stroke={selfCol} strokeWidth={1} fill="none"
-                  markerEnd={`url(#seq-f-${row.actor})`} />
-                <text x={x+26} y={cy+4}
-                  style={{fill: row.actor === activeAgent ? activeColour : C.dimText,
-                          fontFamily:C.font, fontSize:9}}>
-                  {row.label}
-                </text>
-              </g>
-            );
-          }
-
           if (row.kind === 'arrow' || row.kind === 'return') {
             const fx = ax(row.from);
             const tx = ax(row.to);
@@ -601,7 +591,7 @@ function App() {
           <div id="state-panel">
             <StateMachine activeStep={activeStep} activeAgent={activeAgent} />
           </div>
-          <SequenceDiagram events={events} activeAgent={activeAgent} />
+          <SequenceDiagram events={events} activeAgent={activeAgent} activeStep={activeStep} />
         </> : <div className="placeholder">select a session</div>}
       </div>
     </div>

@@ -179,12 +179,21 @@ body {
   font-size: 8px;
 }
 .sm-node-active .sm-node-rect {
-  animation: node-pulse 1.4s ease-in-out infinite;
+  animation: node-fill-pulse 1.6s ease-in-out infinite;
 }
 
-@keyframes node-pulse {
+.sm-node-active {
+  animation: node-glow 1.6s ease-in-out infinite;
+}
+
+@keyframes node-fill-pulse {
   0%, 100% { fill-opacity: 1; }
-  50%       { fill-opacity: 0.75; }
+  50%       { fill-opacity: 0.5; }
+}
+
+@keyframes node-glow {
+  0%, 100% { filter: drop-shadow(0 0 2px var(--node-colour, #f59e0b)); }
+  50%       { filter: drop-shadow(0 0 10px var(--node-colour, #f59e0b)) drop-shadow(0 0 3px #ffffffaa); }
 }
 
 .sm-edge       { stroke: var(--border); stroke-width: 1; fill: none; }
@@ -199,6 +208,17 @@ body {
 }
 .sm-terminal   { fill: var(--text-dim); }
 .sm-diamond    { fill: var(--bg-surface); stroke: var(--border); stroke-width: 1; }
+
+/* ── Sequence diagram status pulse ──────────────────────── */
+
+.seq-status-pulse {
+  animation: seq-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes seq-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
 
 /* ── Sidebar icons ───────────────────────────────────────── */
 

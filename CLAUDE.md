@@ -207,6 +207,130 @@ Every unit of work passes through a single pipeline regardless of entry point. T
 
 ---
 
+## Development Flow — State Graph
+
+The development flow as a non-deterministic state graph. `User`-owned states are blue; `Coding Assistant`-owned states are green; AND-join nodes are grey.
+
+```mermaid
+%%{init: {'flowchart': {'nodeSpacing': 28, 'rankSpacing': 42, 'curve': 'basis'}}}%%
+graph LR
+
+    %% ── Entry points ────────────────────────────────────────────────────────
+    WorkOnFeature[Work On Feature]
+    TestFeature[Test Feature]
+    DebateReady(( ))
+
+    WorkOnFeature -.- DebateReady
+    AnalyseFeature -.- DebateReady
+    TestFeature --- GitHubPRInspect
+
+    %% ── Analysis ────────────────────────────────────────────────────────────
+    AnalyseFeature[Analyse Feature]
+    InspectCode[Inspect Sources]
+    InspectBacklog[Inspect Backlog]
+    AnalysisReady(( ))
+
+    DebateReady --- InspectCode
+    DebateReady --- InspectBacklog
+    InspectCode -.- AnalysisReady
+    InspectBacklog -.- AnalysisReady
+
+    %% ── Issue management ────────────────────────────────────────────────────
+    GrantIssuePermission[Grant Issue Permission]
+    CreateIssue[Create Issue]
+    EditIssue[Edit Issue]
+    SelectIssue[Select Issue]
+    BranchIssue[Branch Issue]
+
+    AnalysisReady --- GrantIssuePermission
+    AnalysisReady --- SelectIssue
+    InspectBacklog --- GrantIssuePermission
+    GrantIssuePermission --- CreateIssue
+    GrantIssuePermission --- EditIssue
+    EditIssue --- SelectIssue
+    CreateIssue --- BranchIssue
+
+    %% ── PR management ───────────────────────────────────────────────────────
+    GitHubPRInspect[Inspect PRs]
+    GitSelectPR[Select PR]
+    GitHubPRCreate[Create PR]
+    GitHubPRMerge[Merge PR]
+    GitHubPRInspect --- GitSelectPR
+
+    %% ── Worktree ─────────────────────────────────────────────────────────────
+    GitWorktreeInspect[Inspect Worktree]
+    GitWorktreeCreate[Create Worktree]
+    GitWorktreeDelete[Delete Worktree]
+    GitSelectWorktree[Select Worktree]
+
+    BranchIssue --- GitWorktreeInspect
+    SelectIssue --- GitWorktreeInspect
+    GitSelectPR --- GitWorktreeInspect
+    GitWorktreeInspect --- GitWorktreeCreate
+    GitWorktreeInspect --- GitWorktreeDelete
+    GitWorktreeInspect --- GitSelectWorktree
+    GitWorktreeCreate --- GitSelectWorktree
+
+    %% ── Implementation ──────────────────────────────────────────────────────
+    ImplementFeature[Implement Feature]
+    VerifyLocalRunAgent[Execute Local Run]
+    ExecuteLocalRunUser[Execute Local Run]
+    RunUnitTests[Run Unit Tests]
+    RunIntegrationTests[Run Integration Tests]
+    AssessTag[Assess Tag]
+
+    GitSelectWorktree --- ImplementFeature
+    GitSelectWorktree --- ExecuteLocalRunUser
+    ImplementFeature --- VerifyLocalRunAgent
+    ImplementFeature --- RunUnitTests
+    ImplementFeature --- RunIntegrationTests
+
+    %% ── Validation ──────────────────────────────────────────────────────────
+    ValidationReady(( ))
+
+    VerifyLocalRunAgent -.- ValidationReady
+    RunUnitTests -.- ValidationReady
+    RunIntegrationTests -.- ValidationReady
+    ValidationReady --- ExecuteLocalRunUser
+
+    %% ── Review & commits ────────────────────────────────────────────────────
+    StructuredCommits[Commit & Push]
+    PRReady(( ))
+    SelectMergePR[Merge PR]
+
+    ExecuteLocalRunUser --- AssessTag
+    ExecuteLocalRunUser --- StructuredCommits
+    ExecuteLocalRunUser --- ImplementFeature
+    ExecuteLocalRunUser --- SelectMergePR
+    AssessTag -.- PRReady
+    StructuredCommits -.- PRReady
+    PRReady --- GitHubPRCreate
+    GitHubPRCreate --- SelectMergePR
+    SelectMergePR --- GitHubPRMerge
+    PRReady --- SelectMergePR
+
+    %% ── Deployment & monitoring ─────────────────────────────────────────────
+    MonitorDeployment[Monitor Deployment]
+
+    GitHubPRMerge --- MonitorDeployment
+    MonitorDeployment --- DebateReady
+
+    classDef user fill:#d9ecff,stroke:#2b6cb0,color:#102a43
+    classDef assistant fill:#e3f9e5,stroke:#2f855a,color:#1b4332
+    classDef join fill:#f8fafc,stroke:#94a3b8,color:#f8fafc,stroke-width:2px
+
+    class WorkOnFeature,TestFeature,GrantIssuePermission user
+    class ExecuteLocalRunUser,SelectMergePR user
+    class AnalyseFeature,InspectCode,InspectBacklog,SelectIssue,CreateIssue assistant
+    class EditIssue,BranchIssue,GitWorktreeInspect,GitWorktreeCreate,GitWorktreeDelete assistant
+    class GitSelectWorktree,GitHubPRInspect,GitSelectPR,GitHubPRCreate assistant
+    class GitHubPRMerge,ImplementFeature,VerifyLocalRunAgent,RunUnitTests assistant
+    class RunIntegrationTests,AssessTag,StructuredCommits,MonitorDeployment assistant
+    class AnalysisReady,ValidationReady,PRReady join
+```
+
+---
+
 ## Observability — Log Dump Specification
 
 Agents emit structured logs as they move through the lifecycle. Hooks capture the tool-call stream automatically. Together they produce two resolution levels: **step-level** (agent-emitted) and **tool-level** (hook-emitted).

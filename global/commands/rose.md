@@ -79,7 +79,7 @@ Derive a short slug from the feature prompt (2–4 words, kebab-case). Then:
 
 ## Handling teammate messages
 
-Teammate messages arrive as new conversation turns. Handle each type:
+Teammate messages arrive as new conversation turns. Handle each type precisely.
 
 ### rose-research — Gemini relay request
 
@@ -96,9 +96,9 @@ When the user pastes Gemini results back, relay them to rose-research:
 SendMessage(to: "rose-research", message: "Gemini results:\n\n[paste user's response here]")
 ```
 
-### rose-backlog — backlog report (requires user approval)
+### rose-backlog — BACKLOG REPORT (requires user approval)
 
-When rose-backlog sends a message starting with "BACKLOG REPORT", it contains both the inspection results and a proposed action (create new issue or edit existing). Present the proposal to the user for approval:
+When rose-backlog sends a message starting with "BACKLOG REPORT", present it to the user:
 
 > rose-backlog has inspected the backlog. Here is the report:
 >
@@ -107,55 +107,112 @@ When rose-backlog sends a message starting with "BACKLOG REPORT", it contains bo
 > Shall I proceed with the proposed action?
 
 When the user responds:
-- **If approved** (any affirmative): relay to rose-backlog:
-  ```
-  SendMessage(to: "rose-backlog", message: "APPROVED — proceed as proposed.")
-  ```
-- **If approved with corrections**: relay the corrections:
-  ```
-  SendMessage(to: "rose-backlog", message: "APPROVED with corrections:\n\n[user's corrections]")
-  ```
-- **If rejected**: relay the rejection:
-  ```
-  SendMessage(to: "rose-backlog", message: "REJECTED — [user's reason]. Do not create or edit any issue.")
-  ```
-  In this case, rose-backlog will not proceed to phases 4–5. Treat its original report as the final report for convergence purposes.
+- **Approved**: `SendMessage(to: "rose-backlog", message: "APPROVED — proceed as proposed.")`
+- **Approved with corrections**: `SendMessage(to: "rose-backlog", message: "APPROVED with corrections:\n\n[corrections]")`
+- **Rejected**: `SendMessage(to: "rose-backlog", message: "REJECTED — [reason]. Do not create or edit any issue.")` — then shut down all teammates and `TeamDelete`. Stop.
 
-### rose-backlog — backlog complete (branch and issue ready)
+### rose-backlog — BACKLOG COMPLETE
 
-When rose-backlog sends a message starting with "BACKLOG COMPLETE", it contains the issue number, title, and branch name. Note this — you will need the branch name for worktree setup.
+When rose-backlog sends a message starting with "BACKLOG COMPLETE":
 
-This counts as rose-backlog's final report.
+1. Extract and store: **issue number**, **issue title**, **branch name**, and the **issue body** from the earlier BACKLOG REPORT.
+2. Shut down rose-backlog: `SendMessage(to: "rose-backlog", message: {type: "shutdown_request"})`
+3. Tell the user: *"Backlog sorted. Creating the worktree — one moment."*
+4. Spawn rose-git to create the worktree:
+   ```
+   Agent(subagent_type: "rose-git", name: "rose-git", team_name: "<active-team-name>",
+         prompt: "Create a worktree for branch <branch-name>.")
+   ```
+5. **Wait** for rose-git to send `WORKTREE READY`. Do not proceed to plan synthesis until that message arrives.
 
-### Any teammate — final report
+### rose-git — WORKTREE READY
 
-When a teammate sends its completed report (either "BACKLOG COMPLETE", "BACKLOG REPORT" after rejection, or a research report), note which teammates have reported in. Do not synthesise yet unless all launched teammates have reported.
+When rose-git sends a message starting with "WORKTREE READY":
 
-If teammates are still outstanding, reply briefly: "Received [agent] report. Waiting on [remaining]."
+1. Extract and store the **worktree path**.
+2. Shut down rose-git: `SendMessage(to: "rose-git", message: {type: "shutdown_request"})`
 
-### All launched teammates reported
+If rose-research has **not yet** reported: wait for it now before proceeding.
 
-Once all launched teammates have sent their final reports:
+Once all initial teammates (rose-backlog, rose-research if launched) have finished and the worktree is ready, proceed to **Plan Synthesis**.
 
-1. Shut down teammates and the team:
+### rose-research — research report
 
-Always:
+When rose-research sends its completed research report:
+
+If rose-backlog and rose-git have also finished: proceed to **Plan Synthesis**.
+Otherwise: store the report and wait.
+
+---
+
+## Plan Synthesis
+
+This step runs once: after BACKLOG COMPLETE has been received, the worktree is ready, and rose-research (if launched) has reported.
+
+**Do not start implementation. Do not spawn rose-engineer yet.**
+
+1. Synthesise everything you know:
+   - Your codebase reading (Step 3)
+   - The issue content (from BACKLOG REPORT)
+   - Research findings (if rose-research ran)
+
+2. If there are genuine open questions that would materially change the implementation approach, ask them now. Keep questions minimal and specific. Wait for the user's answers before proceeding.
+
+3. Once questions are resolved (or if there were none), present a thorough implementation plan:
+   - What files will be changed and how
+   - What new files will be created (if any)
+   - Key design decisions and why
+   - What will NOT be changed (scope boundaries)
+   - Any risks or open questions
+
+   Frame this clearly and invite the user to discuss. **Do not proceed until the user explicitly approves the plan.**
+
+4. When the user approves (any affirmative response), move to **Implementation**.
+
+---
+
+## Implementation
+
+Spawn rose-engineer within the active team:
+
 ```
-SendMessage(to: "rose-backlog", message: {type: "shutdown_request"})
-```
-If rose-research was launched:
-```
-SendMessage(to: "rose-research", message: {type: "shutdown_request"})
+Agent(
+  subagent_type: "rose-engineer",
+  name: "rose-engineer",
+  team_name: "<active-team-name>",
+  prompt: "Implement the agreed plan.
+
+Worktree path: <worktree-path>
+Issue: #<number> — <title>
+
+Issue body:
+<issue body>
+
+Agreed plan:
+<full plan text as presented to user>
+
+Codebase notes:
+<your Step 3 findings — relevant files, patterns, constraints>"
+)
 ```
 
-Then call `TeamDelete`.
+Print: `rose-engineer is implementing.`
 
-2. Synthesise all findings — your own codebase reading (Step 3) plus teammate reports — into a rich, considered response. Respond as Rose: clear, precise, well-structured markdown. Surface the most important insights first. If clarifying questions are genuinely necessary before work can proceed, ask them — but keep them minimal and specific.
+Return to the user. End your turn.
 
-3. **If rose-backlog provided a branch name** (i.e. "BACKLOG COMPLETE" was received), delegate worktree setup to rose-git via the Agent tool:
+### rose-engineer — ENGINEER COMPLETE
 
-```
-Agent(subagent_type: "rose-git", prompt: "Fetch origin and create a worktree for branch <branch-name>.")
-```
+When rose-engineer sends a message starting with "ENGINEER COMPLETE":
 
-When rose-git completes, inform the user that the workspace is ready for implementation.
+1. Relay the summary to the user.
+2. Shut down rose-engineer: `SendMessage(to: "rose-engineer", message: {type: "shutdown_request"})`
+3. Call `TeamDelete`.
+4. Suggest next steps (e.g. review changes, run tests, push the branch).
+
+### rose-engineer — ENGINEER BLOCKED
+
+When rose-engineer sends a message starting with "ENGINEER BLOCKED":
+
+1. Relay the blocker and recommendation to the user.
+2. Ask how to proceed.
+3. When the user decides, relay the decision to rose-engineer and continue.

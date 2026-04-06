@@ -353,6 +353,7 @@ def read_subagents(session_dir: Path, agent_tool_use: dict, completed_tool_uses:
         tool_use_count = 0
         size_kb     = None
 
+        agent_cwd   = None
         jsonl_mtime = None
         if jsonl_file.exists():
             st      = jsonl_file.stat()
@@ -370,6 +371,8 @@ def read_subagents(session_dir: Path, agent_tool_use: dict, completed_tool_uses:
                             continue
                         if started_at is None:
                             started_at = entry.get("timestamp")
+                        if agent_cwd is None and entry.get("type") == "user":
+                            agent_cwd = entry.get("cwd")
                         if entry.get("type") == "assistant":
                             content = entry.get("message", {}).get("content", [])
                             if isinstance(content, list):
@@ -379,6 +382,9 @@ def read_subagents(session_dir: Path, agent_tool_use: dict, completed_tool_uses:
                                 )
             except OSError:
                 pass
+
+        agent_branch  = git(agent_cwd, "rev-parse", "--abbrev-ref", "HEAD") if agent_cwd else None
+        agent_gi      = git_info(agent_cwd) if agent_cwd else {"project": None, "worktree": None}
 
         # Determine live/done — in order of reliability:
         #  1. SubagentStop fired → definitively done
@@ -424,6 +430,9 @@ def read_subagents(session_dir: Path, agent_tool_use: dict, completed_tool_uses:
             "size_kb":       size_kb,
             "tool_use_count": tool_use_count,
             "status":        status,
+            "cwd":           agent_cwd,
+            "branch":        agent_branch,
+            "worktree":      agent_gi.get("worktree"),
         })
 
     agents.sort(key=lambda a: a["started_at"] or "")
@@ -653,6 +662,9 @@ def render_sessions() -> "Text":
                     "total_kb":    total_kb,
                     "total_calls": total_calls,
                     "is_lead":     False,
+                    "cwd":         last.get("cwd"),
+                    "branch":      last.get("branch"),
+                    "worktree":    last.get("worktree"),
                 })
 
             if team_lead:
@@ -724,6 +736,22 @@ def render_sessions() -> "Text":
                 if adesc and not r["is_lead"]:
                     out.append("          ")
                     out.append(adesc, style=STYLE_DIM)
+                    out.append("\n")
+
+                # line 3 — location info (cwd/branch/worktree) when relevant
+                if not r["is_lead"] and r.get("cwd") and (r.get("worktree") is not None or r.get("branch") != s["branch"]):
+                    home = Path.home()
+                    rcwd = Path(r["cwd"])
+                    try:
+                        display_cwd = "~/" + str(rcwd.relative_to(home))
+                    except ValueError:
+                        display_cwd = str(rcwd)
+                    out.append("          ")
+                    out.append(display_cwd, style=STYLE_DIM)
+                    if r.get("branch"):
+                        out.append(f"  ⎇ {r['branch']}", style=STYLE_NEON_DIM)
+                    if r.get("worktree") is not None:
+                        out.append("  [worktree]", style=STYLE_NEON_DIM)
                     out.append("\n")
 
     out.append(sep + "\n", style=STYLE_DIM)

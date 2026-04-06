@@ -548,3 +548,49 @@ SubagentStop fired for this agent_id?
 ```
 
 After computing `is_done`, status is clamped: a "live" agent in a dead session is still shown as "done".
+
+---
+
+## Claude Code Memory System
+
+Claude Code supports a file-based memory system that persists facts across sessions. It is configured per-project and loaded automatically into context at the start of every conversation.
+
+### Location
+
+```
+~/.claude/projects/{encoded-cwd}/memory/
+├── MEMORY.md          ← index file, loaded into every conversation
+└── {name}.md          ← individual memory entries
+```
+
+`MEMORY.md` is the index. It must stay concise (lines after ~200 are truncated) and contain only links to individual memory files — never memory content directly.
+
+### Memory types
+
+| Type | Purpose |
+|---|---|
+| `user` | Who the user is — role, expertise, preferences |
+| `feedback` | Corrections and confirmed approaches ("don't do X", "yes, exactly that") |
+| `project` | Ongoing context, goals, decisions, deadlines |
+| `reference` | Pointers to non-obvious facts that would otherwise have to be rediscovered |
+
+### Entry format
+
+Each memory file uses frontmatter:
+
+```markdown
+---
+name: SubagentStop reliability
+description: SubagentStop does not fire on abrupt exit or context limit
+type: reference
+---
+
+Content here. For feedback and project types, structure as:
+rule/fact, then **Why:** and **How to apply:** lines.
+```
+
+### What to save and what not to
+
+Save things that are **non-obvious and durable**: behavioural findings, confirmed design decisions, user preferences, external resource locations.
+
+Do **not** save things derivable from the code or git history: file paths, architecture, conventions, recent changes, in-progress work, or anything already in CLAUDE.md files.

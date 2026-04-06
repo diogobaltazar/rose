@@ -37,7 +37,7 @@ STYLE_PEARL    = "color(253)"        # title                 — pearl white
 STYLE_SILVER   = "color(245)"        # resumed ←             — silver
 STYLE_DIM      = "dim"               # dates, sizes, project parent
 STYLE_BOLD     = "bold"              # project name
-STYLE_DELTA    = "bold color(220)"   # value-increased highlight — amber gold
+STYLE_DELTA    = "color(39)"         # value-increased highlight — electric blue
 
 
 # ── Value-change highlight state ──────────────────────────────────────────────
@@ -695,7 +695,7 @@ def render_sessions() -> "Text":
                     acount = f"×{r['count']}".rjust(col_count)
                     asize  = fmt_size(r["total_kb"]).rjust(col_size)
                     acalls = str(r["total_calls"]).rjust(col_calls)
-                    pfx    = r["agent_id"] + ":"
+                    pfx    = r["agent_type"] + ":"   # stable key across invocations
 
                     out.append(*dot_sep)
                     out.append(aid, style=STYLE_DIM)

@@ -297,11 +297,15 @@ def read_subagents(session_dir: Path, agent_tool_use: dict, completed_tool_uses:
         tool_use_id = agent_tool_use.get(agent_id, "")
         tool_result_done = bool(tool_use_id and tool_use_id in completed_tool_uses)
 
+        stale = jsonl_mtime is not None and (time.time() - jsonl_mtime) > 120
+
         if hook_states and agent_id in hook_states:
             if hook_states[agent_id] == "done":
                 is_done = True                   # SubagentStop fired
             elif tool_result_done:
                 is_done = True                   # SubagentStop missed; tool_result is ground truth
+            elif stale:
+                is_done = True                   # orphaned Start + silent file — agent is gone
             else:
                 is_done = False                  # genuinely live
         else:

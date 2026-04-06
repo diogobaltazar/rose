@@ -535,6 +535,12 @@ If neither signal is available (old session, no hook log, no transcript link), t
 
 The tool-result join is immune to this: it is written by Claude Code into the parent transcript, not by a hook, so it is reliable even when hooks fail to fire. This makes it the correct cross-check when the hook log says "live".
 
+### When the transcript has no link at all
+
+A third failure mode exists: the agent starts, but the context limit is hit before any `agent_progress` entry is written into the parent transcript. The result is an orphaned `SubagentStart` in the hook log with no `agent_progress`, no `tool_result`, and a subagent `.jsonl` whose last `assistant` entry has `stop_reason: null`. All transcript-based signals are absent.
+
+The correct signal in this case is the subagent `.jsonl` mtime. A genuinely live agent writes to its file constantly (every tool call, every response chunk). If the file has been silent for more than 120 seconds, the agent is gone regardless of what the hook log says.
+
 ### Decision tree
 
 ```
@@ -543,7 +549,9 @@ SubagentStop fired for this agent_id?
 └─ no  → tool_result present in parent transcript?
           ├─ yes → done                             (transcript join — SubagentStop missed)
           └─ no  → SubagentStart fired?
-                    ├─ yes → live                   (genuinely in progress)
+                    ├─ yes → subagent .jsonl silent for >120s?
+                    │         ├─ yes → done         (orphaned Start — agent gone, file stale)
+                    │         └─ no  → live         (genuinely in progress)
                     └─ no  → done                   (no signal — conservative default)
 ```
 

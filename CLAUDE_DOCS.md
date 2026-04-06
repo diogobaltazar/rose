@@ -497,13 +497,48 @@ Key fields:
 | `last_assistant_message` | Stop only | Final message text from the subagent |
 | `stop_hook_active` | Stop only | Whether a `Stop` hook is also active |
 
-### Using hooks for live/done detection
+---
 
-The `agent_id` in both payloads matches exactly the filename stem of `subagents/agent-{agentId}.jsonl`. This gives a clean signal:
+## Agent Live/Done Detection in `observe.py`
 
-- Last event for an `agent_id` is `SubagentStart` → agent is **live**
-- Last event for an `agent_id` is `SubagentStop` → agent is **done**
+Determining whether a subagent is still running is non-trivial. Three signals are available, in decreasing order of reliability.
 
-This is more reliable than the tool_result join (which has a timing gap at startup) and the mtime heuristic (which was a 30-second guess).
+### Tier 1 — Hook log (authoritative)
 
-The log file `~/.claude/logs/subagent-events.jsonl` is written by the `log-subagent-events.sh` hook, which is registered under both `SubagentStart` and `SubagentStop` in `~/.claude/settings.json`.
+`~/.claude/logs/subagent-events.jsonl` is written by `log-subagent-events.sh`, registered under both `SubagentStart` and `SubagentStop`. Reading this file forward and keeping the last event per `agent_id` gives an exact signal:
+
+```
+SubagentStart  →  "live"
+SubagentStop   →  "done"
+```
+
+The `agent_id` in the hook payload matches the filename stem of `subagents/agent-{agentId}.jsonl`, so no join is needed. This is the preferred signal; it is accurate from the very first millisecond of the agent's life.
+
+### Tier 2 — Tool-result join (slight timing gap)
+
+For sessions that predate the hooks, `observe.py` falls back to the transcript join documented in [How `observe.py` joins everything](#how-observepy-joins-everything):
+
+```
+agent_progress entry  →  parentToolUseID
+tool_result entry     →  agent is done
+```
+
+The gap: `agent_progress` entries only appear after the agent begins streaming. In the brief window between `SubagentStart` and the first chunk, no `agent_progress` entry exists, so the agent appears to have no link and the fallback fires. This was the motivation for Tier 1.
+
+### Tier 3 — Conservative default
+
+If neither signal is available (old session, no hook log, no transcript link), the agent is assumed **done**. This avoids phantom live dots on historical sessions.
+
+### Decision tree
+
+```
+agent_id in hook_states?
+├─ yes → use hook_states[agent_id]          (Tier 1)
+└─ no  → agent_id in agent_tool_use?
+          ├─ yes → tool_use_id in completed_tool_uses?
+          │         ├─ yes → done            (Tier 2 — finished)
+          │         └─ no  → live            (Tier 2 — in progress)
+          └─ no  → done                      (Tier 3 — conservative)
+```
+
+After computing `is_done`, status is clamped: a "live" agent in a dead session is still shown as "done".

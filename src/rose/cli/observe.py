@@ -1,21 +1,21 @@
-#!/usr/bin/env python3
 """
 rose observe — session inspector
 
-Usage:
-  python scripts/observe.py --list     # list all sessions
-  python scripts/observe.py --watch    # live view, updates on file changes
+Commands:
+  rose observe list     # list all sessions
+  rose observe watch    # live view, updates on file changes
 """
 
 import json
 import os
 import re
 import subprocess
-import sys
 import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+
+import typer
 
 PROJECTS_DIR    = Path.home() / ".claude" / "projects"
 SESSIONS_DIR    = Path.home() / ".claude" / "sessions"
@@ -27,10 +27,6 @@ DEBOUNCE_S      = 0.15  # seconds after last event before redrawing
 HIGHLIGHT_TTL   = 2.0   # seconds a changed-value highlight stays lit
 
 # ── Rich styles (Matrix palette) ──────────────────────────────────────────────
-#
-#  colour_number corresponds to xterm-256 palette entries, same as the
-#  ANSI escape codes we had before — just expressed as rich style strings.
-#
 STYLE_NEON     = "bold color(118)"   # session ID / live dot — bright neon green
 STYLE_NEON_DIM = "color(28)"         # branch / worktree     — deep matrix green
 STYLE_PEARL    = "color(253)"        # title                 — pearl white
@@ -39,12 +35,7 @@ STYLE_DIM      = "dim"               # dates, sizes, project parent
 STYLE_BOLD     = "bold"              # project name
 STYLE_DELTA    = "color(39)"         # value-increased highlight — electric blue
 
-
-# ── Value-change highlight state ──────────────────────────────────────────────
-#
-#  Tracks previous metric values and highlight expiry times across renders.
-#  Keys are "{agent_id}:{metric}" strings.
-#
+# ── Value-change highlight state ─────────────────────────────────────────────
 _prev_metrics:      dict[str, float] = {}
 _highlight_until:   dict[str, float] = {}
 
@@ -60,11 +51,7 @@ def _check_delta(key: str, value: float) -> bool:
 
 
 def _fmt_delta(text: str, key: str, value: float) -> tuple[str, str, str | None, str | None]:
-    """Return (text, style, arrow, arrow_style) for a metric field.
-
-    If the value just increased or is still highlighted, returns amber style + ↑ arrow.
-    Otherwise returns the normal dim style with no arrow.
-    """
+    """Return (text, style, arrow, arrow_style) for a metric field."""
     if _check_delta(key, value):
         return text, STYLE_DELTA, " ↑", STYLE_DELTA
     return text, STYLE_DIM, None, None
@@ -181,11 +168,7 @@ def read_team_lead(session_id: str) -> str | None:
 # ── Subagent hook log ────────────────────────────────────────────────────────
 
 def read_subagent_hook_states() -> dict[str, str]:
-    """Return {agent_id: "live"|"done"} from SubagentStart/SubagentStop hook log.
-
-    The last event for each agent_id is authoritative:
-      SubagentStart → "live",  SubagentStop → "done"
-    """
+    """Return {agent_id: "live"|"done"} from SubagentStart/SubagentStop hook log."""
     states: dict[str, str] = {}
     if not SUBAGENT_LOG.exists():
         return states
@@ -216,12 +199,7 @@ def read_subagent_hook_states() -> dict[str, str]:
 # ── Message hook log ─────────────────────────────────────────────────────────
 
 def read_shutdown_requests() -> dict[str, list[str]]:
-    """Return {agent_name: [timestamps]} of shutdown_requests sent via SendMessage.
-
-    When a shutdown_request is sent to an agent by name (e.g. "rose-backlog"),
-    SubagentStop may not fire (shutdown via messaging protocol, not natural exit).
-    This log lets us correlate agent_type → shutdown timestamp as a done signal.
-    """
+    """Return {agent_name: [timestamps]} of shutdown_requests sent via SendMessage."""
     shutdowns: dict[str, list[str]] = {}
     if not MESSAGE_LOG.exists():
         return shutdowns
@@ -261,9 +239,7 @@ def read_transcript(path: Path) -> dict:
     cwd        = None
     started_at = None
     ended_at   = None
-    # agent completion tracking: {agentId: tool_use_id}
     agent_tool_use: dict[str, str] = {}
-    # set of tool_use_ids that have a tool_result (agent finished)
     completed_tool_uses: set[str] = set()
 
     try:
@@ -296,14 +272,12 @@ def read_transcript(path: Path) -> dict:
                             cleaned = strip_tags(content)
                             if cleaned:
                                 title = cleaned
-                    # detect tool_result completions
                     content = entry.get("message", {}).get("content", [])
                     if isinstance(content, list):
                         for block in content:
                             if isinstance(block, dict) and block.get("type") == "tool_result":
                                 completed_tool_uses.add(block.get("tool_use_id", ""))
 
-                # link agentId → parentToolUseID via progress entries
                 elif etype == "progress":
                     data = entry.get("data", {})
                     if data.get("type") == "agent_progress":
@@ -335,9 +309,6 @@ def read_subagents(session_dir: Path, agent_tool_use: dict, completed_tool_uses:
 
     agents = []
     for meta_file in subagents_dir.glob("agent-*.meta.json"):
-        agent_id = meta_file.stem.removeprefix("agent-").removesuffix(".meta")
-        # .meta.json stem is "agent-{id}.meta" after glob strips .json
-        # actual stem: "agent-a69d496525515eb5e.meta"
         agent_id = meta_file.name.removeprefix("agent-").removesuffix(".meta.json")
 
         try:
@@ -386,17 +357,11 @@ def read_subagents(session_dir: Path, agent_tool_use: dict, completed_tool_uses:
         agent_branch  = git(agent_cwd, "rev-parse", "--abbrev-ref", "HEAD") if agent_cwd else None
         agent_gi      = git_info(agent_cwd) if agent_cwd else {"project": None, "worktree": None}
 
-        # Determine live/done — in order of reliability:
-        #  1. SubagentStop fired → definitively done
-        #  2. tool_result in parent transcript → done (SubagentStop may have been missed)
-        #  3. SubagentStart fired, no Stop, no tool_result → live
-        #  4. No hook data, no transcript link → conservative "done"
         tool_use_id = agent_tool_use.get(agent_id, "")
         tool_result_done = bool(tool_use_id and tool_use_id in completed_tool_uses)
 
         stale = jsonl_mtime is not None and (time.time() - jsonl_mtime) > 120
 
-        # shutdown_request sent to this agent_type after it started → done
         shutdown_sent = False
         if shutdown_requests and started_at:
             for ts in shutdown_requests.get(agent_type, []):
@@ -406,20 +371,20 @@ def read_subagents(session_dir: Path, agent_tool_use: dict, completed_tool_uses:
 
         if hook_states and agent_id in hook_states:
             if hook_states[agent_id] == "done":
-                is_done = True                   # SubagentStop fired
+                is_done = True
             elif tool_result_done:
-                is_done = True                   # SubagentStop missed; tool_result is ground truth
+                is_done = True
             elif shutdown_sent:
-                is_done = True                   # shutdown_request sent; SubagentStop won't fire
+                is_done = True
             elif stale:
-                is_done = True                   # orphaned Start + silent file — agent is gone
+                is_done = True
             else:
-                is_done = False                  # genuinely live
+                is_done = False
         else:
             if tool_use_id:
-                is_done = tool_result_done       # fall back to transcript join
+                is_done = tool_result_done
             else:
-                is_done = True                   # no signal — conservative default
+                is_done = True
         status = "live" if (not is_done) and session_live else "done"
 
         agents.append({
@@ -568,40 +533,33 @@ def render_sessions() -> "Text":
         started    = fmt_dt(s["started_at"])
         size       = fmt_size(s["size_kb"])
 
-        # separator
         out.append("\n" + sep + "\n", style=STYLE_DIM)
 
-        # dot
         out.append("  ")
         if status == "live":
             out.append("●", style=STYLE_NEON + " blink")
         else:
             out.append("○", style=STYLE_DIM)
 
-        # session id
         out.append("  ")
         out.append(session_id, style=STYLE_NEON)
 
-        # resumed indicator
         if process_sid and process_sid != session_id:
             out.append("  ")
             out.append("←", style=STYLE_SILVER)
             out.append(process_sid, style=STYLE_DIM)
 
-        # pid
         if pid:
             out.append("  ")
             out.append(f"pid {pid}", style=STYLE_DIM)
 
         out.append("\n")
 
-        # title
         if title:
             out.append("  ")
             out.append(title, style=STYLE_PEARL)
             out.append("\n")
 
-        # meta row
         meta_parts: list[tuple[str, str]] = []
 
         if project:
@@ -624,7 +582,6 @@ def render_sessions() -> "Text":
                 out.append(*dot_sep)
             out.append(text, style=style)
 
-        # session KB — with delta highlight
         out.append(*dot_sep)
         if s["size_kb"] is not None:
             t, st, arrow, as_ = _fmt_delta(size, session_id + ":kb", s["size_kb"])
@@ -636,16 +593,13 @@ def render_sessions() -> "Text":
 
         out.append("\n")
 
-        # agents — group by agent_type, one row per type
         agents    = s.get("agents", [])
         team_lead = s.get("team_lead")
         if agents or team_lead:
-            # group: {agent_type: [invocations...]}  (sorted by started_at already)
             groups: dict[str, list] = {}
             for a in agents:
                 groups.setdefault(a["agent_type"], []).append(a)
 
-            # build one summary row per agent type
             rows = []
             for agent_type, invocations in groups.items():
                 last        = invocations[-1]
@@ -698,16 +652,14 @@ def render_sessions() -> "Text":
                 out.append(atype, style=STYLE_NEON_DIM)
 
                 if r["is_lead"]:
-                    # lead row — name · team-lead only
                     out.append(*dot_sep)
                     out.append("team-lead", style=STYLE_DIM)
                 else:
-                    # subagent row — name · id · ×N · KB · ⚙ calls
                     aid    = r["agent_id"][:8]
                     acount = f"×{r['count']}".rjust(col_count)
                     asize  = fmt_size(r["total_kb"]).rjust(col_size)
                     acalls = str(r["total_calls"]).rjust(col_calls)
-                    pfx    = session_id + ":" + r["agent_type"] + ":"  # scoped per session
+                    pfx    = session_id + ":" + r["agent_type"] + ":"
 
                     out.append(*dot_sep)
                     out.append(aid, style=STYLE_DIM)
@@ -732,13 +684,11 @@ def render_sessions() -> "Text":
 
                 out.append("\n")
 
-                # line 2 — description (subagents only)
                 if adesc and not r["is_lead"]:
                     out.append("          ")
                     out.append(adesc, style=STYLE_DIM)
                     out.append("\n")
 
-                # line 3 — location info (cwd/branch/worktree) when relevant
                 if not r["is_lead"] and r.get("cwd") and (r.get("worktree") is not None or r.get("branch") != branch):
                     home = Path.home()
                     rcwd = Path(r["cwd"])
@@ -758,23 +708,23 @@ def render_sessions() -> "Text":
     return out
 
 
-# ── List (one-shot) ───────────────────────────────────────────────────────────
+# ── Typer app ─────────────────────────────────────────────────────────────────
 
-def list_sessions():
+app = typer.Typer(name="observe", help="Session inspector.", add_completion=False)
+
+
+@app.command("list")
+def list_cmd():
+    """List all sessions."""
     from rich.console import Console
     Console().print(render_sessions())
 
 
-# ── Watch mode ────────────────────────────────────────────────────────────────
-
-def watch_sessions():
-    try:
-        from watchdog.observers import Observer
-        from watchdog.events import FileSystemEventHandler
-    except ImportError:
-        print("watchdog is required for --watch:  pip install watchdog")
-        sys.exit(1)
-
+@app.command("watch")
+def watch_cmd():
+    """Live view — updates on file changes."""
+    from watchdog.observers import Observer
+    from watchdog.events import FileSystemEventHandler
     from rich.console import Console
     from rich.live import Live
 
@@ -786,7 +736,6 @@ def watch_sessions():
 
     def refresh():
         live.update(render_sessions(), refresh=True)
-        # schedule another refresh when the earliest active highlight expires
         now     = time.time()
         pending = [exp - now for exp in _highlight_until.values() if exp > now]
         if pending:
@@ -818,7 +767,7 @@ def watch_sessions():
     observer = Observer()
     handler  = Handler()
 
-    logs_dir = SUBAGENT_LOG.parent  # same dir as MESSAGE_LOG
+    logs_dir = SUBAGENT_LOG.parent
     for watch_dir in (SESSIONS_DIR, PROJECTS_DIR, TEAMS_DIR, logs_dir):
         watch_dir.mkdir(parents=True, exist_ok=True)
         observer.schedule(handler, str(watch_dir), recursive=True)
@@ -831,20 +780,3 @@ def watch_sessions():
     except KeyboardInterrupt:
         observer.stop()
         observer.join()
-
-
-# ── Main ──────────────────────────────────────────────────────────────────────
-
-def main():
-    args = sys.argv[1:]
-    if args and args[0] == "--list":
-        list_sessions()
-    elif args and args[0] == "--watch":
-        watch_sessions()
-    else:
-        print(__doc__)
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()

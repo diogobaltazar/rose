@@ -517,7 +517,7 @@ function Sidebar({ sessions, selectedId, onSelect }) {
           className={`session-row ${s.session_id === selectedId ? 'selected' : ''}`}
           onClick={() => onSelect(s.session_id)}
         >
-          <div className={`session-row-dot ${s.status === 'in_progress' ? 'live' : ''}`} />
+          <div className={`session-row-dot ${s.status === 'ready' ? 'live' : ''}`} />
           <div className="session-row-body">
             <div className="session-row-title">{sessionTitle(s)}</div>
             <div className="session-row-sub">
@@ -556,7 +556,7 @@ function App() {
             // Auto-select the most recent in-progress session
             setSelectedId(prev => {
               if (prev) return prev;
-              const live = data.filter(s => s.status === 'in_progress');
+              const live = data.filter(s => s.status === 'ready');
               live.sort((a, b) => (b.started_at || '').localeCompare(a.started_at || ''));
               return live[0]?.session_id || data[0]?.session_id || null;
             });

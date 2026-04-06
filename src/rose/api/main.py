@@ -92,7 +92,7 @@ def _load_session(session_dir: Path) -> dict | None:
     except (json.JSONDecodeError, OSError):
         return None
     # Derive status from events — avoids race with meta.json update on session end.
-    status = "completed" if _has_session_end(events_file) else "in_progress"
+    status = "completed" if _has_session_end(events_file) else "ready"
     return {
         "session_id": meta.get("session_id", session_dir.name),
         "repository": meta.get("repository", "unknown"),

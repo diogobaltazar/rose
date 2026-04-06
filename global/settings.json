@@ -8,51 +8,7 @@
   "permissions": {
     "allow": [
       "Bash(docker compose:*)",
-      "Bash(docker exec:*)",
-      "Bash(~/.claude/hooks/log-step-event.sh*)"
-    ]
-  },
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": ".*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/log-session-start.sh"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/log-session-end.sh"
-          }
-        ]
-      }
-    ],
-    "SubagentStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/log-subagent-start.sh"
-          }
-        ]
-      }
-    ],
-    "SubagentStop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/log-subagent-stop.sh"
-          }
-        ]
-      }
+      "Bash(docker exec:*)"
     ]
   }
 }

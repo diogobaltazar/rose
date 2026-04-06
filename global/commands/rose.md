@@ -109,9 +109,40 @@ When the user pastes Gemini results back, relay them to rose-research:
 SendMessage(to: "rose-research", message: "Gemini results:\n\n[paste user's response here]")
 ```
 
+### rose-backlog — backlog report (requires user approval)
+
+When rose-backlog sends a message starting with "BACKLOG REPORT", it contains both the inspection results and a proposed action (create new issue or edit existing). Present the proposal to the user for approval:
+
+> rose-backlog has inspected the backlog. Here is the report:
+>
+> [paste the full report content]
+>
+> Shall I proceed with the proposed action?
+
+When the user responds:
+- **If approved** (any affirmative): relay to rose-backlog:
+  ```
+  SendMessage(to: "rose-backlog", message: "APPROVED — proceed as proposed.")
+  ```
+- **If approved with corrections**: relay the corrections:
+  ```
+  SendMessage(to: "rose-backlog", message: "APPROVED with corrections:\n\n[user's corrections]")
+  ```
+- **If rejected**: relay the rejection:
+  ```
+  SendMessage(to: "rose-backlog", message: "REJECTED — [user's reason]. Do not create or edit any issue.")
+  ```
+  In this case, rose-backlog will not proceed to phases 4–5. Treat its original report as the final report for convergence purposes.
+
+### rose-backlog — backlog complete (branch and issue ready)
+
+When rose-backlog sends a message starting with "BACKLOG COMPLETE", it contains the issue number, title, and branch name. Note this — you will need the branch name for worktree setup.
+
+This counts as rose-backlog's final report.
+
 ### Any teammate — final report
 
-When a teammate sends its completed report, note which teammates have reported in. Do not synthesise yet unless all launched teammates have reported.
+When a teammate sends its completed report (either "BACKLOG COMPLETE", "BACKLOG REPORT" after rejection, or a research report), note which teammates have reported in. Do not synthesise yet unless all launched teammates have reported.
 
 If teammates are still outstanding, reply briefly: "Received [agent] report. Waiting on [remaining]."
 
@@ -132,12 +163,13 @@ Run each separately with descriptions `log: BI exit`, `log: DR exit`, `log: AF e
 ~/.claude/hooks/log-step-event.sh rose AF step.exit '{"to":"CONVERGENCE","outcome":"confirmed"}'
 ```
 
-2. Shut down the team:
+2. Shut down teammates and the team:
 
+Always:
 ```
 SendMessage(to: "rose-backlog", message: {type: "shutdown_request"})
 ```
-And if rose-research was launched:
+If rose-research was launched:
 ```
 SendMessage(to: "rose-research", message: {type: "shutdown_request"})
 ```
@@ -145,3 +177,11 @@ SendMessage(to: "rose-research", message: {type: "shutdown_request"})
 Then call `TeamDelete`.
 
 3. Synthesise all findings — your own codebase reading (Step 4) plus teammate reports — into a rich, considered response. Respond as Rose: clear, precise, well-structured markdown. Surface the most important insights first. If clarifying questions are genuinely necessary before work can proceed, ask them — but keep them minimal and specific.
+
+4. **If rose-backlog provided a branch name** (i.e. "BACKLOG COMPLETE" was received), delegate worktree setup to rose-git via the Agent tool:
+
+```
+Agent(subagent_type: "rose-git", prompt: "Fetch origin and create a worktree for branch <branch-name>.")
+```
+
+When rose-git completes, inform the user that the workspace is ready for implementation.

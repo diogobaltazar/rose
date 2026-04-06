@@ -24,15 +24,13 @@ BOLD   = "\033[1m"
 DIM    = "\033[2m"
 BLINK  = "\033[5m"
 
-# Solarized + Nord palette
-SOL_GREEN    = "\033[38;5;107m"  # live dot     — Nord green   #A3BE8C
-FROST_BLUE   = "\033[38;5;110m"  # session ID   — Nord frost   #88C0D0
-SOL_YELLOW   = "\033[38;5;136m"  # resumed ←    — Solarized yellow #B58900
-SOL_ORANGE   = "\033[38;5;166m"  # worktree     — Solarized orange #CB4B16
-SNOW         = "\033[38;5;255m"  # title        — Nord snow    #ECEFF4
-FROST_TEAL   = "\033[38;5;109m"  # branch       — Nord frost   #8FBCBB
+# Matrix palette — blacks, pearls, neon greens
+NEON         = "\033[38;5;118m"  # live dot / session ID — bright neon green
+NEON_DIM     = "\033[38;5;28m"   # branch / worktree     — deep matrix green
+PEARL        = "\033[38;5;253m"  # title                 — pearl white
+SILVER       = "\033[38;5;245m"  # resumed ←             — silver
 
-YELLOW = SOL_YELLOW   # fallback for fmt_dot unknown
+YELLOW = SILVER   # fallback for fmt_dot unknown
 
 
 # ── Git helpers ───────────────────────────────────────────────────────────────
@@ -287,9 +285,9 @@ SEP = f"  {DIM}{'─' * 72}{RESET}"
 
 def fmt_dot(status: str) -> str:
     if status == "live":
-        return f"{BLINK}{SOL_GREEN}●{RESET}"
+        return f"{BLINK}{NEON}●{RESET}"
     elif status == "unknown":
-        return f"{SOL_YELLOW}●{RESET}"
+        return f"{SILVER}●{RESET}"
     else:
         return f"{DIM}○{RESET}"
 
@@ -304,15 +302,15 @@ def list_sessions():
     print()
     for s in sessions:
         status   = s["status"]
-        sid      = f"{BOLD}{FROST_BLUE}{s['session_id']}{RESET}"
+        sid      = f"{BOLD}{NEON}{s['session_id']}{RESET}"
         psid     = s.get("process_sid", "")
-        resumed  = f"{SOL_YELLOW}←{DIM}{psid}{RESET}" if psid and psid != s["session_id"] else ""
+        resumed  = f"{SILVER}←{DIM}{psid}{RESET}" if psid and psid != s["session_id"] else ""
         pid      = f"{DIM}pid {s['pid']}{RESET}" if s["pid"] else ""
         started  = fmt_dt(s["started_at"])
         project  = fmt_project(s["project"])
-        worktree = s["worktree"] and f"{SOL_ORANGE}worktree {fmt_worktree(s['worktree'])}{RESET}"
-        branch   = f"{FROST_TEAL}⎇ {s['branch']}{RESET}" if s["branch"] else None
-        title    = f"{SNOW}{s['title']}{RESET}" if s["title"] else ""
+        worktree = s["worktree"] and f"{NEON_DIM}worktree {fmt_worktree(s['worktree'])}{RESET}"
+        branch   = f"{NEON_DIM}⎇ {s['branch']}{RESET}" if s["branch"] else None
+        title    = f"{PEARL}{s['title']}{RESET}" if s["title"] else ""
         if s["size_kb"] is None:
             size = "0 KB"
         elif s["size_kb"] >= 1024:

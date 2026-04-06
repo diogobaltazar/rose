@@ -11,7 +11,7 @@ import os
 import re
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
@@ -180,40 +180,67 @@ def read_transcript(path: Path) -> dict:
 # ── Session scanning ──────────────────────────────────────────────────────────
 
 def scan_sessions() -> list[dict]:
-    live     = live_transcripts()  # {transcript_stem: pid}
-    sessions = []
+    live         = live_transcripts()  # {transcript_stem: {pid, sessionId}}
+    sessions     = []
+    matched_pids = set()
 
-    if not PROJECTS_DIR.exists():
-        return sessions
+    if PROJECTS_DIR.exists():
+        for project_dir in PROJECTS_DIR.iterdir():
+            if not project_dir.is_dir():
+                continue
+            for transcript in project_dir.glob("*.jsonl"):
+                session_id = transcript.stem
+                info       = read_transcript(transcript)
+                gi         = git_info(info["cwd"] or "")
 
-    for project_dir in PROJECTS_DIR.iterdir():
-        if not project_dir.is_dir():
-            continue
-        for transcript in project_dir.glob("*.jsonl"):
-            session_id = transcript.stem
-            info       = read_transcript(transcript)
-            gi         = git_info(info["cwd"] or "")
+                if session_id in live:
+                    status      = "live"
+                    pid         = live[session_id]["pid"]
+                    process_sid = live[session_id]["sessionId"]
+                    matched_pids.add(pid)
+                else:
+                    status      = "done"
+                    pid         = None
+                    process_sid = None
 
-            if session_id in live:
-                status      = "live"
-                pid         = live[session_id]["pid"]
-                process_sid = live[session_id]["sessionId"]
-            else:
-                status      = "done"
-                pid         = None
-                process_sid = None
+                sessions.append({
+                    "session_id":  session_id,
+                    "process_sid": process_sid,
+                    "pid":         pid,
+                    "status":      status,
+                    "project":     gi["project"],
+                    "worktree":    gi["worktree"],
+                    "branch":      info["branch"],
+                    "started_at":  info["started_at"],
+                    "title":       info["title"],
+                    "size_kb":     info["size_kb"],
+                })
 
+    # Live processes with no transcript yet
+    if SESSIONS_DIR.exists():
+        for f in SESSIONS_DIR.glob("*.json"):
+            try:
+                data = json.loads(f.read_text())
+                pid  = data.get("pid")
+                sid  = data.get("sessionId")
+                cwd  = data.get("cwd", "")
+                ms   = data.get("startedAt", 0)
+            except (json.JSONDecodeError, OSError):
+                continue
+            if not pid or not pid_running(pid) or pid in matched_pids:
+                continue
+            gi = git_info(cwd)
             sessions.append({
-                "session_id":  session_id,
-                "process_sid": process_sid,
+                "session_id":  sid,
+                "process_sid": None,
                 "pid":         pid,
-                "status":      status,
-                "project":    gi["project"],
-                "worktree":   gi["worktree"],
-                "branch":     info["branch"],
-                "started_at": info["started_at"],
-                "title":      info["title"],
-                "size_kb":    info["size_kb"],
+                "status":      "live",
+                "project":     gi["project"] or cwd,
+                "worktree":    gi["worktree"],
+                "branch":      git(cwd, "rev-parse", "--abbrev-ref", "HEAD"),
+                "started_at":  datetime.fromtimestamp(ms / 1000, tz=timezone.utc).isoformat(),
+                "title":       None,
+                "size_kb":     None,
             })
 
     sessions.sort(key=lambda s: s["started_at"] or "", reverse=True)
@@ -277,8 +304,8 @@ def list_sessions():
         project  = fmt_project(s["project"])
         worktree = s["worktree"] and f"worktree {fmt_worktree(s['worktree'])}"
         branch   = f"⎇ {s['branch']}" if s["branch"] else None
-        title    = s["title"] or f"{DIM}no title{RESET}"
-        size     = f"{s['size_kb']} KB"
+        title    = s["title"] or ""
+        size     = f"{s['size_kb']} KB" if s["size_kb"] is not None else "0 KB"
 
         meta_parts = [p for p in [project, branch, worktree, f"{DIM}{started}{RESET}", f"{DIM}{size}{RESET}"] if p]
         meta = f"  {DIM}·{RESET}  ".join(str(p) for p in meta_parts)

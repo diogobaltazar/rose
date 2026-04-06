@@ -30,6 +30,7 @@ services:
     environment:
       - LOG_DIR=/logs
       - ROSE_CONFIG=/rose-config/config.json
+      - WATCHFILES_FORCE_POLLING=true
     ports:
       - "5101:8000"
 

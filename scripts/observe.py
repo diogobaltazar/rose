@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 rose-observe — ASCII flow diagram from events.jsonl
 
@@ -155,14 +156,14 @@ def fmt_state_machine(node_states, dr_launched):
     CONV = glyph(node_states.get("CONV", "idle"))
 
     dr_label = "DR  ROSE-RESEARCH" if dr_launched else "DR  ROSE-RESEARCH  (skipped)"
-    dr_edge  = "──" if dr_launched else "·· "
+    dr_top = "╭── ── ── ── ── ── ── ──╮" if not dr_launched else "╭──────────────────────╮"
 
     lines = [
         "  STATE MACHINE",
         "  " + "─" * 56,
         "",
         f"                              {DR} {dr_label}",
-        f"                           ╭{dr_edge}──────────────────╮",
+        f"                           {dr_top}",
         f"  {FP} FP ──▶  {AF} AF ──┤                          ├──▶  {CONV} CONV",
         f"  USER        ROSE       ╰──────────────────────╮  │",
         f"                              {BI} BI  ROSE-BACKLOG  ╯",
@@ -189,11 +190,17 @@ TS_W  = 10  # timestamp prefix
 
 def derive_messages(events):
     msgs = []
+    seen = set()
     for ev in events:
         event   = ev.get("event", "")
         step    = ev.get("step")
         ts      = ev.get("ts", "")
         payload = ev.get("payload") or {}
+
+        key = (event, step)
+        if key in seen and event in ("step.enter", "step.exit"):
+            continue
+        seen.add(key)
 
         if event == "message.user":
             preview = (payload.get("preview") or "message")[:48]
@@ -323,7 +330,7 @@ def main():
     session_id = resolve_session()
     events, meta = load_session(session_id)
 
-    title   = meta.get("title") or session_id[:20]
+    title   = meta.get("title") or session_id
     status  = meta.get("status", "unknown")
     started = fmt_ts(meta.get("started_at", ""))
     ended   = fmt_ts(meta.get("ended_at", ""))

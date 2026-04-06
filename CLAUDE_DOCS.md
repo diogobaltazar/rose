@@ -130,85 +130,185 @@ Key fields for `observe.py --list`:
 
 ---
 
-## Log Structure
+## Agent Storage
 
-This is a **custom rose logging system** — Claude Code has no built-in event logging. Everything here is written by hook scripts installed by `rose install`.
+Every subagent invocation is recorded in two places: the **parent transcript** (which sees the agent as a tool call) and a dedicated **subagent directory** (which holds its own full conversation).
 
-Session metadata (status, start time, title, branch) comes entirely from Claude Code's native storage — no session-level log file needed. Rose only logs agent activity.
+### Directory layout
 
 ```
-~/.claude/logs/
+~/.claude/projects/{encoded-cwd}/
+├── {session_id}.jsonl                          # parent transcript
 └── {session_id}/
-    ├── rose/
-    │   └── events.jsonl
-    ├── rose-backlog/
-    │   └── events.jsonl
-    └── rose-research/
-        └── events.jsonl
+    ├── subagents/
+    │   ├── agent-{agentId}.meta.json           # agentType + description
+    │   └── agent-{agentId}.jsonl               # full subagent conversation
+    └── tool-results/
 ```
 
-Agent subdirectories are created when a subagent starts.
-
-### `{session_id}/{agent}/events.jsonl`
-
-Turns, tool calls, and workflow steps for a specific agent:
-
-| Event | Hook | When |
-|---|---|---|
-| `turn.start` | `UserPromptSubmit` | User submits a message |
-| `turn.end` | `Stop` | Claude finishes responding |
-| `tool.call` | `PostToolUse` | After a tool succeeds |
-| `tool.error` | `PostToolUseFailure` | After a tool fails |
-| `step.enter` | manual | Agent enters a workflow step |
-| `step.exit` | manual | Agent exits a workflow step |
-
-### Event envelope
-
-```json
-{
-  "seq":     1,
-  "ts":      "2026-04-06T03:02:05.000Z",
-  "event":   "turn.start | turn.end | tool.call | tool.error | step.enter | step.exit",
-  "payload": {}
-}
-```
-
-`seq` is monotonically increasing within each `events.jsonl` file independently.
+`{agentId}` is a runtime identifier (e.g. `a69d496525515eb5e`) generated fresh for each invocation. It is **not** the `subagent_type` name — it is the join key between the subagent files and the parent transcript entries.
 
 ---
 
-## `observe.py --list`
+### `agent-{agentId}.meta.json`
 
-Modelled after the `/resume` picker. Reads from Claude Code's native storage — no custom state needed.
+The human-readable label and purpose for this invocation:
 
-### Data sources
+```json
+{
+  "agentType": "claude-code-guide",
+  "description": "Claude Code hooks reference"
+}
+```
 
-| Field | Source |
+- `agentType` is the named agent (`rose`, `rose-backlog`, `claude-code-guide`, etc.)
+- `description` is the short label Claude passed when invoking the agent — it distinguishes two runs of the same `agentType`
+
+---
+
+### `agent-{agentId}.jsonl`
+
+The subagent's own full conversation transcript, in the same format as a parent session transcript (`user`, `assistant`, `progress` entries). Key fields:
+
+```json
+{
+  "type": "user",
+  "agentId": "a69d496525515eb5e",
+  "sessionId": "78b85df3-9ce0-4d1d-a4ce-2d7459980b92",
+  "isSidechain": true,
+  "timestamp": "2026-04-06T12:06:29.891Z",
+  "cwd": "/Users/pereid22/rose",
+  "message": {
+    "role": "user",
+    "content": "What are all the possible hooks that Claude Code provides?..."
+  }
+}
+```
+
+Note `isSidechain: true` — this marks all subagent entries as belonging to a sidechain, not the main conversation. `sessionId` is the **parent** session's ID.
+
+From this file we extract:
+
+| Field | How |
 |---|---|
-| `session_id` | filename of `~/.claude/projects/{cwd}/{session_id}.jsonl` |
-| `status` | `~/.claude/sessions/` — live if session_id present with running pid |
-| `started_at` | `startedAt` from `~/.claude/sessions/{pid}.json` (if live), else first `timestamp` in transcript |
-| `ended_at` | `mtime` of the transcript `.jsonl` file |
-| `branch` | first `gitBranch` field found in transcript |
-| `title` | first user message text in transcript |
+| `started_at` | `timestamp` of first entry |
+| `size_kb` | file size on disk |
+| `tool_use_count` | count of `tool_use` blocks across all `assistant` entries |
 
-### Display
+---
 
-Sessions sorted most-recent first. `started_at` is the most recent session start (i.e. last resume time, not original creation).
+### How agent lifecycle is recorded in the parent transcript
 
-**Live** (pid running):
-```
-  78b85df3  live     06-APR-2026 04:02:01  →  …                     ⎇ main   testing logs
+Each agent invocation leaves three kinds of entries in the **parent** `{session_id}.jsonl`, all linked by a common `tool_use_id`:
+
+#### 1 — Agent starts (`assistant` entry)
+
+When Claude decides to invoke an agent, it writes an `assistant` entry with a `tool_use` block:
+
+```json
+{
+  "type": "assistant",
+  "timestamp": "2026-04-06T12:06:29.778Z",
+  "message": {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "tool_use",
+        "id": "toolu_vrtx_01CkwKbLK1PpkVbt6a9NSzmZ",
+        "name": "Agent",
+        "input": {
+          "subagent_type": "claude-code-guide",
+          "description": "Claude Code hooks reference",
+          "prompt": "What are all the possible hooks...",
+          "run_in_background": false
+        }
+      }
+    ]
+  }
+}
 ```
 
-**Done** (not in sessions dir):
-```
-  78b85df3  done     06-APR-2026 04:02:01  →  07-APR-2026 05:15:42  ⎇ main   testing logs
+`id` is the `tool_use_id` anchor — everything else joins on this.
+
+#### 2 — Agent running (`progress` entries)
+
+While the agent works, a stream of `progress` entries arrives, all sharing the same `parentToolUseID`:
+
+```json
+{
+  "type": "progress",
+  "timestamp": "2026-04-06T12:06:31.536Z",
+  "parentToolUseID": "toolu_vrtx_01CkwKbLK1PpkVbt6a9NSzmZ",
+  "toolUseID": "agent_msg_vrtx_01E17...",
+  "isSidechain": false,
+  "data": {
+    "type": "agent_progress",
+    "agentId": "a69d496525515eb5e",
+    "prompt": "What are all the possible hooks...",
+    "message": { "..." : "..." }
+  }
+}
 ```
 
-**Unknown** (in sessions dir but pid dead — likely crashed):
-```
-  78b85df3  unknown  06-APR-2026 04:02:01  →  …                     ⎇ main   testing logs
+Key observations:
+- `data.agentId` is the join key to the `subagents/` directory (filename `agent-{agentId}.*`)
+- `parentToolUseID` is the join key back to the `tool_use` block in the `assistant` entry
+- `agentName` is always `null` — the human-readable name is only in the `tool_use` input or `.meta.json`
+- There can be dozens of these per invocation — one per streamed chunk
+
+#### 3 — Agent finishes (`user` entry)
+
+When the agent completes, a `user` entry appears with a `tool_result` block:
+
+```json
+{
+  "type": "user",
+  "timestamp": "2026-04-06T12:07:15.303Z",
+  "message": {
+    "role": "user",
+    "content": [
+      {
+        "type": "tool_result",
+        "tool_use_id": "toolu_vrtx_01CkwKbLK1PpkVbt6a9NSzmZ",
+        "content": [
+          { "type": "text", "text": "Based on the documentation..." }
+        ]
+      }
+    ]
+  }
+}
 ```
 
-Fields: `session_id` · `status` · `started_at` · `→` · `ended_at` · `⎇ branch` · `title`
+`tool_use_id` matches the `id` from the `assistant` entry. Its `timestamp` minus the start `timestamp` gives the exact duration.
+
+---
+
+### How `observe.py` joins everything
+
+```
+subagents/agent-{agentId}.meta.json   →  agentType, description
+subagents/agent-{agentId}.jsonl       →  started_at, size_kb, tool_use_count
+
+parent transcript:
+  progress entry  data.agentId == agentId  →  parentToolUseID
+  user entry      tool_result.tool_use_id == parentToolUseID  →  agent is done
+```
+
+Concretely, for each subagent:
+
+1. Read `{agentId}` from the filename of `agent-*.meta.json`
+2. Read `agentType` and `description` from the meta file
+3. Read `started_at`, `size_kb`, `tool_use_count` from `agent-{agentId}.jsonl`
+4. Scan parent transcript `progress` entries where `data.agentId == agentId` to get `parentToolUseID`
+5. Scan parent transcript `user` entries for a `tool_result` where `tool_use_id == parentToolUseID`
+6. If a matching `tool_result` exists → agent is **done**; if not and session is live → agent is **live**
+
+Timeline in the parent transcript for one agent invocation:
+
+```
+assistant  [12:06:29]  tool_use      id=toolu_01Ck  name=Agent  subagent_type=claude-code-guide
+progress   [12:06:31]  agent_progress  parentToolUseID=toolu_01Ck  agentId=a69d...  (chunk 1)
+progress   [12:06:33]  agent_progress  parentToolUseID=toolu_01Ck  agentId=a69d...  (chunk 2)
+...
+user       [12:07:15]  tool_result   tool_use_id=toolu_01Ck  ← agent done, duration = 46s
+```

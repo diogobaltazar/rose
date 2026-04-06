@@ -133,6 +133,10 @@ def read_transcript(path: Path) -> dict:
     cwd        = None
     started_at = None
     ended_at   = None
+    # agent completion tracking: {agentId: tool_use_id}
+    agent_tool_use: dict[str, str] = {}
+    # set of tool_use_ids that have a tool_result (agent finished)
+    completed_tool_uses: set[str] = set()
 
     try:
         with path.open() as f:
@@ -151,7 +155,9 @@ def read_transcript(path: Path) -> dict:
                         started_at = ts
                     ended_at = ts
 
-                if entry.get("type") == "user" and entry.get("message", {}).get("role") == "user":
+                etype = entry.get("type")
+
+                if etype == "user" and entry.get("message", {}).get("role") == "user":
                     if cwd is None:
                         cwd = entry.get("cwd")
                     if branch is None:
@@ -162,17 +168,103 @@ def read_transcript(path: Path) -> dict:
                             cleaned = strip_tags(content)
                             if cleaned:
                                 title = cleaned
+                    # detect tool_result completions
+                    content = entry.get("message", {}).get("content", [])
+                    if isinstance(content, list):
+                        for block in content:
+                            if isinstance(block, dict) and block.get("type") == "tool_result":
+                                completed_tool_uses.add(block.get("tool_use_id", ""))
+
+                # link agentId → parentToolUseID via progress entries
+                elif etype == "progress":
+                    data = entry.get("data", {})
+                    if data.get("type") == "agent_progress":
+                        agent_id    = data.get("agentId")
+                        parent_tuid = entry.get("parentToolUseID")
+                        if agent_id and parent_tuid:
+                            agent_tool_use[agent_id] = parent_tuid
+
     except OSError:
         pass
 
     return {
-        "cwd":        cwd,
-        "branch":     branch,
-        "started_at": started_at,
-        "ended_at":   ended_at,
-        "title":      title,
-        "size_kb":    round(path.stat().st_size / 1024, 1),
+        "cwd":               cwd,
+        "branch":            branch,
+        "started_at":        started_at,
+        "ended_at":          ended_at,
+        "title":             title,
+        "size_kb":           round(path.stat().st_size / 1024, 1),
+        "agent_tool_use":    agent_tool_use,
+        "completed_tool_uses": completed_tool_uses,
     }
+
+
+def read_subagents(session_dir: Path, agent_tool_use: dict, completed_tool_uses: set, session_live: bool) -> list[dict]:
+    """Read subagent metadata and transcripts from {session_dir}/subagents/."""
+    subagents_dir = session_dir / "subagents"
+    if not subagents_dir.exists():
+        return []
+
+    agents = []
+    for meta_file in subagents_dir.glob("agent-*.meta.json"):
+        agent_id = meta_file.stem.removeprefix("agent-").removesuffix(".meta")
+        # .meta.json stem is "agent-{id}.meta" after glob strips .json
+        # actual stem: "agent-a69d496525515eb5e.meta"
+        agent_id = meta_file.name.removeprefix("agent-").removesuffix(".meta.json")
+
+        try:
+            meta = json.loads(meta_file.read_text())
+        except (json.JSONDecodeError, OSError):
+            continue
+
+        agent_type  = meta.get("agentType", "unknown")
+        description = meta.get("description", "")
+
+        jsonl_file  = subagents_dir / f"agent-{agent_id}.jsonl"
+        started_at  = None
+        tool_use_count = 0
+        size_kb     = None
+
+        if jsonl_file.exists():
+            size_kb = round(jsonl_file.stat().st_size / 1024, 1)
+            try:
+                with jsonl_file.open() as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            entry = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        if started_at is None:
+                            started_at = entry.get("timestamp")
+                        if entry.get("type") == "assistant":
+                            content = entry.get("message", {}).get("content", [])
+                            if isinstance(content, list):
+                                tool_use_count += sum(
+                                    1 for b in content
+                                    if isinstance(b, dict) and b.get("type") == "tool_use"
+                                )
+            except OSError:
+                pass
+
+        tool_use_id = agent_tool_use.get(agent_id, "")
+        is_done     = (not tool_use_id) or (tool_use_id in completed_tool_uses)
+        status      = "done" if is_done else ("live" if session_live else "done")
+
+        agents.append({
+            "agent_id":      agent_id,
+            "agent_type":    agent_type,
+            "description":   description,
+            "started_at":    started_at,
+            "size_kb":       size_kb,
+            "tool_use_count": tool_use_count,
+            "status":        status,
+        })
+
+    agents.sort(key=lambda a: a["started_at"] or "")
+    return agents
 
 
 # ── Session scanning ──────────────────────────────────────────────────────────
@@ -201,6 +293,13 @@ def scan_sessions() -> list[dict]:
                     pid         = None
                     process_sid = None
 
+                session_dir = transcript.parent / session_id
+                agents      = read_subagents(
+                    session_dir,
+                    info["agent_tool_use"],
+                    info["completed_tool_uses"],
+                    status == "live",
+                )
                 sessions.append({
                     "session_id":  session_id,
                     "process_sid": process_sid,
@@ -212,6 +311,7 @@ def scan_sessions() -> list[dict]:
                     "started_at":  info["started_at"],
                     "title":       info["title"],
                     "size_kb":     info["size_kb"],
+                    "agents":      agents,
                 })
 
     # Live processes with no transcript yet
@@ -239,6 +339,7 @@ def scan_sessions() -> list[dict]:
                 "started_at":  datetime.fromtimestamp(ms / 1000, tz=timezone.utc).isoformat(),
                 "title":       None,
                 "size_kb":     None,
+                "agents":      [],
             })
 
     sessions.sort(key=lambda s: s["started_at"] or "", reverse=True)
@@ -347,6 +448,36 @@ def render_sessions() -> "Text":
             out.append(text, style=style)
 
         out.append("\n")
+
+        # agents — compute column widths first
+        agents = s.get("agents", [])
+        if agents:
+            col_type  = max(len(a["agent_type"])           for a in agents)
+            col_size  = max(len(fmt_size(a["size_kb"]))    for a in agents)
+            col_calls = max(len(f"{a['tool_use_count']} calls") for a in agents)
+
+            for a in agents:
+                astatus   = a["status"]
+                atype     = a["agent_type"].ljust(col_type)
+                asize     = fmt_size(a["size_kb"]).rjust(col_size)
+                acalls    = f"{a['tool_use_count']} calls".rjust(col_calls)
+
+                out.append("     ")
+                if astatus == "live":
+                    out.append("●", style=STYLE_NEON + " blink")
+                else:
+                    out.append("○", style=STYLE_DIM)
+                out.append("  ")
+                out.append(atype,                   style=STYLE_NEON_DIM)
+                out.append("  ")
+                out.append(a["agent_id"],           style=STYLE_DIM)
+                out.append("  ")
+                out.append(fmt_dt(a["started_at"]), style=STYLE_DIM)
+                out.append("  ")
+                out.append(asize,                   style=STYLE_DIM)
+                out.append("  ")
+                out.append(acalls,                  style=STYLE_DIM)
+                out.append("\n")
 
     out.append(sep + "\n", style=STYLE_DIM)
     return out

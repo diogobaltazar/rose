@@ -328,3 +328,90 @@ docker build -t rose .
 ---
 
 For a full explanation of Claude Code's configuration primitives — settings.json, hooks, agents, slash commands, CLAUDE.md — see [docs/reference.md](docs/reference.md).
+
+---
+
+## Claude Setup
+
+Design decisions made to the Claude Code configuration that lives in `global/` and is installed to `~/.claude/`.
+
+### Architecture overview
+
+The setup is built around three Claude Code primitives:
+
+| Primitive | What it is | Where |
+|-----------|-----------|-------|
+| **Command** | A slash command (`/feature`) that runs in the main session as Rose | `global/commands/feature.md` |
+| **Agent** | A specialist subagent spawned by the command | `global/agents/` |
+| **Hook** | A shell script fired at lifecycle events | `global/hooks/` |
+
+### Agent teams — parallel research phase
+
+The `/feature` command orchestrates a parallel research phase before any implementation work begins. Three specialist agents run simultaneously:
+
+| Agent | Model | Purpose |
+|-------|-------|---------|
+| `deep-research` | claude-sonnet-4-6 | External knowledge — technology patterns, prior art, business context |
+| `code-inspect` | claude-sonnet-4-6 | Codebase knowledge — architecture, conventions, entry points, constraints |
+| `backlog-inspect` | claude-haiku-4-5-20251001 | GitHub backlog — duplicates, related issues, blockers |
+
+**Why teammate mode, not subagents**
+
+The original design used `Agent` tool calls with `run_in_background: true`. This launches agents asynchronously but the orchestrator still blocks — it cannot return to the user until all three resolve. Teammate mode (enabled via `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`) uses `TeamCreate` + named teammates, which allows the lead to return to the user immediately and collect results across turns via `SendMessage`.
+
+**Why these three agents**
+
+- `deep-research` and `backlog-inspect` access external systems (Gemini/web, GitHub) — genuine I/O parallelism worth the overhead.
+- `code-inspect` reads the local codebase. It was kept as a teammate because in the fire-and-return model the lead cannot do the reading itself before returning to the user. If the design reverts to blocking, `code-inspect` is the first candidate to fold back into the main session.
+
+**Model selection rationale**
+
+- `claude-opus-4-6` for the orchestrator (Rose): synthesis across multiple research streams requires the strongest reasoning.
+- `claude-sonnet-4-6` for research agents: capable web search and code reading, faster and cheaper than Opus.
+- `claude-haiku-4-5-20251001` for backlog-inspect: purely JSON parsing and pattern matching against GitHub issue data — no reasoning depth needed.
+
+### Deep research — Gemini relay pattern
+
+`deep-research` does not call `WebSearch` directly. Instead:
+
+1. It analyses what external knowledge the feature actually requires.
+2. It formulates 1–3 targeted prompts and asks the user to run them in **Gemini Deep Research**.
+3. The lead relays the queries to the user; the user pastes results back; the lead relays results to the agent.
+4. The agent synthesises Gemini output with codebase context and reports to the lead.
+
+**Why**: Gemini Deep Research uses Google's own search index and runs a genuine multi-step iterative research loop. `WebSearch` via Brave cannot match it for breadth or depth. The man-in-the-middle relay keeps the agent in the loop without requiring API access to Gemini Deep Research (which is a product feature, not an exposed endpoint).
+
+If no external knowledge is genuinely needed, the agent skips to synthesis immediately.
+
+### Hook design
+
+Hooks capture lifecycle events without requiring agents to emit logging themselves.
+
+| Hook | Event | Does |
+|------|-------|------|
+| `log-session-start.sh` | `PreToolUse` (fires once via sentinel) | Creates log dir, writes `meta.json`, emits `session.start` |
+| `log-session-end.sh` | `Stop` | Derives outcome from last `step.exit`, emits `session.end`, updates `meta.json` |
+| `log-subagent-start.sh` | `SubagentStart` | Maps agent type → step code, emits `step.enter` |
+| `log-subagent-stop.sh` | `SubagentStop` | Maps agent type → step code, emits `step.exit` |
+
+**Why hooks for step logging, not agent-side bash**: hooks fire reliably regardless of what the agent does. If step logging were written into each agent's prompt, an agent that crashes or returns early would miss the exit event. The hook fires at the OS process boundary.
+
+`PostToolUse` / `log-tool-event.sh` was removed — it generated tool-call events that no downstream consumer used, adding noise with no benefit.
+
+### Status line
+
+A `statusline.sh` script provides a live progress bar at the bottom of every Claude Code session:
+
+```
+█████████░░░░░░░░░░░  45%   Claude Sonnet 4.6   12.4k / 200k tokens
+```
+
+Colour transitions: green → yellow (60%) → red (85%).
+
+The script lives at `~/.claude/statusline.sh` directly (not inside `global/`) and is wired into `settings.json`. If you run `rose reinstall`, the settings entry is preserved but the script must be recreated manually — or moved into `global/` to be managed by rose.
+
+### Teammate mode display
+
+`"teammateMode": "in-process"` is set in `~/.claude.json`. This renders all teammates in the main terminal rather than spawning tmux panes. Use `Shift+Up/Down` to switch between agents, `Enter` to view.
+
+Tmux mode was not chosen because the setup runs over an SSH/ONA connection where tmux pane lifecycle is less reliable.

@@ -713,20 +713,20 @@ def render_sessions() -> "Text":
                     out.append(aid, style=STYLE_DIM)
 
                     out.append(*dot_sep)
-                    t, s, arrow, as_ = _fmt_delta(acount, pfx + "count", r["count"])
-                    out.append(t, style=s)
+                    t, st, arrow, as_ = _fmt_delta(acount, pfx + "count", r["count"])
+                    out.append(t, style=st)
                     if arrow:
                         out.append(arrow, style=as_)
 
                     out.append(*dot_sep)
-                    t, s, arrow, as_ = _fmt_delta(asize, pfx + "kb", r["total_kb"])
-                    out.append(t, style=s)
+                    t, st, arrow, as_ = _fmt_delta(asize, pfx + "kb", r["total_kb"])
+                    out.append(t, style=st)
                     if arrow:
                         out.append(arrow, style=as_)
 
                     out.append(*dot_sep)
-                    t, s, arrow, as_ = _fmt_delta(f"⚙ {acalls}", pfx + "calls", r["total_calls"])
-                    out.append(t, style=s)
+                    t, st, arrow, as_ = _fmt_delta(f"⚙ {acalls}", pfx + "calls", r["total_calls"])
+                    out.append(t, style=st)
                     if arrow:
                         out.append(arrow, style=as_)
 
@@ -739,7 +739,7 @@ def render_sessions() -> "Text":
                     out.append("\n")
 
                 # line 3 — location info (cwd/branch/worktree) when relevant
-                if not r["is_lead"] and r.get("cwd") and (r.get("worktree") is not None or r.get("branch") != s["branch"]):
+                if not r["is_lead"] and r.get("cwd") and (r.get("worktree") is not None or r.get("branch") != branch):
                     home = Path.home()
                     rcwd = Path(r["cwd"])
                     try:

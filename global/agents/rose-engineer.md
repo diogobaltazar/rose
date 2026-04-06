@@ -12,6 +12,7 @@ Rose will send you a message containing:
 - **Issue** — the GitHub issue number and full content
 - **Plan** — the agreed implementation plan, as approved by the user
 - **Codebase notes** — Rose's analysis of the relevant files and patterns
+- **meta_path** — path to the session meta.json where you will write the version tag
 
 You do **not** receive the worktree path directly. You ask rose-git for it.
 
@@ -49,7 +50,41 @@ Coding standards:
 - Do not create abstractions for one-time operations
 - Never use `git add -A` or `git add .` — stage files explicitly
 
-### Step 4 — Report
+### Step 4 — Determine version tag
+
+Ask rose-git for the last deployed tag:
+
+```
+SendMessage(to: "rose-git", message: "TAG QUERY — what is the last deployed git tag?")
+```
+
+Rose-git will respond with the tag or "none". Based on the scope of changes you made:
+- **patch** (bug fix, docs, small tweak) → increment patch: `v1.2.3` → `v1.2.4`
+- **minor** (new feature, backwards-compatible) → increment minor: `v1.2.3` → `v1.3.0`
+- **major** (breaking change) → increment major: `v1.2.3` → `v2.0.0`
+- **pre-release** (work in progress, alpha/beta) → append pre-release suffix, e.g. `v1.3.0-a.1`
+
+Write the determined tag to meta.json:
+
+```bash
+python3 -c "
+import json, pathlib
+p = pathlib.Path('<meta-path from prompt>')
+d = {}
+try: d = json.loads(p.read_text())
+except: pass
+d['tag'] = '<determined-tag>'
+p.write_text(json.dumps(d, indent=2))
+"
+```
+
+Report to rose:
+
+```
+SendMessage(to: "rose", message: "TAG WRITTEN\n\n<determined-tag>")
+```
+
+### Step 5 — Report completion
 
 When implementation is complete, send a summary to rose:
 

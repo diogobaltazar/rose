@@ -58,17 +58,23 @@ git worktree add .claude/worktrees/<branch-name> <branch-name>
 SendMessage(to: "rose", message: "WORKTREE READY\n\nPath: <absolute-path-to-worktree>\nBranch: <branch-name>")
 ```
 
-**Step 4 — Wait for rose-engineer**
+**Step 4 — Serve queries from rose-engineer**
 
-Stay alive. When rose-engineer sends you a message asking for the worktree path (any message containing "worktree" or "WORKTREE QUERY"), respond:
+Stay alive. Respond to either of these queries from rose-engineer:
 
-```
-SendMessage(to: "rose-engineer", message: "WORKTREE PATH\n\n<absolute-path-to-worktree>")
-```
+- **WORKTREE QUERY** — respond with the worktree path:
+  ```
+  SendMessage(to: "rose-engineer", message: "WORKTREE PATH\n\n<absolute-path-to-worktree>")
+  ```
+
+- **TAG QUERY** — run `git describe --tags --abbrev=0 2>/dev/null || echo "none"` in the worktree and respond:
+  ```
+  SendMessage(to: "rose-engineer", message: "TAG RESPONSE\n\n<tag-or-none>")
+  ```
 
 **Step 5 — Shut down**
 
-After sending the path to rose-engineer, your work is done. You may shut down (stop responding and wait for a shutdown request, or simply stop).
+After answering both queries (or once you receive a shutdown request), your work is done.
 
 ---
 

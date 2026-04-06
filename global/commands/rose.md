@@ -51,16 +51,57 @@ Derive a short slug from the feature prompt (2–4 words, kebab-case). Then:
 
 1. Call `TeamCreate` with `team_name: "feature-<slug>"` and `agent_type: "rose"`
 
-2. **Always launch** `rose-backlog` and `rose-git` together in a single call:
-   - `rose-backlog`: `subagent_type: "rose-backlog"`, `name: "rose-backlog"`, `team_name: "feature-<slug>"`, prompt: the user's feature request
+2. **Compute the meta.json path** for this session. Run:
+
+   ```bash
+   python3 -c "
+   import json, os, pathlib
+   sessions = pathlib.Path.home() / '.claude/sessions'
+   cwd = os.getcwd()
+   best = None
+   best_time = 0
+   for f in sessions.glob('*.json'):
+       try:
+           d = json.loads(f.read_text())
+           if d.get('cwd') == cwd:
+               mt = f.stat().st_mtime
+               if mt > best_time:
+                   best_time = mt
+                   best = d
+       except: pass
+   if best:
+       sid = best.get('sessionId', '')
+       enc = cwd.replace('/', '-')
+       meta = pathlib.Path.home() / '.claude/projects' / enc / sid / 'meta.json'
+       meta.parent.mkdir(parents=True, exist_ok=True)
+       print(meta)
+   "
+   ```
+
+   Store the printed path as `<meta-path>`. Then write the initial meta.json:
+
+   ```bash
+   python3 -c "
+   import json, pathlib
+   p = pathlib.Path('<meta-path>')
+   existing = {}
+   try: existing = json.loads(p.read_text())
+   except: pass
+   existing.setdefault('feature', '<first-line-of-user-prompt>')
+   p.write_text(json.dumps(existing, indent=2))
+   "
+   ```
+
+3. **Always launch** `rose-backlog` and `rose-git` together in a single call:
+   - `rose-backlog`: `subagent_type: "rose-backlog"`, `name: "rose-backlog"`, `team_name: "feature-<slug>"`, prompt: the user's feature request + `\n\nmeta_path: <meta-path>`
    - `rose-git`: `subagent_type: "rose-git"`, `name: "rose-git"`, `team_name: "feature-<slug>"`, prompt: "Enter worktree service mode. Wait for rose-backlog to send you a BRANCH READY message, then follow the worktree service protocol."
 
-3. **Conditionally launch** `rose-research` (only if Step 3 determined DR is needed):
+4. **Conditionally launch** `rose-research` (only if Step 3 determined DR is needed):
    - `subagent_type: "rose-research"`, `name: "rose-research"`, `team_name: "feature-<slug>"`, prompt: the user's feature request
 
    Launch all agents in a **single message** if DR is needed.
 
-4. Print status lines for what was actually launched:
+5. Print status lines for what was actually launched:
 
    If rose-research launched:
    ```
@@ -76,7 +117,7 @@ Derive a short slug from the feature prompt (2–4 words, kebab-case). Then:
    (rose-research stood down — technology already established in the codebase.)
    ```
 
-5. **Return to the user.** End your turn here. Answer any questions the user has while teammates run — you have already read the codebase and can discuss the feature.
+6. **Return to the user.** End your turn here. Answer any questions the user has while teammates run — you have already read the codebase and can discuss the feature.
 
 ---
 
@@ -197,6 +238,8 @@ Agreed plan:
 Codebase notes:
 <your Step 3 findings — relevant files, patterns, constraints>
 
+meta_path: <meta-path>
+
 Note: ask rose-git for the worktree path before you begin."
 )
 ```
@@ -204,6 +247,14 @@ Note: ask rose-git for the worktree path before you begin."
 Print: `rose-engineer is implementing.`
 
 Return to the user. End your turn.
+
+### rose-backlog — ISSUES WRITTEN
+
+When rose-backlog sends a message starting with "ISSUES WRITTEN", store the issue URLs for display. No action required — the values are already in meta.json.
+
+### rose-engineer — TAG WRITTEN
+
+When rose-engineer sends a message starting with "TAG WRITTEN", store the tag for display. No action required — the value is already in meta.json.
 
 ### rose-engineer — ENGINEER COMPLETE
 

@@ -93,7 +93,29 @@ Once the branch is created, send the branch name to rose-git so it can create th
 SendMessage(to: "rose-git", message: "BRANCH READY\n\nBranch: feat/<issue-number>-<slug>")
 ```
 
-## Phase 6 — Report back to rose
+## Phase 6 — Write issues to meta.json
+
+Your prompt contains a `meta_path:` line with the path to the session meta.json. Extract it and write the issue URL(s):
+
+```bash
+python3 -c "
+import json, pathlib
+p = pathlib.Path('<meta-path>')
+d = {}
+try: d = json.loads(p.read_text())
+except: pass
+d['issues'] = ['https://github.com/<owner>/<repo>/issues/<number>']
+p.write_text(json.dumps(d, indent=2))
+"
+```
+
+Then report to rose:
+
+```
+SendMessage(to: "rose", message: "ISSUES WRITTEN\n\nhttps://github.com/<owner>/<repo>/issues/<number>")
+```
+
+## Phase 7 — Report back to rose
 
 ```
 SendMessage(to: "rose", message: "BACKLOG COMPLETE\n\n**Issue**: #<number> — <title>\n**Branch**: feat/<number>-<slug>\n**Action taken**: Created new issue | Edited #N")

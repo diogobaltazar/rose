@@ -51,29 +51,32 @@ Derive a short slug from the feature prompt (2–4 words, kebab-case). Then:
 
 1. Call `TeamCreate` with `team_name: "feature-<slug>"` and `agent_type: "rose"`
 
-2. **Always launch** `rose-backlog`:
-   - `subagent_type: "rose-backlog"`, `name: "rose-backlog"`, `team_name: "feature-<slug>"`, prompt: the user's feature request
+2. **Always launch** `rose-backlog` and `rose-git` together in a single call:
+   - `rose-backlog`: `subagent_type: "rose-backlog"`, `name: "rose-backlog"`, `team_name: "feature-<slug>"`, prompt: the user's feature request
+   - `rose-git`: `subagent_type: "rose-git"`, `name: "rose-git"`, `team_name: "feature-<slug>"`, prompt: "Enter worktree service mode. Wait for rose-backlog to send you a BRANCH READY message, then follow the worktree service protocol."
 
 3. **Conditionally launch** `rose-research` (only if Step 3 determined DR is needed):
    - `subagent_type: "rose-research"`, `name: "rose-research"`, `team_name: "feature-<slug>"`, prompt: the user's feature request
 
-   Launch both agents in a **single message** if DR is needed.
+   Launch all agents in a **single message** if DR is needed.
 
 4. Print status lines for what was actually launched:
 
    If rose-research launched:
    ```
    rose-backlog is on the backlog.
+   rose-git is standing by for the branch.
    rose-research is heading out for research.
    ```
 
    If rose-research skipped:
    ```
    rose-backlog is on the backlog.
+   rose-git is standing by for the branch.
    (rose-research stood down — technology already established in the codebase.)
    ```
 
-5. **Return to the user.** End your turn here. The user is free to prompt while teammates run.
+5. **Return to the user.** End your turn here. Answer any questions the user has while teammates run — you have already read the codebase and can discuss the feature.
 
 ---
 
@@ -116,31 +119,32 @@ When the user responds:
 When rose-backlog sends a message starting with "BACKLOG COMPLETE":
 
 1. Extract and store: **issue number**, **issue title**, **branch name**, and the **issue body** from the earlier BACKLOG REPORT.
-2. Shut down rose-backlog: `SendMessage(to: "rose-backlog", message: {type: "shutdown_request"})`
-3. Tell the user: *"Backlog sorted. Creating the worktree — one moment."*
-4. Spawn rose-git to create the worktree:
-   ```
-   Agent(subagent_type: "rose-git", name: "rose-git", team_name: "<active-team-name>",
-         prompt: "Create a worktree for branch <branch-name>.")
-   ```
-5. **Wait** for rose-git to send `WORKTREE READY`. Do not proceed to plan synthesis until that message arrives.
+2. Note that rose-backlog has already notified rose-git directly — rose-git is creating the worktree.
+3. Shut down rose-backlog: `SendMessage(to: "rose-backlog", message: {type: "shutdown_request"})`
+4. Tell the user: *"Backlog sorted. Rose-git is creating the worktree — one moment."*
+
+Do **not** spawn another rose-git instance. The existing rose-git is handling the worktree.
 
 ### rose-git — WORKTREE READY
 
 When rose-git sends a message starting with "WORKTREE READY":
 
-1. Extract and store the **worktree path**.
-2. Shut down rose-git: `SendMessage(to: "rose-git", message: {type: "shutdown_request"})`
+1. Extract and store the **worktree path** and **branch name**.
+2. Do **not** shut down rose-git — it must remain alive to answer rose-engineer's worktree query.
+3. Tell the user: *"Worktree ready at `<path>`."*
 
-If rose-research has **not yet** reported: wait for it now before proceeding.
+If rose-research has **not yet** reported: wait for it now before proceeding to Plan Synthesis.
 
-Once all initial teammates (rose-backlog, rose-research if launched) have finished and the worktree is ready, proceed to **Plan Synthesis**.
+If all information is in (backlog + worktree + research if applicable): proceed to **Plan Synthesis**.
 
 ### rose-research — research report
 
 When rose-research sends its completed research report:
 
-If rose-backlog and rose-git have also finished: proceed to **Plan Synthesis**.
+1. Store the research findings.
+2. Shut down rose-research: `SendMessage(to: "rose-research", message: {type: "shutdown_request"})`
+
+If the worktree is also ready: proceed to **Plan Synthesis**.
 Otherwise: store the report and wait.
 
 ---
@@ -173,7 +177,7 @@ This step runs once: after BACKLOG COMPLETE has been received, the worktree is r
 
 ## Implementation
 
-Spawn rose-engineer within the active team:
+Spawn rose-engineer within the active team. Do **not** include the worktree path — rose-engineer will ask rose-git for it directly.
 
 ```
 Agent(
@@ -182,7 +186,6 @@ Agent(
   team_name: "<active-team-name>",
   prompt: "Implement the agreed plan.
 
-Worktree path: <worktree-path>
 Issue: #<number> — <title>
 
 Issue body:
@@ -192,7 +195,9 @@ Agreed plan:
 <full plan text as presented to user>
 
 Codebase notes:
-<your Step 3 findings — relevant files, patterns, constraints>"
+<your Step 3 findings — relevant files, patterns, constraints>
+
+Note: ask rose-git for the worktree path before you begin."
 )
 ```
 
@@ -206,8 +211,9 @@ When rose-engineer sends a message starting with "ENGINEER COMPLETE":
 
 1. Relay the summary to the user.
 2. Shut down rose-engineer: `SendMessage(to: "rose-engineer", message: {type: "shutdown_request"})`
-3. Call `TeamDelete`.
-4. Suggest next steps (e.g. review changes, run tests, push the branch).
+3. Shut down rose-git: `SendMessage(to: "rose-git", message: {type: "shutdown_request"})`
+4. Call `TeamDelete`.
+5. Suggest next steps (e.g. review changes, run tests, push the branch).
 
 ### rose-engineer — ENGINEER BLOCKED
 

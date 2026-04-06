@@ -449,35 +449,69 @@ def render_sessions() -> "Text":
 
         out.append("\n")
 
-        # agents — compute column widths first
+        # agents — group by agent_type, one row per type
         agents = s.get("agents", [])
         if agents:
-            col_type  = max(len(a["agent_type"])           for a in agents)
-            col_size  = max(len(fmt_size(a["size_kb"]))    for a in agents)
-            col_calls = max(len(f"{a['tool_use_count']} calls") for a in agents)
-
+            # group: {agent_type: [invocations...]}  (sorted by started_at already)
+            groups: dict[str, list] = {}
             for a in agents:
-                astatus   = a["status"]
-                atype     = a["agent_type"].ljust(col_type)
-                asize     = fmt_size(a["size_kb"]).rjust(col_size)
-                acalls    = f"{a['tool_use_count']} calls".rjust(col_calls)
+                groups.setdefault(a["agent_type"], []).append(a)
 
+            # build one summary row per agent type
+            rows = []
+            for agent_type, invocations in groups.items():
+                last        = invocations[-1]
+                status      = "live" if any(a["status"] == "live" for a in invocations) else "done"
+                count       = len(invocations)
+                total_kb    = round(sum((a["size_kb"] or 0) for a in invocations), 1)
+                total_calls = sum(a["tool_use_count"] for a in invocations)
+                rows.append({
+                    "agent_type":  agent_type,
+                    "agent_id":    last["agent_id"],
+                    "description": last["description"],
+                    "status":      status,
+                    "count":       count,
+                    "total_kb":    total_kb,
+                    "total_calls": total_calls,
+                })
+
+            col_type  = max(len(r["agent_type"])         for r in rows)
+            col_count = max(len(f"×{r['count']}")        for r in rows)
+            col_size  = max(len(fmt_size(r["total_kb"])) for r in rows)
+            col_calls = max(len(str(r["total_calls"]))   for r in rows)
+            dot_sep   = ("  ·  ", STYLE_DIM)
+
+            for r in rows:
+                atype  = r["agent_type"].ljust(col_type)
+                aid    = r["agent_id"][:8]
+                acount = f"×{r['count']}".rjust(col_count)
+                asize  = fmt_size(r["total_kb"]).rjust(col_size)
+                acalls = str(r["total_calls"]).rjust(col_calls)
+                adesc  = r["description"] or ""
+
+                # line 1 — dot  name  ·  id  ·  ×N  ·  KB  ·  ⚙ calls
                 out.append("     ")
-                if astatus == "live":
+                if r["status"] == "live":
                     out.append("●", style=STYLE_NEON + " blink")
                 else:
                     out.append("○", style=STYLE_DIM)
                 out.append("  ")
-                out.append(atype,                   style=STYLE_NEON_DIM)
-                out.append("  ")
-                out.append(a["agent_id"],           style=STYLE_DIM)
-                out.append("  ")
-                out.append(fmt_dt(a["started_at"]), style=STYLE_DIM)
-                out.append("  ")
-                out.append(asize,                   style=STYLE_DIM)
-                out.append("  ")
-                out.append(acalls,                  style=STYLE_DIM)
+                out.append(atype,  style=STYLE_NEON_DIM)
+                out.append(*dot_sep)
+                out.append(aid,    style=STYLE_DIM)
+                out.append(*dot_sep)
+                out.append(acount, style=STYLE_DIM)
+                out.append(*dot_sep)
+                out.append(asize,  style=STYLE_DIM)
+                out.append(*dot_sep)
+                out.append(f"⚙ {acalls}", style=STYLE_DIM)
                 out.append("\n")
+
+                # line 2 — description
+                if adesc:
+                    out.append("          ")
+                    out.append(adesc, style=STYLE_DIM)
+                    out.append("\n")
 
     out.append(sep + "\n", style=STYLE_DIM)
     return out

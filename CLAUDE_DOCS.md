@@ -162,6 +162,42 @@ Key fields for `observe.py --list`:
 
 ---
 
+## Teammates vs Subagents
+
+Both teammates and subagents are invoked via the `Agent` tool. The distinction is in how they are spawned and whether they can send messages back.
+
+### Subagents
+
+Spawned with `Agent(subagent_type: "...", prompt: "...")`. Run inline, return a result, done. No messaging, no team.
+
+### Teammates
+
+Spawned with `Agent(subagent_type: "...", name: "...", team_name: "...")`. Can send and receive messages via `SendMessage`. Coordinated by a team lead.
+
+### Are teammates separate OS processes?
+
+**No.** With `teammateMode: "in-process"` (set in `~/.claude.json`), teammates run inside the same Claude Code process as the parent session. This is confirmed by:
+
+- `~/.claude/sessions/` contains only one entry — the parent session's PID. No additional entries appear when teammates are launched.
+- The teammate shutdown response includes `"paneId": "in-process"` and `"backendType": "in-process"`.
+- Teammates appear in `observe --list` as subagents under the parent session, not as top-level sessions.
+
+**Consequence:** there are no teammate PIDs to display. Everything runs under the parent session's PID.
+
+### Storage
+
+Teammates and subagents use identical native storage — both appear in `{session_id}/subagents/`:
+
+```
+~/.claude/projects/{encoded-cwd}/{session_id}/subagents/
+├── agent-{agentId}.meta.json    ← agentType: "rose-backlog", description: "..."
+└── agent-{agentId}.jsonl        ← full conversation transcript
+```
+
+The only way to distinguish a teammate invocation from a plain subagent invocation in the transcript is context — teammates are typically spawned with a `name` and `team_name`.
+
+---
+
 ## Agent Storage
 
 Every subagent invocation is recorded in two places: the **parent transcript** (which sees the agent as a tool call) and a dedicated **subagent directory** (which holds its own full conversation).

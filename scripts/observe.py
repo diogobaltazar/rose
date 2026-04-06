@@ -23,7 +23,8 @@ TEAMS_DIR       = Path.home() / ".claude" / "teams"
 SUBAGENT_LOG    = Path.home() / ".claude" / "logs" / "subagent-events.jsonl"
 MESSAGE_LOG     = Path.home() / ".claude" / "logs" / "message-events.jsonl"
 
-DEBOUNCE_S = 0.15  # seconds after last event before redrawing
+DEBOUNCE_S      = 0.15  # seconds after last event before redrawing
+HIGHLIGHT_TTL   = 2.0   # seconds a changed-value highlight stays lit
 
 # ── Rich styles (Matrix palette) ──────────────────────────────────────────────
 #
@@ -36,6 +37,37 @@ STYLE_PEARL    = "color(253)"        # title                 — pearl white
 STYLE_SILVER   = "color(245)"        # resumed ←             — silver
 STYLE_DIM      = "dim"               # dates, sizes, project parent
 STYLE_BOLD     = "bold"              # project name
+STYLE_DELTA    = "bold color(220)"   # value-increased highlight — amber gold
+
+
+# ── Value-change highlight state ──────────────────────────────────────────────
+#
+#  Tracks previous metric values and highlight expiry times across renders.
+#  Keys are "{agent_id}:{metric}" strings.
+#
+_prev_metrics:      dict[str, float] = {}
+_highlight_until:   dict[str, float] = {}
+
+
+def _check_delta(key: str, value: float) -> bool:
+    """Return True if value increased since last call; update state."""
+    now  = time.time()
+    prev = _prev_metrics.get(key)
+    _prev_metrics[key] = value
+    if prev is not None and value > prev:
+        _highlight_until[key] = now + HIGHLIGHT_TTL
+    return now < _highlight_until.get(key, 0)
+
+
+def _fmt_delta(text: str, key: str, value: float) -> tuple[str, str, str | None, str | None]:
+    """Return (text, style, arrow, arrow_style) for a metric field.
+
+    If the value just increased or is still highlighted, returns amber style + ↑ arrow.
+    Otherwise returns the normal dim style with no arrow.
+    """
+    if _check_delta(key, value):
+        return text, STYLE_DELTA, " ↑", STYLE_DELTA
+    return text, STYLE_DIM, None, None
 
 
 # ── Git helpers ───────────────────────────────────────────────────────────────
@@ -654,14 +686,28 @@ def render_sessions() -> "Text":
                     acount = f"×{r['count']}".rjust(col_count)
                     asize  = fmt_size(r["total_kb"]).rjust(col_size)
                     acalls = str(r["total_calls"]).rjust(col_calls)
+                    pfx    = r["agent_id"] + ":"
+
                     out.append(*dot_sep)
-                    out.append(aid,    style=STYLE_DIM)
+                    out.append(aid, style=STYLE_DIM)
+
                     out.append(*dot_sep)
-                    out.append(acount, style=STYLE_DIM)
+                    t, s, arrow, as_ = _fmt_delta(acount, pfx + "count", r["count"])
+                    out.append(t, style=s)
+                    if arrow:
+                        out.append(arrow, style=as_)
+
                     out.append(*dot_sep)
-                    out.append(asize,  style=STYLE_DIM)
+                    t, s, arrow, as_ = _fmt_delta(asize, pfx + "kb", r["total_kb"])
+                    out.append(t, style=s)
+                    if arrow:
+                        out.append(arrow, style=as_)
+
                     out.append(*dot_sep)
-                    out.append(f"⚙ {acalls}", style=STYLE_DIM)
+                    t, s, arrow, as_ = _fmt_delta(f"⚙ {acalls}", pfx + "calls", r["total_calls"])
+                    out.append(t, style=s)
+                    if arrow:
+                        out.append(arrow, style=as_)
 
                 out.append("\n")
 
@@ -703,6 +749,22 @@ def watch_sessions():
 
     def refresh():
         live.update(render_sessions(), refresh=True)
+        # schedule another refresh when the earliest active highlight expires
+        now     = time.time()
+        pending = [exp - now for exp in _highlight_until.values() if exp > now]
+        if pending:
+            t = threading.Timer(min(pending) + 0.05, schedule_refresh)
+            t.daemon = True
+            t.start()
+
+    def schedule_refresh():
+        with lock:
+            nonlocal timer
+            if timer is not None:
+                timer.cancel()
+            timer = threading.Timer(0, refresh)
+            timer.daemon = True
+            timer.start()
 
     class Handler(FileSystemEventHandler):
         def on_any_event(self, event):

@@ -20,12 +20,12 @@ from pathlib import Path
 
 import typer
 
-PROJECTS_DIR    = Path.home() / ".claude" / "projects"
-SESSIONS_DIR    = Path.home() / ".claude" / "sessions"
-TEAMS_DIR       = Path.home() / ".claude" / "teams"
-SUBAGENT_LOG    = Path.home() / ".claude" / "logs" / "subagent-events.jsonl"
-MESSAGE_LOG     = Path.home() / ".claude" / "logs" / "message-events.jsonl"
-OBSERVE_CONFIG  = Path.home() / ".claude" / "observe-config.json"
+PROJECTS_DIR    = Path("/claude/projects")
+SESSIONS_DIR    = Path("/claude/sessions")
+TEAMS_DIR       = Path("/claude/teams")
+SUBAGENT_LOG    = Path("/claude/logs/subagent-events.jsonl")
+MESSAGE_LOG     = Path("/claude/logs/message-events.jsonl")
+OBSERVE_CONFIG  = Path("/claude/observe-config.json")
 
 DEBOUNCE_S      = 0.15   # seconds after last event before redrawing
 HIGHLIGHT_TTL   = 2.0    # seconds a changed-value highlight stays lit
@@ -943,8 +943,14 @@ app = typer.Typer(name="observe", help="Session inspector.", add_completion=Fals
 
 
 @app.command("watch")
-def watch_cmd():
+def watch_cmd(
+    web: bool = typer.Option(False, "--web", help="Launch the rose-web container (browser UI)"),
+):
     """Live tabbed view — updates on file changes."""
+    if web:
+        from rich.console import Console as _Console
+        _Console().print("[yellow]TODO:[/yellow] launch rose-web container")
+        return
     from watchdog.observers import Observer
     from watchdog.events import FileSystemEventHandler
     from rich.console import Console

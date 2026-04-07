@@ -1,7 +1,6 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  /* Space-black background */
   --bg:       #03030A;
   --surface:  #07070F;
   --border:   rgba(255,255,255,0.06);
@@ -9,20 +8,22 @@
   --text-dim: rgba(255,255,255,0.35);
   --font:     'IBM Plex Mono', 'Courier New', monospace;
 
-  /* Lightsaber actor colours */
-  --c-user:    #00B4FF;   /* Jedi blue — Luke / Obi-Wan */
-  --c-rose:    #CC00FF;   /* Mace Windu purple */
-  --c-dr:      #00FF88;   /* Yoda green */
-  --c-ci:      #FF8800;   /* Cal Kestis orange */
-  --c-bi:      #FF2222;   /* Sith red */
+  /* CLI palette (xterm-256 approximations) */
+  --c-neon:     #87d787;  /* color(118) */
+  --c-neon-dim: #005f00;  /* color(28) */
+  --c-pearl:    #dadada;  /* color(253) */
+  --c-silver:   #8a8a8a;  /* color(245) */
+  --c-dim:      #6c6c6c;
+  --c-delta:    #00afff;  /* color(39) */
+  --c-mem:      #87afaf;  /* color(109) */
+  --c-tool:     #d7af87;  /* color(180) */
+  --c-time:     #afafaf;  /* color(145) */
+  --c-tok:      #87af87;  /* color(114) */
+  --c-usd:      #ffaf87;  /* color(216) */
 
-  /* Node colours (map to actors) */
-  --c-fp:   #00B4FF;
-  --c-af:   #CC00FF;
-  --c-dr:   #00FF88;
-  --c-ci:   #FF8800;
-  --c-bi:   #FF2222;
-  --c-conv: #E8E8FF;
+  /* Lightsaber accent (sidebar) */
+  --c-rose: #CC00FF;
+  --c-live: #87d787;
 }
 
 html, body, #root { height: 100%; overflow: hidden; }
@@ -81,8 +82,8 @@ body {
   background: var(--text-dim);
 }
 .session-row-dot.live {
-  background: var(--c-dr);
-  box-shadow: 0 0 6px var(--c-dr);
+  background: var(--c-live);
+  box-shadow: 0 0 6px var(--c-live);
   animation: dot-blink 1.8s ease-in-out infinite;
 }
 .session-row-body { min-width: 0; }
@@ -114,24 +115,12 @@ body {
 
 /* ── Main area ────────────────────────────────────────────────── */
 
-#main { flex: 1; display: flex; overflow: hidden; }
-
-#state-panel {
-  width: 45%;
-  min-width: 360px;
-  border-right: 1px solid var(--border);
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg);
-}
-
-#sequence-panel {
+#main {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
   background: var(--bg);
+  padding: 24px 0;
 }
 
 .placeholder {
@@ -146,62 +135,129 @@ body {
   text-transform: uppercase;
 }
 
-/* ── State machine SVG ────────────────────────────────────────── */
+/* ── Session Detail ──────────────────────────────────────────── */
 
-.sm-svg { width: 100%; height: 100%; display: block; }
-
-/* Node pulse animations */
-@keyframes saber-pulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.55; }
+.session-detail {
+  padding: 0 24px;
+  max-width: 900px;
 }
 
-@keyframes ring-out {
-  0%   { stroke-width: 2; opacity: 0.7; transform: scale(1); }
-  100% { stroke-width: 0.5; opacity: 0; transform: scale(2.2); }
-}
-@keyframes ring-out-delay {
-  0%   { stroke-width: 2; opacity: 0.5; transform: scale(1); }
-  100% { stroke-width: 0.5; opacity: 0; transform: scale(2.2); }
+.detail-title {
+  font-size: 14px;
+  color: var(--c-pearl);
+  margin-bottom: 16px;
+  line-height: 1.4;
 }
 
-.node-active-circle { animation: saber-pulse 1.6s ease-in-out infinite; }
-
-.pulse-ring-1 {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: ring-out 1.8s ease-out infinite;
-}
-.pulse-ring-2 {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: ring-out-delay 1.8s ease-out 0.6s infinite;
-}
-.pulse-ring-sm-1 {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: ring-out 1.8s ease-out infinite;
-}
-.pulse-ring-sm-2 {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: ring-out-delay 1.8s ease-out 0.6s infinite;
+.detail-header {
+  margin-bottom: 20px;
 }
 
-/* Active edge dash animation */
-@keyframes dash-flow {
-  to { stroke-dashoffset: -20; }
+.header-row {
+  display: flex;
+  align-items: baseline;
+  margin-bottom: 2px;
+  font-size: 12px;
+  line-height: 1.6;
 }
-.edge-active {
-  stroke-dasharray: 6 4;
-  animation: dash-flow 0.5s linear infinite;
+
+.header-key {
+  color: var(--c-silver);
+  width: 90px;
+  flex-shrink: 0;
 }
 
-/* ── Sequence diagram ─────────────────────────────────────────── */
+.header-val {
+  color: var(--c-pearl);
+  word-break: break-all;
+}
 
-#seq-container { min-height: 100%; }
+.val-neon     { color: var(--c-neon); }
+.val-neon-dim { color: var(--c-neon-dim); }
+.val-dim      { color: var(--c-dim); }
+.val-default  { color: var(--c-pearl); }
+.val-undef    { color: var(--c-dim); font-style: italic; }
 
-@keyframes row-in {
-  from { opacity: 0; transform: translateY(-8px); }
-  to   { opacity: 1; transform: translateY(0); }
+.detail-rule {
+  border-top: 1px solid var(--border);
+  margin-top: 16px;
+}
+
+/* ── Agent Matrix Table ──────────────────────────────────────── */
+
+.matrix-container {
+  margin-top: 16px;
+}
+
+.matrix-table {
+  border-collapse: collapse;
+  font-size: 12px;
+  width: 100%;
+}
+
+.matrix-table th {
+  text-align: right;
+  padding: 2px 10px;
+  font-weight: 400;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.matrix-table th:first-child {
+  text-align: left;
+}
+
+.matrix-cell {
+  text-align: right;
+  padding: 3px 10px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.matrix-summary-row td {
+  padding-bottom: 4px;
+}
+
+.matrix-rule td {
+  padding: 0;
+}
+
+.matrix-rule-line {
+  border-top: 1px solid rgba(255,255,255,0.08);
+  margin: 2px 0 4px;
+}
+
+.matrix-label {
+  text-align: left;
+  padding: 3px 10px 3px 0;
+  white-space: nowrap;
+}
+
+.status-dot {
+  display: inline-block;
+  margin-right: 6px;
+  color: var(--c-dim);
+  font-size: 10px;
+}
+
+.status-dot.live {
+  color: var(--c-neon);
+  animation: dot-blink 1.8s ease-in-out infinite;
+  text-shadow: 0 0 4px var(--c-neon);
+}
+
+.agent-id {
+  color: var(--c-dim);
+  margin-right: 6px;
+  font-size: 11px;
+}
+
+.agent-type {
+  color: var(--c-neon-dim);
+  font-size: 11px;
+}
+
+.delta-arrow {
+  color: var(--c-delta);
+  font-weight: 600;
 }

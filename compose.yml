@@ -18,6 +18,9 @@ services:
       - type: bind
         source: ${HOME}/.config/rose
         target: /rose-config
+      - type: bind
+        source: ${HOME}/.rose-vault
+        target: /rose-vault
     environment:
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
 
@@ -26,9 +29,15 @@ services:
     build: src/rose/api
     volumes:
       - "${HOME}/.claude/logs:/logs:ro"
+      - "${HOME}/.claude/projects:/projects:ro"
+      - "${HOME}/.claude/sessions:/sessions:ro"
+      - "${HOME}/.claude/teams:/teams:ro"
       - "${HOME}/.config/rose:/rose-config:ro"
     environment:
       - LOG_DIR=/logs
+      - PROJECTS_DIR=/projects
+      - SESSIONS_DIR=/sessions
+      - TEAMS_DIR=/teams
       - ROSE_CONFIG=/rose-config/config.json
       - WATCHFILES_FORCE_POLLING=true
     ports:

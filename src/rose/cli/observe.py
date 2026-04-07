@@ -676,36 +676,6 @@ def _header_row(out, label: str, value: str, delta_key: str | None = None, delta
     out.append("\n")
 
 
-def _agent_summary_row(out, agent_rows: list[dict], session_id: str) -> None:
-    if not agent_rows:
-        return
-    total_kb     = round(sum(r["total_kb"]     for r in agent_rows), 1)
-    total_tools  = sum(r["total_tools"]  for r in agent_rows)
-    total_tokens = sum(r["total_tokens"] for r in agent_rows)
-    total_usd    = sum(r["total_usd"]    for r in agent_rows)
-    total_dur    = sum(r["duration"]     for r in agent_rows)
-    total_inv    = sum(r["invocations"]  for r in agent_rows)
-
-    pfx = session_id + ":agents:"
-    parts = [
-        (fmt_size(total_kb),          pfx + "kb",    total_kb),
-        (f"⚙ {total_tools}",          pfx + "tools", total_tools),
-        (fmt_duration(total_dur),      pfx + "dur",   total_dur),
-        (fmt_tokens(total_tokens),     pfx + "tok",   total_tokens),
-        (fmt_usd(total_usd),           pfx + "usd",   total_usd),
-        (f"×{total_inv}",              pfx + "inv",   total_inv),
-    ]
-    out.append("     ")
-    dot = ("  ·  ", STYLE_DIM)
-    for i, (txt, key, val) in enumerate(parts):
-        if i:
-            out.append(*dot)
-        t, st, arrow, as_ = _fmt_delta(txt, key, val)
-        out.append(t, style=st)
-        if arrow:
-            out.append(arrow, style=as_)
-    out.append("\n\n")
-
 
 def _render_session_body(s: dict) -> "Text":
     """Render a single session's detail view (header, metrics, agents)."""
@@ -725,16 +695,6 @@ def _render_session_body(s: dict) -> "Text":
 
     sep = "  " + "─" * 76
 
-    out.append("\n" + sep + "\n", style=STYLE_DIM)
-
-    # Project name + live dot
-    project_name = Path(project).name if project else "—"
-    out.append("  ")
-    if status == "live":
-        out.append("● ", style=STYLE_NEON + " blink")
-    else:
-        out.append("○ ", style=STYLE_DIM)
-    out.append(project_name, style=STYLE_BOLD)
     out.append("\n")
 
     # Feature one-liner
@@ -748,10 +708,8 @@ def _render_session_body(s: dict) -> "Text":
 
     out.append("\n")
 
-    # Session ID + chain
-    sid_short  = session_id[:8]
-    psid_short = process_sid[:8] if (process_sid and process_sid != session_id) else None
-    chain = sid_short + ("  ←  " + psid_short if psid_short else "")
+    # Session ID + chain (full IDs)
+    chain = session_id + ("  ←  " + process_sid if (process_sid and process_sid != session_id) else "")
     _header_row(out, "session", chain)
     _header_row(out, "created", fmt_dt(s["started_at"]))
     if project:
@@ -760,14 +718,15 @@ def _render_session_body(s: dict) -> "Text":
         _header_row(out, "branch", branch)
 
     # meta fields (from meta.json)
+    waiting = "🕐 waiting..."
     issues = meta.get("issues")
     if issues:
         val = "  ".join(issues) if isinstance(issues, list) else str(issues)
     else:
-        val = "none"
+        val = waiting
     _header_row(out, "issue(s)", val)
-    _header_row(out, "tag", meta.get("tag") or "none")
-    _header_row(out, "PR",  meta.get("pr")  or "none")
+    _header_row(out, "tag", meta.get("tag") or waiting)
+    _header_row(out, "PR",  meta.get("pr")  or waiting)
 
     # aggregate metrics
     pfx = session_id + ":"
@@ -823,95 +782,70 @@ def _render_session_body(s: dict) -> "Text":
             "worktree":     last.get("worktree"),
         })
 
-    _agent_summary_row(out, agent_rows, session_id)
+    # ── Agent table ─────────────────────────────────────────────────────────
+    from rich.table import Table
 
-    # Column widths
-    col_type = max(len(r["agent_type"])                for r in agent_rows)
-    col_size = max(len(fmt_size(r["total_kb"]))        for r in agent_rows)
-    col_tool = max(len(f"⚙ {r['total_tools']}")       for r in agent_rows)
-    col_dur  = max(len(fmt_duration(r["duration"]))    for r in agent_rows)
-    col_tok  = max(len(fmt_tokens(r["total_tokens"]))  for r in agent_rows)
-    col_usd  = max(len(fmt_usd(r["total_usd"]))        for r in agent_rows)
-    col_inv  = max(len(f"×{r['invocations']}")         for r in agent_rows)
+    table = Table(box=None, show_header=True, padding=(0, 1), pad_edge=False)
+    table.add_column("", no_wrap=True)       # dot + id + type
+    table.add_column("size", justify="right", no_wrap=True)
+    table.add_column("tools", justify="right", no_wrap=True)
+    table.add_column("time", justify="right", no_wrap=True)
+    table.add_column("tokens", justify="right", no_wrap=True)
+    table.add_column("USD", justify="right", no_wrap=True)
+    table.add_column("×", justify="right", no_wrap=True)
 
-    dot = ("  ·  ", STYLE_DIM)
+    # Summary header row
+    sum_kb     = round(sum(r["total_kb"]     for r in agent_rows), 1)
+    sum_tools  = sum(r["total_tools"]  for r in agent_rows)
+    sum_dur    = sum(r["duration"]     for r in agent_rows)
+    sum_tokens = sum(r["total_tokens"] for r in agent_rows)
+    sum_usd    = sum(r["total_usd"]    for r in agent_rows)
+    sum_inv    = sum(r["invocations"]  for r in agent_rows)
 
-    def _render_row(r: dict, line_pfx: str, body_pfx: str) -> None:
-        atype = r["agent_type"].ljust(col_type)
+    table.add_row(
+        f"  [bold]Σ agents[/bold]",
+        f"[{STYLE_VAL}]{fmt_size(sum_kb)}[/]",
+        f"[{STYLE_VAL}]⚙ {sum_tools}[/]",
+        f"[{STYLE_VAL}]{fmt_duration(sum_dur)}[/]",
+        f"[{STYLE_VAL}]{fmt_tokens(sum_tokens)}[/]",
+        f"[{STYLE_VAL}]{fmt_usd(sum_usd)}[/]",
+        f"[{STYLE_VAL}]×{sum_inv}[/]",
+    )
+
+    # Agent rows
+    all_rows = agent_rows
+    for r in all_rows:
+        dot_s = STYLE_NEON if r["status"] == "live" else STYLE_DIM
+        dot_c = "●" if r["status"] == "live" else "○"
         aid   = r["agent_id"][:8]
-        k     = session_id + ":" + r["agent_type"] + ":"
+        label = f"  [{dot_s}]{dot_c}[/] [{STYLE_DIM}]{aid}[/] [{STYLE_NEON_DIM}]{r['agent_type']}[/]"
 
-        out.append(line_pfx)
-        if r["status"] == "live":
-            out.append("○ ", style=STYLE_NEON + " blink")
-        else:
-            out.append("○ ", style=STYLE_DIM)
-        out.append(atype, style=STYLE_NEON_DIM)
+        k = session_id + ":" + r["agent_type"] + ":"
 
-        for txt, key, val in [
-            (fmt_size(r["total_kb"]).rjust(col_size),         k+"kb",    r["total_kb"]),
-            (f"⚙ {r['total_tools']}".rjust(col_tool),         k+"tools", r["total_tools"]),
-            (fmt_duration(r["duration"]).rjust(col_dur),       k+"dur",   r["duration"]),
-            (fmt_tokens(r["total_tokens"]).rjust(col_tok),     k+"tok",   r["total_tokens"]),
-            (fmt_usd(r["total_usd"]).rjust(col_usd),           k+"usd",   r["total_usd"]),
-            (f"×{r['invocations']}".rjust(col_inv),            k+"inv",   r["invocations"]),
-        ]:
-            out.append(*dot)
+        def _cell(txt, key, val):
             t, st, arrow, as_ = _fmt_delta(txt, key, val)
-            out.append(t, style=st)
+            s = f"[{st}]{t}[/]"
             if arrow:
-                out.append(arrow, style=as_)
-        out.append("\n")
+                s += f"[{as_}]{arrow}[/]"
+            return s
 
-        # agent ID
-        out.append(body_pfx + aid + "\n", style=STYLE_DIM)
+        table.add_row(
+            label,
+            _cell(fmt_size(r["total_kb"]),       k+"kb",    r["total_kb"]),
+            _cell(f"⚙ {r['total_tools']}",       k+"tools", r["total_tools"]),
+            _cell(fmt_duration(r["duration"]),     k+"dur",   r["duration"]),
+            _cell(fmt_tokens(r["total_tokens"]),   k+"tok",   r["total_tokens"]),
+            _cell(fmt_usd(r["total_usd"]),         k+"usd",   r["total_usd"]),
+            _cell(f"×{r['invocations']}",          k+"inv",   r["invocations"]),
+        )
 
-        # cwd / branch / worktree (only if different from session)
-        if r.get("cwd") and (r.get("worktree") is not None or r.get("branch") != branch):
-            rcwd = Path(r["cwd"])
-            try:
-                display_cwd = "~/" + str(rcwd.relative_to(home))
-            except ValueError:
-                display_cwd = str(rcwd)
-            out.append(body_pfx, style=STYLE_DIM)
-            out.append(display_cwd, style=STYLE_DIM)
-            if r.get("branch"):
-                out.append(f"  ⎇ {r['branch']}", style=STYLE_NEON_DIM)
-            if r.get("worktree") is not None:
-                out.append(f"  worktree {Path(r['worktree']).name}", style=STYLE_NEON_DIM)
-            out.append("\n")
-
-    standalone = [r for r in agent_rows if not r["in_team"]]
-    team_rows  = [r for r in agent_rows if r["in_team"]]
-
-    # Standalone agents (flat)
-    for r in standalone:
-        _render_row(r, line_pfx="     ", body_pfx="        ")
-
-    # Team lead + tree children
-    if lead_type or team_rows:
-        out.append("     ")
-        if status == "live":
-            out.append("○ ", style=STYLE_NEON + " blink")
-        else:
-            out.append("○ ", style=STYLE_DIM)
-        out.append((lead_type or "rose").ljust(col_type), style=STYLE_NEON_DIM)
-        out.append(*dot)
-        out.append("team-lead", style=STYLE_DIM)
-        out.append("\n")
-
-        if team_rows:
-            out.append("     |\n", style=STYLE_DIM)
-            for i, r in enumerate(team_rows):
-                is_last    = i == len(team_rows) - 1
-                line_pfx   = "     |-- "
-                body_pfx   = ("         " if is_last else "     |   ")
-                _render_row(r, line_pfx=line_pfx, body_pfx=body_pfx)
-                if not is_last:
-                    out.append("     |\n", style=STYLE_DIM)
+    from io import StringIO
+    from rich.console import Console as _C
+    buf = StringIO()
+    _C(file=buf, highlight=False, width=120).print(table)
+    out.append(buf.getvalue())
 
     out.append("\n")
-    out.append(sep + "\n", style=STYLE_DIM)
     return out
 
 
@@ -934,8 +868,7 @@ def render_tab_bar(sessions: list[dict], selected: int) -> "Text":
         if i == selected:
             bar.append(label, style=STYLE_TAB_SEL)
         else:
-            dot_style = STYLE_NEON if s["status"] == "live" else STYLE_DIM
-            # Render the dot with status colour, rest dim
+            dot_style = (STYLE_NEON + " blink") if s["status"] == "live" else STYLE_DIM
             dot     = "●" if s["status"] == "live" else "○"
             project = s.get("project") or ""
             name    = Path(project).name if project else s["session_id"][:8]
@@ -995,11 +928,14 @@ def watch_cmd():
     sessions_cache: list[dict] = []
     lock     = threading.Lock()
     timer: threading.Timer | None = None
-    dirty    = threading.Event()
+    dirty    = threading.Event()   # file change: re-scan + re-render
+    redraw   = threading.Event()   # tab change: re-render only
 
-    def _scan_and_render():
+    def _scan():
         nonlocal sessions_cache
         sessions_cache = scan_sessions()
+
+    def _render():
         return render_tabbed_view(sessions_cache, selected[0])
 
     def schedule_refresh():
@@ -1042,14 +978,21 @@ def watch_cmd():
 
         tty.setcbreak(fd)
 
-        # Initial render
-        dirty.set()
+        # Initial scan
+        _scan()
+        redraw.set()
 
         while True:
-            # Check for dirty flag (file changes or highlight expiry)
+            # File change: re-scan data then re-render
             if dirty.is_set():
                 dirty.clear()
-                output = _scan_and_render()
+                _scan()
+                redraw.set()
+
+            # Tab switch or data change: re-render from cache
+            if redraw.is_set():
+                redraw.clear()
+                output = _render()
                 sys.stdout.write("\033[H\033[2J")  # home + clear
                 sys.stdout.flush()
                 console.print(output, highlight=False)
@@ -1072,10 +1015,9 @@ def watch_cmd():
                 elif ch == '\t':  # Tab — next
                     if sessions_cache:
                         selected[0] = (selected[0] + 1) % len(sessions_cache)
-                        dirty.set()
+                        redraw.set()
 
                 elif ch == '\x1b':  # Escape sequence
-                    # Read rest of escape sequence (non-blocking)
                     if select.select([sys.stdin], [], [], 0.05)[0]:
                         seq = sys.stdin.read(1)
                         if seq == '[':
@@ -1084,13 +1026,13 @@ def watch_cmd():
                                 if code == 'Z':  # Shift+Tab
                                     if sessions_cache:
                                         selected[0] = (selected[0] - 1) % len(sessions_cache)
-                                        dirty.set()
+                                        redraw.set()
 
                 elif ch in '123456789':
                     idx = int(ch) - 1
                     if sessions_cache and idx < len(sessions_cache):
                         selected[0] = idx
-                        dirty.set()
+                        redraw.set()
 
     finally:
         # Restore terminal state

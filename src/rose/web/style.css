@@ -1,28 +1,28 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg:       #03030A;
-  --surface:  #07070F;
-  --border:   rgba(255,255,255,0.06);
-  --text:     rgba(255,255,255,0.90);
-  --text-dim: rgba(255,255,255,0.35);
+  --bg:       #010a03;
+  --surface:  #021408;
+  --border:   rgba(135,215,135,0.08);
+  --text:     rgba(215,255,215,0.90);
+  --text-dim: rgba(135,215,135,0.40);
   --font:     'IBM Plex Mono', 'Courier New', monospace;
 
   /* CLI palette (xterm-256 approximations) */
-  --c-neon:     #87d787;  /* color(118) */
+  --c-neon:     #87d787;  /* color(114) */
   --c-neon-dim: #005f00;  /* color(28) */
-  --c-pearl:    #dadada;  /* color(253) */
-  --c-silver:   #8a8a8a;  /* color(245) */
-  --c-dim:      #6c6c6c;
-  --c-delta:    #00afff;  /* color(39) */
-  --c-mem:      #87afaf;  /* color(109) */
-  --c-tool:     #d7af87;  /* color(180) */
-  --c-time:     #afafaf;  /* color(145) */
-  --c-tok:      #87af87;  /* color(114) */
-  --c-usd:      #ffaf87;  /* color(216) */
+  --c-pearl:    #d7ffd7;  /* color(194) */
+  --c-silver:   #5f8a5f;  /* color(65) */
+  --c-dim:      #4a6c4a;
+  --c-delta:    #87ff87;  /* color(120) */
+  --c-mem:      #afd7af;  /* color(151) */
+  --c-tool:     #afd787;  /* color(149) */
+  --c-time:     #7aaa7a;
+  --c-tok:      #87af87;  /* color(108) */
+  --c-usd:      #d7ff87;  /* color(192) */
 
   /* Lightsaber accent (sidebar) */
-  --c-rose: #CC00FF;
+  --c-rose: #00d75f;
   --c-live: #87d787;
 }
 
@@ -32,7 +32,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
-  font-size: 14px;
+  font-size: 15px;
 }
 
 #layout { display: flex; height: 100vh; }
@@ -51,7 +51,7 @@ body {
 }
 
 #sidebar-header {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.18em;
   text-transform: uppercase;
@@ -69,9 +69,9 @@ body {
   border-left: 2px solid transparent;
   transition: background 0.12s;
 }
-.session-row:hover { background: rgba(204,0,255,0.05); }
+.session-row:hover { background: rgba(0,215,95,0.05); }
 .session-row.selected {
-  background: rgba(204,0,255,0.08);
+  background: rgba(0,215,95,0.08);
   border-left-color: var(--c-rose);
 }
 .session-row-dot {
@@ -88,21 +88,21 @@ body {
 }
 .session-row-body { min-width: 0; }
 .session-row-title {
-  font-size: 11px;
+  font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: rgba(255,255,255,0.85);
+  color: rgba(215,255,215,0.85);
 }
-.session-row.selected .session-row-title { color: #fff; }
+.session-row.selected .session-row-title { color: #d7ffd7; }
 .session-row-sub {
-  font-size: 10px;
-  color: rgba(255,255,255,0.5);
+  font-size: 11px;
+  color: rgba(135,215,135,0.55);
   margin-top: 3px;
 }
 .sidebar-empty {
   padding: 14px;
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--text-dim);
@@ -130,7 +130,7 @@ body {
   height: 100%;
   width: 100%;
   color: var(--text-dim);
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.2em;
   text-transform: uppercase;
 }
@@ -143,7 +143,7 @@ body {
 }
 
 .detail-title {
-  font-size: 14px;
+  font-size: 15px;
   color: var(--c-pearl);
   margin-bottom: 16px;
   line-height: 1.4;
@@ -157,7 +157,7 @@ body {
   display: flex;
   align-items: baseline;
   margin-bottom: 2px;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.6;
 }
 
@@ -191,7 +191,7 @@ body {
 
 .matrix-table {
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: 13px;
   width: 100%;
 }
 
@@ -199,7 +199,7 @@ body {
   text-align: right;
   padding: 2px 10px;
   font-weight: 400;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.04em;
 }
 
@@ -223,7 +223,7 @@ body {
 }
 
 .matrix-rule-line {
-  border-top: 1px solid rgba(255,255,255,0.08);
+  border-top: 1px solid rgba(135,215,135,0.10);
   margin: 2px 0 4px;
 }
 
@@ -237,7 +237,7 @@ body {
   display: inline-block;
   margin-right: 6px;
   color: var(--c-dim);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .status-dot.live {
@@ -249,12 +249,12 @@ body {
 .agent-id {
   color: var(--c-dim);
   margin-right: 6px;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .agent-type {
   color: var(--c-neon-dim);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .delta-arrow {

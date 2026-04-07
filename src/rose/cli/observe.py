@@ -42,6 +42,11 @@ STYLE_VAL      = "color(253)"        # header value column
 STYLE_DELTA    = "color(39)"         # value-increased highlight
 STYLE_TAB_SEL  = "bold reverse"      # selected tab
 STYLE_TAB      = "color(245)"        # unselected tab
+STYLE_MEM      = "color(109)"        # matrix: memory (soft blue)
+STYLE_TOOL     = "color(180)"        # matrix: tools (warm amber)
+STYLE_TIME     = "color(145)"        # matrix: time (muted lavender)
+STYLE_TOK      = "color(114)"        # matrix: tokens (soft green)
+STYLE_USD      = "color(216)"        # matrix: USD (peach)
 
 # ── Value-change highlight state ──────────────────────────────────────────────
 _prev_metrics:    dict[str, float] = {}
@@ -56,11 +61,6 @@ def _check_delta(key: str, value: float) -> bool:
         _highlight_until[key] = now + HIGHLIGHT_TTL
     return now < _highlight_until.get(key, 0)
 
-
-def _fmt_delta(text: str, key: str, value: float) -> tuple[str, str, str | None, str | None]:
-    if _check_delta(key, value):
-        return text, STYLE_DELTA, " ↑", STYLE_DELTA
-    return text, STYLE_DIM, None, None
 
 
 # ── Config / pricing ──────────────────────────────────────────────────────────
@@ -150,14 +150,16 @@ def fmt_size(kb: float | None) -> str:
 def fmt_duration(seconds: float | None) -> str:
     if seconds is None or seconds < 0:
         return "—"
-    s = int(seconds)
-    h, rem = divmod(s, 3600)
-    m, s   = divmod(rem, 60)
-    if h:
-        return f"{h}h {m:02d}m {s:02d}s"
-    if m:
-        return f"{m}m {s:02d}s"
-    return f"{s}s"
+    total_m = seconds / 60
+    if total_m < 1:
+        return f"{int(seconds)}s"
+    total_h = total_m / 60
+    if total_h < 1:
+        return f"{int(total_m)}m"
+    total_d = total_h / 24
+    if total_d < 1:
+        return f"{total_h:.1f}h"
+    return f"{total_d:.1f}d"
 
 
 def fmt_tokens(n: int | None) -> str:
@@ -664,7 +666,7 @@ def scan_sessions() -> list[dict]:
 
 # ── Rendering ──────────────────────────────────────────────────────────────────
 
-def _header_row(out, label: str, value: str, delta_key: str | None = None, delta_val: float = 0) -> None:
+def _header_row(out, label: str, value: str, delta_key: str | None = None, delta_val: float = 0, value_style: str | None = None) -> None:
     out.append("  ")
     out.append(f"{label:<10}", style=STYLE_KEY)
     out.append("  ")
@@ -672,7 +674,7 @@ def _header_row(out, label: str, value: str, delta_key: str | None = None, delta
         out.append(value, style=STYLE_DELTA)
         out.append(" ↑", style=STYLE_DELTA)
     else:
-        out.append(value, style=STYLE_VAL)
+        out.append(value, style=value_style or STYLE_VAL)
     out.append("\n")
 
 
@@ -710,41 +712,26 @@ def _render_session_body(s: dict) -> "Text":
 
     # Session ID + chain (full IDs)
     chain = session_id + ("  ←  " + process_sid if (process_sid and process_sid != session_id) else "")
-    _header_row(out, "session", chain)
-    _header_row(out, "created", fmt_dt(s["started_at"]))
+    _header_row(out, "session", chain, value_style=STYLE_NEON)
+    _header_row(out, "created", fmt_dt(s["started_at"]), value_style=STYLE_DIM)
     if project:
-        _header_row(out, "tree", project)
+        _header_row(out, "tree", project, value_style=STYLE_NEON_DIM)
     if branch:
-        _header_row(out, "branch", branch)
+        _header_row(out, "branch", branch, value_style=STYLE_NEON_DIM)
 
     # meta fields (from meta.json)
-    waiting = "🕐 waiting..."
+    undef = "undefined"
+    undef_style = "italic " + STYLE_DIM
     issues = meta.get("issues")
     if issues:
         val = "  ".join(issues) if isinstance(issues, list) else str(issues)
+        _header_row(out, "issue(s)", val, value_style=STYLE_VAL)
     else:
-        val = waiting
-    _header_row(out, "issue(s)", val)
-    _header_row(out, "tag", meta.get("tag") or waiting)
-    _header_row(out, "PR",  meta.get("pr")  or waiting)
-
-    # aggregate metrics
-    pfx = session_id + ":"
-    _header_row(out, "memory",
-        fmt_size(s["total_kb"]),
-        pfx + "kb",    s["total_kb"] or 0)
-    _header_row(out, "tool",
-        str(s["total_tools"]),
-        pfx + "tools", s["total_tools"])
-    _header_row(out, "time",
-        fmt_duration(s["duration"]),
-        pfx + "dur",   s["duration"] or 0)
-    _header_row(out, "token",
-        fmt_tokens(s["total_tokens"]),
-        pfx + "tok",   s["total_tokens"])
-    _header_row(out, "USD",
-        fmt_usd(s["total_usd"]),
-        pfx + "usd",   s["total_usd"])
+        _header_row(out, "issue(s)", undef, value_style=undef_style)
+    tag_val = meta.get("tag")
+    _header_row(out, "tag", tag_val or undef, value_style=STYLE_VAL if tag_val else undef_style)
+    pr_val = meta.get("pr")
+    _header_row(out, "PR", pr_val or undef, value_style=STYLE_VAL if pr_val else undef_style)
 
     if not agents:
         out.append("\n")
@@ -787,34 +774,15 @@ def _render_session_body(s: dict) -> "Text":
 
     table = Table(box=None, show_header=True, padding=(0, 1), pad_edge=False)
     table.add_column("", no_wrap=True)       # dot + id + type
-    table.add_column("size", justify="right", no_wrap=True)
-    table.add_column("tools", justify="right", no_wrap=True)
-    table.add_column("time", justify="right", no_wrap=True)
-    table.add_column("tokens", justify="right", no_wrap=True)
-    table.add_column("USD", justify="right", no_wrap=True)
-    table.add_column("×", justify="right", no_wrap=True)
-
-    # Summary header row
-    sum_kb     = round(sum(r["total_kb"]     for r in agent_rows), 1)
-    sum_tools  = sum(r["total_tools"]  for r in agent_rows)
-    sum_dur    = sum(r["duration"]     for r in agent_rows)
-    sum_tokens = sum(r["total_tokens"] for r in agent_rows)
-    sum_usd    = sum(r["total_usd"]    for r in agent_rows)
-    sum_inv    = sum(r["invocations"]  for r in agent_rows)
-
-    table.add_row(
-        f"  [bold]Σ agents[/bold]",
-        f"[{STYLE_VAL}]{fmt_size(sum_kb)}[/]",
-        f"[{STYLE_VAL}]⚙ {sum_tools}[/]",
-        f"[{STYLE_VAL}]{fmt_duration(sum_dur)}[/]",
-        f"[{STYLE_VAL}]{fmt_tokens(sum_tokens)}[/]",
-        f"[{STYLE_VAL}]{fmt_usd(sum_usd)}[/]",
-        f"[{STYLE_VAL}]×{sum_inv}[/]",
-    )
+    table.add_column("memory", justify="right", no_wrap=True, header_style=STYLE_KEY)
+    table.add_column("tools", justify="right", no_wrap=True, header_style=STYLE_KEY)
+    table.add_column("time", justify="right", no_wrap=True, header_style=STYLE_KEY)
+    table.add_column("tokens", justify="right", no_wrap=True, header_style=STYLE_KEY)
+    table.add_column("USD", justify="right", no_wrap=True, header_style=STYLE_KEY)
+    table.add_column("×", justify="right", no_wrap=True, header_style=STYLE_KEY)
 
     # Agent rows
-    all_rows = agent_rows
-    for r in all_rows:
+    for r in agent_rows:
         dot_s = STYLE_NEON if r["status"] == "live" else STYLE_DIM
         dot_c = "●" if r["status"] == "live" else "○"
         aid   = r["agent_id"][:8]
@@ -822,21 +790,19 @@ def _render_session_body(s: dict) -> "Text":
 
         k = session_id + ":" + r["agent_type"] + ":"
 
-        def _cell(txt, key, val):
-            t, st, arrow, as_ = _fmt_delta(txt, key, val)
-            s = f"[{st}]{t}[/]"
-            if arrow:
-                s += f"[{as_}]{arrow}[/]"
-            return s
+        def _cell(txt, key, val, style):
+            if _check_delta(key, val):
+                return f"[{STYLE_DELTA}]{txt} ↑[/]"
+            return f"[{style}]{txt}[/]"
 
         table.add_row(
             label,
-            _cell(fmt_size(r["total_kb"]),       k+"kb",    r["total_kb"]),
-            _cell(f"⚙ {r['total_tools']}",       k+"tools", r["total_tools"]),
-            _cell(fmt_duration(r["duration"]),     k+"dur",   r["duration"]),
-            _cell(fmt_tokens(r["total_tokens"]),   k+"tok",   r["total_tokens"]),
-            _cell(fmt_usd(r["total_usd"]),         k+"usd",   r["total_usd"]),
-            _cell(f"×{r['invocations']}",          k+"inv",   r["invocations"]),
+            _cell(fmt_size(r["total_kb"]),       k+"kb",    r["total_kb"],     STYLE_MEM),
+            _cell(f"⚙ {r['total_tools']}",       k+"tools", r["total_tools"],  STYLE_TOOL),
+            _cell(fmt_duration(r["duration"]),     k+"dur",   r["duration"],     STYLE_TIME),
+            _cell(fmt_tokens(r["total_tokens"]),   k+"tok",   r["total_tokens"], STYLE_TOK),
+            _cell(fmt_usd(r["total_usd"]),         k+"usd",   r["total_usd"],   STYLE_USD),
+            _cell(f"×{r['invocations']}",          k+"inv",   r["invocations"], STYLE_DIM),
         )
 
     from io import StringIO

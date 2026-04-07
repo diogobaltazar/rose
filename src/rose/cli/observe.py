@@ -794,13 +794,13 @@ def _render_session_body(s: dict) -> "Text":
     table.add_column("USD", justify="right", no_wrap=True, header_style=STYLE_KEY)
     table.add_column("×", justify="right", no_wrap=True, header_style=STYLE_KEY)
 
-    # Summary row (no label — just totals)
-    sum_kb     = round(sum(r["total_kb"]     for r in agent_rows), 1)
-    sum_tools  = sum(r["total_tools"]  for r in agent_rows)
-    sum_dur    = sum(r["duration"]     for r in agent_rows)
-    sum_tokens = sum(r["total_tokens"] for r in agent_rows)
-    sum_usd    = sum(r["total_usd"]    for r in agent_rows)
-    sum_inv    = sum(r["invocations"]  for r in agent_rows)
+    # Summary row — subagents + main session
+    sum_kb     = round(sum(r["total_kb"]     for r in agent_rows) + (s.get("own_kb") or 0), 1)
+    sum_tools  = sum(r["total_tools"]  for r in agent_rows) + (s.get("own_tools") or 0)
+    sum_dur    = sum(r["duration"]     for r in agent_rows) + (s.get("own_duration") or 0)
+    sum_tokens = sum(r["total_tokens"] for r in agent_rows) + (s.get("own_tokens") or 0)
+    sum_usd    = sum(r["total_usd"]    for r in agent_rows) + (s.get("own_usd") or 0)
+    sum_inv    = sum(r["invocations"]  for r in agent_rows) + 1
 
     table.add_row(
         "",
@@ -865,7 +865,10 @@ def _render_session_body(s: dict) -> "Text":
     # Inject a full-width rule after the second line (header + totals)
     raw_lines = buf.getvalue().split("\n")
     if len(raw_lines) > 2:
-        raw_lines.insert(2, "  \033[2m" + "─" * 76 + "\033[0m")
+        # Measure visible width of the longest rendered line (strip ANSI codes)
+        _ansi = re.compile(r"\x1b\[[0-9;]*m")
+        ruler_w = max((len(_ansi.sub("", ln)) for ln in raw_lines if ln.strip()), default=78)
+        raw_lines.insert(2, "\033[2m" + "─" * ruler_w + "\033[0m")
     out.append_text(_T.from_ansi("\n".join(raw_lines)))
 
     out.append("\n")

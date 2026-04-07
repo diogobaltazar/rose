@@ -605,6 +605,16 @@ def scan_sessions() -> list[dict]:
                 total_tokens = info["tokens"] + sum(a["tokens"] for a in agents)
                 total_usd    = info["usd"] + sum(a["usd"] for a in agents)
 
+                # Session-only metrics (excludes subagents)
+                own_duration = None
+                if info["started_at"] and info["ended_at"]:
+                    try:
+                        t0 = datetime.fromisoformat(info["started_at"].replace("Z", "+00:00"))
+                        t1 = datetime.fromisoformat(info["ended_at"].replace("Z", "+00:00"))
+                        own_duration = (t1 - t0).total_seconds()
+                    except Exception:
+                        pass
+
                 sessions.append({
                     "session_id":   session_id,
                     "process_sid":  process_sid,
@@ -620,6 +630,11 @@ def scan_sessions() -> list[dict]:
                     "total_tools":  total_tools,
                     "total_tokens": total_tokens,
                     "total_usd":    total_usd,
+                    "own_kb":       round(info["size_kb"] or 0, 1),
+                    "own_tools":    info["tool_count"],
+                    "own_tokens":   info["tokens"],
+                    "own_usd":      info["usd"],
+                    "own_duration": own_duration,
                     "agents":       agents,
                     "team_config":  team_config,
                     "meta":         session_meta,
@@ -798,28 +813,49 @@ def _render_session_body(s: dict) -> "Text":
     )
 
     # Agent rows
+    agent_id_len = max((len(r["agent_id"]) for r in agent_rows), default=17)
+
+    def _cell(txt, key, val, style):
+        if val is not None and _check_delta(key, val):
+            return f"[{STYLE_DELTA}]{txt} ↑[/]"
+        return f"[{style}]{txt}[/]"
+
     for r in agent_rows:
         dot_s = STYLE_NEON if r["status"] == "live" else STYLE_DIM
         dot_c = "●" if r["status"] == "live" else "○"
-        aid   = r["agent_id"][:8]
+        aid   = r["agent_id"]
         label = f"  [{dot_s}]{dot_c}[/] [{STYLE_DIM}]{aid}[/] [{STYLE_NEON_DIM}]{r['agent_type']}[/]"
 
         k = session_id + ":" + r["agent_type"] + ":"
 
-        def _cell(txt, key, val, style):
-            if val is not None and _check_delta(key, val):
-                return f"[{STYLE_DELTA}]{txt} ↑[/]"
-            return f"[{style}]{txt}[/]"
-
         table.add_row(
             label,
             _cell(fmt_size(r["total_kb"]),       k+"kb",    r["total_kb"],     STYLE_MEM),
-            _cell(str(r["total_tools"]),             k+"tools", r["total_tools"],  STYLE_TOOL),
-            _cell(fmt_duration(r["duration"]),     k+"dur",   r["duration"],     STYLE_TIME),
-            _cell(fmt_tokens(r["total_tokens"]),   k+"tok",   r["total_tokens"], STYLE_TOK),
-            _cell(fmt_usd(r["total_usd"]),         k+"usd",   r["total_usd"],   STYLE_USD),
-            _cell(f"×{r['invocations']}",          k+"inv",   r["invocations"], STYLE_DIM),
+            _cell(str(r["total_tools"]),          k+"tools", r["total_tools"],  STYLE_TOOL),
+            _cell(fmt_duration(r["duration"]),    k+"dur",   r["duration"],     STYLE_TIME),
+            _cell(fmt_tokens(r["total_tokens"]),  k+"tok",   r["total_tokens"], STYLE_TOK),
+            _cell(fmt_usd(r["total_usd"]),        k+"usd",   r["total_usd"],   STYLE_USD),
+            _cell(f"×{r['invocations']}",         k+"inv",   r["invocations"], STYLE_DIM),
         )
+
+    # Main session row ("claude" or "rose" if started with /rose)
+    title_lower = (s.get("title") or "").lstrip().lower()
+    main_name   = "rose" if title_lower.startswith("/rose") else "claude"
+    main_sid    = session_id.replace("-", "")[:agent_id_len]
+    dot_s       = STYLE_NEON if status == "live" else STYLE_DIM
+    dot_c       = "●" if status == "live" else "○"
+    main_label  = f"  [{dot_s}]{dot_c}[/] [{STYLE_DIM}]{main_sid}[/] [{STYLE_NEON_DIM}]{main_name}[/]"
+    k           = session_id + ":main:"
+
+    table.add_row(
+        main_label,
+        _cell(fmt_size(s.get("own_kb")),        k+"kb",    s.get("own_kb"),      STYLE_MEM),
+        _cell(str(s.get("own_tools", 0)),        k+"tools", s.get("own_tools"),   STYLE_TOOL),
+        _cell(fmt_duration(s.get("own_duration")), k+"dur", s.get("own_duration"), STYLE_TIME),
+        _cell(fmt_tokens(s.get("own_tokens")),   k+"tok",   s.get("own_tokens"),  STYLE_TOK),
+        _cell(fmt_usd(s.get("own_usd")),         k+"usd",   s.get("own_usd"),     STYLE_USD),
+        f"[{STYLE_DIM}]×1[/]",
+    )
 
     from io import StringIO
     from rich.console import Console as _C

@@ -771,21 +771,8 @@ def _render_session_body(s: dict) -> "Text":
 
     # ── Agent table ─────────────────────────────────────────────────────────
     from rich.table import Table
-    from rich.box import Box
 
-    # No outer borders, no column separators, but mid-row rules enabled
-    _RULE_BOX = Box(
-        "    \n"
-        "    \n"
-        " ─  \n"  # mid-rule: space + dash + space (no column junction)
-        "    \n"
-        " ─  \n"
-        " ─  \n"
-        "    \n"
-        "    \n",
-    )
-
-    table = Table(box=_RULE_BOX, show_header=True, padding=(0, 1), pad_edge=False, show_edge=False)
+    table = Table(box=None, show_header=True, padding=(0, 1), pad_edge=False)
     table.add_column("", no_wrap=True)       # dot + id + type
     table.add_column("memory", justify="right", no_wrap=True, header_style=STYLE_KEY)
     table.add_column("tools", justify="right", no_wrap=True, header_style=STYLE_KEY)
@@ -810,7 +797,6 @@ def _render_session_body(s: dict) -> "Text":
         f"[bold {STYLE_TOK}]{fmt_tokens(sum_tokens)}[/]",
         f"[bold {STYLE_USD}]{fmt_usd(sum_usd)}[/]",
         f"[bold {STYLE_DIM}]×{sum_inv}[/]",
-        end_section=True,
     )
 
     # Agent rows
@@ -842,7 +828,11 @@ def _render_session_body(s: dict) -> "Text":
     from rich.text import Text as _T
     buf = StringIO()
     _C(file=buf, highlight=False, width=120, force_terminal=True, color_system="truecolor").print(table)
-    out.append_text(_T.from_ansi(buf.getvalue()))
+    # Inject a full-width rule after the second line (header + totals)
+    raw_lines = buf.getvalue().split("\n")
+    if len(raw_lines) > 2:
+        raw_lines.insert(2, "  \033[2m" + "─" * 76 + "\033[0m")
+    out.append_text(_T.from_ansi("\n".join(raw_lines)))
 
     out.append("\n")
     return out

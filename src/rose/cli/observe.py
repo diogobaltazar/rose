@@ -781,6 +781,24 @@ def _render_session_body(s: dict) -> "Text":
     table.add_column("USD", justify="right", no_wrap=True, header_style=STYLE_KEY)
     table.add_column("×", justify="right", no_wrap=True, header_style=STYLE_KEY)
 
+    # Summary row (no label — just totals)
+    sum_kb     = round(sum(r["total_kb"]     for r in agent_rows), 1)
+    sum_tools  = sum(r["total_tools"]  for r in agent_rows)
+    sum_dur    = sum(r["duration"]     for r in agent_rows)
+    sum_tokens = sum(r["total_tokens"] for r in agent_rows)
+    sum_usd    = sum(r["total_usd"]    for r in agent_rows)
+    sum_inv    = sum(r["invocations"]  for r in agent_rows)
+
+    table.add_row(
+        "",
+        f"[bold {STYLE_MEM}]{fmt_size(sum_kb)}[/]",
+        f"[bold {STYLE_TOOL}]⚙ {sum_tools}[/]",
+        f"[bold {STYLE_TIME}]{fmt_duration(sum_dur)}[/]",
+        f"[bold {STYLE_TOK}]{fmt_tokens(sum_tokens)}[/]",
+        f"[bold {STYLE_USD}]{fmt_usd(sum_usd)}[/]",
+        f"[bold {STYLE_DIM}]×{sum_inv}[/]",
+    )
+
     # Agent rows
     for r in agent_rows:
         dot_s = STYLE_NEON if r["status"] == "live" else STYLE_DIM

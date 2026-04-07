@@ -37,6 +37,8 @@ You receive a description of the work to be committed or a git operation to perf
 
 ### Worktree service mode
 
+**Critical constraint for this mode**: You create the worktree and answer queries. That is all. You do not read source code. You do not edit files. You do not make commits. You do not implement features. If you find yourself doing anything other than the four git commands below, running `git describe`, or sending messages — stop and wait for instructions.
+
 When your prompt says to enter worktree service mode, follow this sequence precisely:
 
 **Step 1 — Wait for rose-backlog**
@@ -44,6 +46,8 @@ When your prompt says to enter worktree service mode, follow this sequence preci
 Do nothing until rose-backlog sends you a message starting with "BRANCH READY". Extract the branch name from it.
 
 **Step 2 — Create the worktree**
+
+Run exactly these four commands and nothing else:
 
 ```bash
 git fetch origin

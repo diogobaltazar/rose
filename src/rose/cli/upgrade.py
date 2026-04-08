@@ -92,7 +92,17 @@ def upgrade(
                 shutil.copy2(src_file, dst_commands / src_file.name)
                 results.add_row("[green]✓[/green]", f"commands/{src_file.name}", "copied")
 
-    # 2. Copy hook scripts individually — never delete existing hooks
+    # 2. Copy agent definitions individually — never delete existing agents
+    src_agents = global_src / "agents"
+    if src_agents.exists():
+        dst_agents = claude_dir / "agents"
+        dst_agents.mkdir(parents=True, exist_ok=True)
+        for src_file in sorted(src_agents.iterdir()):
+            if src_file.is_file():
+                shutil.copy2(src_file, dst_agents / src_file.name)
+                results.add_row("[green]✓[/green]", f"agents/{src_file.name}", "copied")
+
+    # 4. Copy hook scripts individually — never delete existing hooks
     src_hooks_dir = global_src / "hooks"
     if src_hooks_dir.exists():
         dst_hooks_dir = claude_dir / "hooks"
@@ -102,7 +112,7 @@ def upgrade(
                 shutil.copy2(src_file, dst_hooks_dir / src_file.name)
                 results.add_row("[green]✓[/green]", f"hooks/{src_file.name}", "copied")
 
-    # 3. Merge hook configuration into settings.json — never replace the file wholesale
+    # 5. Merge hook configuration into settings.json — never replace the file wholesale
     src_settings_path = global_src / "settings.json"
     dst_settings_path = claude_dir / "settings.json"
 

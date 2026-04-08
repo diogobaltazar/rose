@@ -1,10 +1,11 @@
 import typer
 from pathlib import Path
 from rose.cli.install import install
-from rose.cli.uninstall import uninstall
+from rose.cli.upgrade import upgrade
 from rose.cli.config import app as config_app
 from rose.cli.observe import app as observe_app
 from rose.cli.session import app as session_app
+
 app = typer.Typer(
     name="rose",
     help="Installs and manages Claude Code configuration.",
@@ -13,22 +14,10 @@ app = typer.Typer(
 )
 
 app.command()(install)
-app.command()(uninstall)
+app.command()(upgrade)
 app.add_typer(config_app)
 app.add_typer(observe_app)
 app.add_typer(session_app)
-
-
-@app.command()
-def reinstall(
-    claude_dir: Path = typer.Argument(
-        Path("/claude"),
-        help="Host ~/.claude directory (mounted into container)",
-        show_default=False,
-    ),
-):
-    """Wipe ~/.claude and reinstall global config from scratch."""
-    install(claude_dir=claude_dir, force=True, reset=True)
 
 
 if __name__ == "__main__":

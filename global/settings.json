@@ -12,12 +12,23 @@
     ]
   },
   "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "HOOK_EVENT=PostToolUse:SendMessage ~/.claude/hooks/log-message-events.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "SendMessage"
+      }
+    ],
     "SubagentStart": [
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "HOOK_EVENT=SubagentStart ~/.claude/hooks/log-subagent-events.sh"
+            "command": "HOOK_EVENT=SubagentStart ~/.claude/hooks/log-subagent-events.sh",
+            "type": "command"
           }
         ]
       }
@@ -26,19 +37,8 @@
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "HOOK_EVENT=SubagentStop ~/.claude/hooks/log-subagent-events.sh"
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "SendMessage",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "HOOK_EVENT=PostToolUse:SendMessage ~/.claude/hooks/log-message-events.sh"
+            "command": "HOOK_EVENT=SubagentStop ~/.claude/hooks/log-subagent-events.sh",
+            "type": "command"
           }
         ]
       }

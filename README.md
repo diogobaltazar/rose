@@ -8,131 +8,26 @@ Installs and manages Claude Code configuration.
 
 ## Setup
 
-Add the following to your `~/.zshrc` and reload with `source ~/.zshrc`:
+Add an alias to your shell config (`~/.zshrc` or `~/.bashrc`):
 
 ```bash
-# Set ROSE_DEV to your rose source path to build from source on every run.
-export ROSE_DEV="$HOME/rose"
-
-_rose_build_if_changed() {
-  local dev_dir="$1"
-  local hash_file="${XDG_CACHE_HOME:-$HOME/.cache}/rose/build_hash"
-  local current_hash
-  current_hash=$(find "$dev_dir" \
-    \( -name "*.py" -o -name "*.md" -o -name "*.json" -o -name "*.sh" -o -name "Dockerfile" -o -name "requirements.txt" \) \
-    -not -path "*/.git/*" \
-    | sort | xargs shasum -a 256 2>/dev/null | shasum -a 256 | cut -d' ' -f1)
-
-  if [[ "$(cat "$hash_file" 2>/dev/null)" != "$current_hash" ]]; then
-    docker compose -f "$dev_dir/compose.yml" build rose > /dev/null 2>&1
-    mkdir -p "$(dirname "$hash_file")"
-    echo "$current_hash" > "$hash_file"
-  fi
-}
-
-rose() {
-  local cmd="${1:-help}"
-
-  # Auto-detect: prefer cwd if it looks like a rose source tree (worktree support).
-  local _rose_dev
-  if [[ -f "$(pwd)/compose.yml" && -d "$(pwd)/src/rose" ]]; then
-    _rose_dev="$(pwd)"
-  else
-    _rose_dev="${ROSE_DEV:-}"
-  fi
-
-  if [[ "$cmd" == "install" || "$cmd" == "reinstall" ]]; then
-    shift
-    local link_path=""
-    local reset=false
-    local extra_args=()
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-        --link)  link_path="${2/#\~/$HOME}"; shift 2 ;;
-        --reset) reset=true; shift ;;
-        *)       extra_args+=("$1"); shift ;;
-      esac
-    done
-    [[ "$cmd" == "reinstall" ]] && reset=true
-
-    local mount_path="${link_path:-$HOME/.claude}"
-
-    if [[ "$reset" == true ]]; then
-      local real_path="$mount_path"
-      [[ -L "$mount_path" ]] && real_path="$(readlink "$mount_path")"
-      echo "Resetting ${real_path}..."
-      rm -rf "${real_path:?}"
-    fi
-
-    mkdir -p "$mount_path"
-
-    if [[ -n "$_rose_dev" ]]; then
-      _rose_build_if_changed "$_rose_dev"
-      TARGET_PROJECT="$(pwd)" GITHUB_TOKEN="$(gh auth token 2>/dev/null)" \
-        docker compose --progress quiet -f "$_rose_dev/compose.yml" run --rm rose install "${extra_args[@]}"
-    else
-      docker run --rm -it \
-        -v "$(pwd):/project" \
-        -v "$mount_path:/claude" \
-        -v "$HOME/.ssh:/root/.ssh:ro" \
-        -e GITHUB_TOKEN="$(gh auth token 2>/dev/null)" \
-        rose:latest install "${extra_args[@]}"
-    fi
-
-    if [[ -n "$link_path" ]]; then
-      ln -sf "$link_path" "$HOME/.claude"
-      echo "Symlink: ~/.claude -> $link_path"
-    fi
-
-  elif [[ "$cmd" == "observe" ]]; then
-    local subcmd="${2:-}"
-    local compose_file="${_rose_dev:+$_rose_dev/}compose.yml"
-    case "$subcmd" in
-      start)
-        mkdir -p "$HOME/.claude/logs" "$HOME/.config/rose"
-        echo "Starting rose observe at http://localhost:5100 ..."
-        docker compose -p rose -f "$compose_file" up --build --detach api web
-        ;;
-      stop)
-        docker compose -p rose -f "$compose_file" stop api web
-        ;;
-      restart)
-        docker compose -p rose -f "$compose_file" restart api web
-        ;;
-      status)
-        for name in rose-api rose-web; do
-          if docker ps --filter "name=^${name}$" --filter "status=running" --format "{{.Names}}" | grep -q "^${name}$"; then
-            printf "\033[32m●\033[0m %s running\n" "$name"
-          else
-            printf "\033[31m●\033[0m %s down\n" "$name"
-          fi
-        done
-        ;;
-      *)
-        echo "Usage: rose observe <start|stop|restart|status>"
-        ;;
-    esac
-
-  else
-    if [[ -n "$_rose_dev" ]]; then
-      _rose_build_if_changed "$_rose_dev"
-      TARGET_PROJECT="$(pwd)" GITHUB_TOKEN="$(gh auth token 2>/dev/null)" \
-        docker compose --progress quiet -f "$_rose_dev/compose.yml" run --rm rose "$cmd" "${@:2}"
-    else
-      docker run --rm -it \
-        -v "$(pwd):/project" \
-        -v "$HOME/.claude:/claude" \
-        -v "$HOME/.ssh:/root/.ssh:ro" \
-        -e GITHUB_TOKEN="$(gh auth token 2>/dev/null)" \
-        rose:latest "$cmd" "${@:2}"
-    fi
-  fi
-}
+alias rose='docker run --rm -it \
+  -v "$(pwd):/project" \
+  -v "$HOME/.claude:/claude" \
+  -v "$HOME/.ssh:/root/.ssh:ro" \
+  -e GITHUB_TOKEN="$(gh auth token 2>/dev/null)" \
+  rose:latest'
 ```
 
-The function auto-detects rose source trees: if the current directory contains `compose.yml` and `src/rose/`, it uses that directory — no need to update `ROSE_DEV` when switching between the main repo and worktrees.
+Then reload your shell:
 
-Unset `ROSE_DEV` (or don't set it) to use the published image.
+```bash
+source ~/.zshrc
+```
+
+You can now run any rose command — `rose upgrade`, `rose install`, `rose observe start` — from any directory.
+
+> **Developing rose?** Run `docker compose build rose` to build from source, then update your alias to use the local image name.
 
 ## Commands
 
@@ -180,8 +75,6 @@ rose reinstall        # wipe ~/.claude and reinstall from scratch
 ```
 
 ### rose observe
-
-`rose observe` is handled by the shell function — it runs `docker compose` directly on the host (Docker is not available inside the rose container).
 
 ```bash
 rose observe start    # build and start rose-api + rose-web, detached

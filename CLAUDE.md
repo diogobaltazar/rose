@@ -16,13 +16,14 @@ If you edit `~/.claude` directly, the change will be lost the next time someone 
 
 ## Testing changes
 
-With `ROSE_DEV=$HOME/rose` set (already in your `~/.zshrc`), rose rebuilds from this directory on every run:
+To test changes, build the image from source and then run `rose upgrade`:
 
 ```bash
+docker compose build rose
 rose upgrade    # reinstall from this branch's source
 ```
 
-Switch branches freely — `rose upgrade` always installs from the current checkout.
+Switch branches freely — build and upgrade again to pick up the new branch's changes.
 
 ## Feedback about rose behaviour
 

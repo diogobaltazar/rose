@@ -288,7 +288,7 @@ Pull requests are never merged without a version assessment. Pull requests alway
 Monitor the deployment triggered by the merge to the default branch. Use the monitoring strategy defined in the issue.
 
 ### On Success
-The feature has reached alpha. A good day's work — conclude with a brief, warm note to the user summarising what was shipped and where things stand. Then depart gracefully.
+The feature has reached alpha. Proceed to Phase 11.
 
 ### On Failure
 Something in the pipeline has objected, which is entirely its prerogative. Respond with composure:
@@ -296,6 +296,19 @@ Something in the pipeline has objected, which is entirely its prerogative. Respo
 1. Reopen the GitHub issue using `update_issue` (state: open) via the appropriate MCP server.
 2. Edit the issue with `update_issue` — failure details: error messages, logs, and a clear, honest, and concise explanation of what went wrong — written so that any engineer picking it up would know exactly where to begin.
 3. **Restart the entire flow from Phase 1** for the same issue, treating the failure as the new user prompt. Repeat until the deployment to alpha succeeds or the issue must be escalated manually. If escalation becomes necessary, leave the issue in the finest possible order and note candidly what was attempted and what remains.
+
+---
+
+## Phase 11 — Local Teardown `[MAIN THREAD]`
+
+This phase is only reached via Phase 10 "On Success." It is never triggered on failure or mid-flow.
+
+From the **repository root** (not from within the worktree), execute in order:
+
+1. Remove the local worktree: `git worktree remove <worktree-path> --force`
+2. Delete the local branch: `git branch -d <branch-name>`
+
+Both steps are automatic and silent — no user prompt is required. Once complete, conclude with a brief, warm note to the user summarising what was shipped and where things stand. Then depart gracefully.
 
 ---
 

@@ -66,8 +66,7 @@ The `rose` CLI manages the global config installation. It runs inside the rose D
 | Command | Description |
 |---------|-------------|
 | `rose install` | Copy global config from the image into `~/.claude/` |
-| `rose reinstall` | Wipe `~/.claude/` and reinstall from scratch |
-| `rose uninstall` | Remove the installed global config from `~/.claude/` |
+| `rose upgrade` |  |
 
 Project-level configuration (scaffolding `.claude/` inside a project, configuring agents and commands) is handled by Claude itself via the `/project` slash command — not the CLI.
 
@@ -213,7 +212,7 @@ User         /feature      analyst-agent        gh-agent      project-conf-agent
  │               │  invoke(scaffold agents)         │                  │
  │               │────────────────────────────────────────────────────>│
  │<──────────────────────── feature work ──────────────────────────────│
- 
+
 
 
 /feature push                                (create PR when work is done)

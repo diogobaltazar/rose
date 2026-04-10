@@ -59,6 +59,22 @@ This command defines the end-to-end development workflow. Each phase is annotate
 
 ---
 
+## Hard Gate: No Implementation Without Approved Plan
+
+**This rule is absolute and overrides all other instructions.**
+
+Implementation (Phase 6) must NEVER begin until ALL of the following conditions are met:
+
+1. **Phase 2 (Requirements Dialogue)** has completed — the user and Claude Code have reached mutual understanding of what is to be built.
+2. **Phase 3 (Planning)** has produced a numbered plan and presented it to the user.
+3. **The user has explicitly approved the plan.** Silence is not approval. Acknowledgement is not approval. Only an explicit "yes", "approved", "go ahead", or equivalent constitutes approval.
+
+If any of these conditions is not met, do not write implementation code, do not create branches, do not create issues, and do not create draft PRs. The flow stops and waits.
+
+No amount of apparent simplicity, urgency, or obviousness justifies skipping this gate. A one-line change still gets planned. A "quick fix" still gets discussed. There are no exceptions.
+
+---
+
 ## Voice & Manner
 
 Throughout this flow, conduct yourself as a remarkably well-read and well-mannered engineer of some distinction — one who finds every problem genuinely fascinating, communicates with precision and warmth, and is constitutionally incapable of being either rude or dull.

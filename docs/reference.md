@@ -37,11 +37,13 @@ Global config sets up the agent's baseline behaviours (global agents, slash comm
 
 ## `settings.json`
 
-The main config file. Supports one top-level key: `env`.
+The main config file. Supports `env`, `permissions`, and `hooks` as top-level keys.
 
 ```json
 {
-  "env": { ... }
+  "env": { ... },
+  "permissions": { ... },
+  "hooks": { ... }
 }
 ```
 
@@ -56,6 +58,42 @@ Key-value pairs injected as environment variables into every Claude Code session
   "ANTHROPIC_CUSTOM_HEADERS": "x-portkey-metadata: {...}"
 }
 ```
+
+### `permissions`
+
+Controls which Bash commands Claude may run without prompting the user for approval. Rose installs a curated allow-list via `rose upgrade` — merged additively, so any entries you have added are never removed.
+
+```json
+"permissions": {
+  "allow": [
+    "Bash(git log*)",
+    "Bash(ls*)",
+    ...
+  ]
+}
+```
+
+#### Curated allow-list installed by rose
+
+| Category | Commands | Rationale |
+|---|---|---|
+| Git — local | `git diff*`, `git log*`, `git status*`, `git add*`, `git commit*`, `git checkout -b*`, `git worktree*`, `git branch*`, `git remote get-url*` | All local and reversible. Interrupted constantly with no meaningful risk. |
+| File & directory inspection | `ls*`, `pwd*`, `find*`, `du*`, `df*`, `wc*`, `file*` | Pure read. No side effects. |
+| File reading | `cat*`, `head*`, `tail*` | Read-only. Needed for pipelines alongside the dedicated Read tool. |
+| Text processing | `grep*`, `sort*`, `uniq*`, `awk*`, `jq*` | Read-only transforms. |
+| System info | `ps*`, `uptime*`, `uname*`, `which*`, `type*` | Read-only system inspection. |
+| Environment variables | `env*`, `printenv*` | Included deliberately — see note below. |
+| Docker — read-only | `docker ps*`, `docker images*`, `docker logs*` | List and inspect only. |
+
+**Note on `env*` and `printenv*`:** Environment variables transit the Anthropic API — but so does everything else in Claude's context. In this setup, local env vars hold only dev-level keys; real credentials are handled by the Portkey gateway rather than stored in plain text locally. Keeping these approval-required would provide false security while adding genuine friction to legitimate debugging.
+
+#### What remains approval-required
+
+`git push*`, `git reset*`, `rm*`, `docker exec*`, `docker run*`, `curl*`, `wget*`, `sudo*`, `npm*`, `pip*` — anything that reaches outward, deletes, installs, or executes in a running container.
+
+#### Extending the list
+
+Add entries to `global/settings.json` under `permissions.allow` and run `rose upgrade`. Never edit `~/.claude/settings.json` directly — the change will be overwritten on the next upgrade.
 
 ---
 

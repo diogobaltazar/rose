@@ -1,7 +1,7 @@
 """
-rose-api — session data backend for rose-web.
+topgun-api — session data backend for topgun-web.
 
-Serves the same rich session data that the CLI's `rose observe watch` renders,
+Serves the same rich session data that the CLI's `topgun observe watch` renders,
 including agent metrics, token counts, costs, and subagent details.
 """
 
@@ -22,7 +22,7 @@ LOG_DIR = Path(os.environ.get("LOG_DIR", Path.home() / ".claude" / "logs"))
 PROJECTS_DIR = Path(os.environ.get("PROJECTS_DIR", Path.home() / ".claude" / "projects"))
 SESSIONS_DIR = Path(os.environ.get("SESSIONS_DIR", Path.home() / ".claude" / "sessions"))
 TEAMS_DIR = Path(os.environ.get("TEAMS_DIR", Path.home() / ".claude" / "teams"))
-CONFIG_FILE = Path(os.environ.get("ROSE_CONFIG", Path.home() / ".config" / "rose" / "config.json"))
+CONFIG_FILE = Path(os.environ.get("TOPGUN_CONFIG", Path.home() / ".config" / "topgun" / "config.json"))
 WEB_DIR = Path(__file__).parent.parent / "web"
 
 STALE_THRESHOLD = 120  # seconds — transcript older than this is considered done

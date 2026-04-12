@@ -22,7 +22,7 @@
   --c-usd:      #d7ff87;  /* color(192) */
 
   /* Lightsaber accent (sidebar) */
-  --c-rose: #00d75f;
+  --c-topgun: #00d75f;
   --c-live: #87d787;
 }
 
@@ -55,8 +55,8 @@ body {
   font-weight: 600;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--c-rose);
-  text-shadow: 0 0 12px var(--c-rose);
+  color: var(--c-topgun);
+  text-shadow: 0 0 12px var(--c-topgun);
   padding: 0 14px 20px;
 }
 
@@ -72,7 +72,7 @@ body {
 .session-row:hover { background: rgba(0,215,95,0.05); }
 .session-row.selected {
   background: rgba(0,215,95,0.08);
-  border-left-color: var(--c-rose);
+  border-left-color: var(--c-topgun);
 }
 .session-row-dot {
   width: 5px; height: 5px;

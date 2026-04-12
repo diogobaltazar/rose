@@ -1,4 +1,4 @@
-from rose.cli.upgrade import _merge_permissions
+from topgun.cli.upgrade import _merge_permissions
 
 
 def test_merge_permissions_into_empty():
@@ -19,7 +19,7 @@ def test_merge_permissions_preserves_user_entries():
     """_merge_permissions must never remove entries the user has added.
 
     Users may add project-specific or personal permissions to their
-    ~/.claude/settings.json. A rose upgrade must not silently delete them,
+    ~/.claude/settings.json. A topgun upgrade must not silently delete them,
     as this would break workflows the user has deliberately enabled.
     Edge cases not covered: duplicate user entries (preserved as-is).
     """
@@ -34,7 +34,7 @@ def test_merge_permissions_preserves_user_entries():
 def test_merge_permissions_no_duplicates():
     """_merge_permissions must not add an entry that is already present.
 
-    Running rose upgrade is idempotent. If a permission is already in the
+    Running topgun upgrade is idempotent. If a permission is already in the
     destination allow-list — whether from a previous upgrade or added manually —
     it must not be duplicated. Duplicates in Claude Code's allow-list are
     harmless but produce a confusing settings file.
@@ -49,7 +49,7 @@ def test_merge_permissions_no_duplicates():
 def test_merge_permissions_idempotent():
     """_merge_permissions called twice must produce the same result as once.
 
-    rose upgrade may be run repeatedly. The second run must produce zero
+    topgun upgrade may be run repeatedly. The second run must produce zero
     changes and must not alter the allow-list from what the first run produced.
     """
     src = {"permissions": {"allow": ["Bash(ls*)", "Bash(ps*)"]}}

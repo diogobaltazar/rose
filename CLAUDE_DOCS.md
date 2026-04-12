@@ -3,7 +3,7 @@
 
 **Version:** 1.0
 **Date:** 2026-04-07
-**Repository:** [diogobaltazar/rose](https://github.com/diogobaltazar/rose)
+**Repository:** [diogobaltazar/topgun](https://github.com/diogobaltazar/topgun)
 
 ---
 
@@ -11,9 +11,9 @@
 
 This document is a formal behavioural reference for *AI orchestrators* — software systems that use AI components to make runtime decisions about task decomposition, tool invocation, and inter-agent coordination. Volume I focuses on **Claude Code** [1], Anthropic's command-line coding assistant, as a representative *coding agent orchestrator*.
 
-Each documented behaviour is treated as a falsifiable property: a claim about system output under stated conditions. Where possible, the claim is accompanied by an executable experiment in the **rose** repository [R]. Each experiment constitutes a *lab* with explicit prerequisites (OS, installed software, LLM access, API credentials, configuration). A reader who satisfies the prerequisites can run the experiment and verify the claim independently; a reader who cannot may still use the experiment as a precise specification of what was observed. Reproducibility is conditional on prerequisite access, not universal.
+Each documented behaviour is treated as a falsifiable property: a claim about system output under stated conditions. Where possible, the claim is accompanied by an executable experiment in the **topgun** repository [R]. Each experiment constitutes a *lab* with explicit prerequisites (OS, installed software, LLM access, API credentials, configuration). A reader who satisfies the prerequisites can run the experiment and verify the claim independently; a reader who cannot may still use the experiment as a precise specification of what was observed. Reproducibility is conditional on prerequisite access, not universal.
 
-The rose repository [R] provides the test apparatus: hook scripts, an observability API, and a session monitoring dashboard. A comparative survey of agentic frameworks is included to situate Claude Code in the broader ecosystem. Subsequent volumes will address Gastown [3], OpenClaw [2], and platform-hosted orchestrators.
+The topgun repository [R] provides the test apparatus: hook scripts, an observability API, and a session monitoring dashboard. A comparative survey of agentic frameworks is included to situate Claude Code in the broader ecosystem. Subsequent volumes will address Gastown [3], OpenClaw [2], and platform-hosted orchestrators.
 
 ---
 
@@ -24,7 +24,7 @@ The rose repository [R] provides the test apparatus: hook scripts, an observabil
 AI orchestrators cannot be fully characterised by static analysis: their control flow is determined by model inference at runtime, not by explicit branching logic. This document uses an empirical, observation-based methodology governed by three principles:
 
 1. **Condition specificity.** Every behaviour records the conditions under which it was observed: OS, software versions, configuration state.
-2. **Reproducibility.** Each behaviour is, where possible, accompanied by an executable experiment in the **rose** repository [R] — a *lab* with explicit *prerequisites* a reader must satisfy to run it. Reproducibility is conditional on those prerequisites; the experiment is a precise specification regardless.
+2. **Reproducibility.** Each behaviour is, where possible, accompanied by an executable experiment in the **topgun** repository [R] — a *lab* with explicit *prerequisites* a reader must satisfy to run it. Reproducibility is conditional on those prerequisites; the experiment is a precise specification regardless.
 3. **Falsifiability.** Known failure modes and edge cases are stated alongside each nominal description.
 
 ### 1.2 Experimental Model
@@ -134,7 +134,7 @@ Gastown, OpenClaw, and the platform-hosted orchestrators will be addressed in su
 
 ## 2. Configuration
 
-**Lab prerequisites:** macOS Darwin 25.2.0; Claude Code installed; rose applied (`rose install` [R, `src/rose/cli/install.py`]).
+**Lab prerequisites:** macOS Darwin 25.2.0; Claude Code installed; topgun applied (`topgun install` [R, `src/topgun/cli/install.py`]).
 
 Claude Code configuration lives in two files with distinct roles. Placing a key in the wrong file produces silently incorrect behaviour.
 
@@ -366,7 +366,7 @@ Preferences stored here rather than in `settings.json`. Adding these keys to `se
 
 ## 3. Execution Model
 
-**Lab prerequisites:** macOS Darwin 25.2.0; Claude Code installed; rose applied (`rose install` [R]).
+**Lab prerequisites:** macOS Darwin 25.2.0; Claude Code installed; topgun applied (`topgun install` [R]).
 
 ### 3.1 Session
 
@@ -392,9 +392,9 @@ A **turn** is one request-response cycle: the user submits a message; the model 
 
 ## 4. Storage Architecture
 
-**Lab prerequisites:** macOS Darwin 25.2.0; Claude Code installed; rose applied (`rose install` [R]); at least one Claude Code session started from the project directory. All file paths and JSON schemas presented here were verified by direct observation of the live filesystem.
+**Lab prerequisites:** macOS Darwin 25.2.0; Claude Code installed; topgun applied (`topgun install` [R]); at least one Claude Code session started from the project directory. All file paths and JSON schemas presented here were verified by direct observation of the live filesystem.
 
-Claude Code maintains two storage categories: the **project transcript store** and the **session process registry** — the authoritative source of truth for all observability tooling [R, `src/rose/api/main.py`].
+Claude Code maintains two storage categories: the **project transcript store** and the **session process registry** — the authoritative source of truth for all observability tooling [R, `src/topgun/api/main.py`].
 
 ### 4.1 Project Transcript Store
 
@@ -409,7 +409,7 @@ A *project* in Claude Code's storage model corresponds to a working directory (`
     └── {session_id}.jsonl
 ```
 
-The `encoded-cwd` is derived by replacing each `/` in the absolute path with `-`. For example, `/Users/pereid22/rose` becomes `-Users-pereid22-rose`. This encoding is lossless only for typical filesystem paths; paths containing `-` characters are not disambiguated from `/` characters by this scheme.
+The `encoded-cwd` is derived by replacing each `/` in the absolute path with `-`. For example, `/Users/pereid22/topgun` becomes `-Users-pereid22-topgun`. This encoding is lossless only for typical filesystem paths; paths containing `-` characters are not disambiguated from `/` characters by this scheme.
 
 #### 4.1.2 Transcript Format
 
@@ -425,7 +425,7 @@ The two primary entry types are `user` and `assistant`.
   "sessionId": "8ac36fae-...",
   "timestamp": "2026-04-06T02:41:49.059Z",
   "gitBranch": "main",
-  "cwd": "/Users/pereid22/rose",
+  "cwd": "/Users/pereid22/topgun",
   "message": {
     "role": "user",
     "content": "there are hooks in global/hooks that I no longer require"
@@ -451,7 +451,7 @@ The two primary entry types are `user` and `assistant`.
 
 Tool results are encoded as `user` type entries with `message.content` as a JSON array rather than a plain string.
 
-Fields used by the observability layer for session listing [R, `src/rose/api/main.py`]:
+Fields used by the observability layer for session listing [R, `src/topgun/api/main.py`]:
 
 | Field | Source |
 |---|---|
@@ -470,7 +470,7 @@ One file is created per running Claude Code process, keyed by the operating syst
 {
   "pid":       71823,
   "sessionId": "dedd37bc-...",
-  "cwd":       "/Users/pereid22/rose",
+  "cwd":       "/Users/pereid22/topgun",
   "startedAt": 1775477968105
 }
 ```
@@ -496,13 +496,13 @@ Resumed session:
 2. Find the `.jsonl` file in that directory whose `mtime ≥ startedAt / 1000`.
 3. That file is the transcript currently being written to.
 
-This procedure is valid because only one transcript per project directory can be modified after a given process start time. The implementation is in the rose repository [R, `src/rose/api/main.py`].
+This procedure is valid because only one transcript per project directory can be modified after a given process start time. The implementation is in the topgun repository [R, `src/topgun/api/main.py`].
 
 ---
 
 ## 5. Agent Architecture
 
-**Lab prerequisites:** macOS Darwin 25.2.0; Claude Code installed; rose applied (`rose install` [R]); `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1"` present in `settings.json`; `teammateMode: "in-process"` present in `~/.claude.json`; active Claude API access (LLM availability required); at least one agent invocation executed. All subagent directory layouts and transcript schemas were verified by direct inspection.
+**Lab prerequisites:** macOS Darwin 25.2.0; Claude Code installed; topgun applied (`topgun install` [R]); `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1"` present in `settings.json`; `teammateMode: "in-process"` present in `~/.claude.json`; active Claude API access (LLM availability required); at least one agent invocation executed. All subagent directory layouts and transcript schemas were verified by direct inspection.
 
 ### 5.1 Subagents and Teammates
 
@@ -523,7 +523,7 @@ Storage layout is identical for both; the only distinguishing signal in the tran
 
 1. `~/.claude/sessions/` contains exactly one file — the parent process's PID — regardless of how many teammates are active at a given moment.
 2. The teammate shutdown response payload contains `"paneId": "in-process"` and `"backendType": "in-process"`.
-3. In session and agent listings produced by the rose observability layer [R, `src/rose/api/main.py`], teammates appear as subagents nested under the parent session, not as top-level sessions.
+3. In session and agent listings produced by the topgun observability layer [R, `src/topgun/api/main.py`], teammates appear as subagents nested under the parent session, not as top-level sessions.
 
 **Consequence:** no teammate PIDs are available to monitoring tools. All execution occurs under the parent session's PID, and process-level isolation between teammates does not exist in this mode.
 
@@ -552,7 +552,7 @@ Every subagent or teammate invocation is recorded in two locations: the **parent
 }
 ```
 
-- `agentType`: the named agent definition (e.g. `rose`, `claude-code-guide`, `engineer`)
+- `agentType`: the named agent definition (e.g. `topgun`, `claude-code-guide`, `engineer`)
 - `description`: the short label passed by the invoking model at call time; distinguishes multiple invocations of the same `agentType` within a session
 
 #### 5.3.2 `agent-{agentId}.jsonl`
@@ -568,7 +568,7 @@ The agent's full conversation transcript, in the same JSONL format as a parent s
   "sessionId": "78b85df3-9ce0-4d1d-a4ce-2d7459980b92",
   "isSidechain": true,
   "timestamp": "2026-04-06T12:06:29.891Z",
-  "cwd": "/Users/pereid22/rose",
+  "cwd": "/Users/pereid22/topgun",
   "message": {
     "role": "user",
     "content": "What are all the possible hooks that Claude Code provides?..."
@@ -608,7 +608,7 @@ The `timestamp` of this entry is the agent's `started_at`.
 
 **Observed behaviour:** subagents execute on `claude-haiku-4-5-20251001` by default, not on the parent session's model. This is directly observable in the `model` field of `assistant` entries within the subagent transcript.
 
-Fields extractable from this file for observability purposes [R, `src/rose/api/main.py`]:
+Fields extractable from this file for observability purposes [R, `src/topgun/api/main.py`]:
 
 | Field | Derivation |
 |---|---|
@@ -739,11 +739,11 @@ user       [12:07:15]  tool_result    tool_use_id=toolu_01Ck  ← done; duration
 
 ## 6. Observability and Event Hooks
 
-**Lab prerequisites:** macOS Darwin 25.2.0; Claude Code installed; rose applied (`rose install` [R]); active Claude API access (LLM availability required); hook scripts present at `~/.claude/hooks/` [R, `global/hooks/`]; at least one session with subagent invocations run after hook deployment. Log output is written to `~/.claude/logs/`.
+**Lab prerequisites:** macOS Darwin 25.2.0; Claude Code installed; topgun applied (`topgun install` [R]); active Claude API access (LLM availability required); hook scripts present at `~/.claude/hooks/` [R, `global/hooks/`]; at least one session with subagent invocations run after hook deployment. Log output is written to `~/.claude/logs/`.
 
 ### 6.1 Transcript Join Procedure
 
-The observability layer [R, `src/rose/api/main.py`] reconstructs a complete picture of each agent invocation by joining data from three sources:
+The observability layer [R, `src/topgun/api/main.py`] reconstructs a complete picture of each agent invocation by joining data from three sources:
 
 ```
 subagents/agent-{agentId}.meta.json   →  agentType, description
@@ -783,10 +783,10 @@ Fires at the moment the subagent begins. The subagent's own transcript file may 
 ```json
 {
   "session_id": "78b85df3-9ce0-4d1d-a4ce-2d7459980b92",
-  "transcript_path": "/Users/pereid22/.claude/projects/-Users-pereid22-rose/78b85df3-....jsonl",
-  "cwd": "/Users/pereid22/rose",
+  "transcript_path": "/Users/pereid22/.claude/projects/-Users-pereid22-topgun/78b85df3-....jsonl",
+  "cwd": "/Users/pereid22/topgun",
   "agent_id": "a73f163bf6391f728",
-  "agent_type": "rose-backlog",
+  "agent_type": "topgun-backlog",
   "hook_event_name": "SubagentStart"
 }
 ```
@@ -801,10 +801,10 @@ Fires when the subagent finishes normally. Adds the agent transcript path and th
 {
   "session_id": "78b85df3-9ce0-4d1d-a4ce-2d7459980b92",
   "agent_id": "a73f163bf6391f728",
-  "agent_type": "rose-backlog",
+  "agent_type": "topgun-backlog",
   "hook_event_name": "SubagentStop",
   "stop_hook_active": false,
-  "agent_transcript_path": "/Users/pereid22/.claude/projects/-Users-pereid22-rose/78b85df3-.../subagents/agent-a73f163bf6391f728.jsonl",
+  "agent_transcript_path": "/Users/pereid22/.claude/projects/-Users-pereid22-topgun/78b85df3-.../subagents/agent-a73f163bf6391f728.jsonl",
   "last_assistant_message": "Task complete. Read one file, reported back to team-lead."
 }
 ```
@@ -850,18 +850,18 @@ Writes to `~/.claude/logs/message-events.jsonl`. Implementation: [R, `global/hoo
 {
   "session_id": "78b85df3-9ce0-4d1d-a4ce-2d7459980b92",
   "transcript_path": "...",
-  "cwd": "/Users/pereid22/rose",
+  "cwd": "/Users/pereid22/topgun",
   "hook_event_name": "PostToolUse",
   "tool_name": "SendMessage",
   "tool_input": {
-    "to": "rose-backlog",
+    "to": "topgun-backlog",
     "message": { "type": "shutdown_request" },
-    "summary": "Shut down rose-backlog"
+    "summary": "Shut down topgun-backlog"
   },
   "tool_response": {
     "success": true,
-    "request_id": "shutdown-...@rose-backlog",
-    "target": "rose-backlog"
+    "request_id": "shutdown-...@topgun-backlog",
+    "target": "topgun-backlog"
   },
   "tool_use_id": "toolu_vrtx_01..."
 }
@@ -943,7 +943,7 @@ The shutdown signal is read from `~/.claude/logs/message-events.jsonl` (§6.3). 
 
 ## 7. Memory System
 
-**Lab prerequisites:** macOS Darwin 25.2.0; Claude Code installed; rose applied (`rose install` [R]); active Claude API access (LLM availability required). The memory system is configured via [R, `global/CLAUDE.md`].
+**Lab prerequisites:** macOS Darwin 25.2.0; Claude Code installed; topgun applied (`topgun install` [R]); active Claude API access (LLM availability required). The memory system is configured via [R, `global/CLAUDE.md`].
 
 Claude Code supports a file-based memory system. The index is loaded automatically into every session's system prompt.
 
@@ -1018,4 +1018,4 @@ this guidance is relevant). The Why line permits correct application to edge cas
 
 [13] deepset. *Haystack*. https://haystack.deepset.ai/
 
-[R] diogobaltazar. *rose — Claude Code Configuration and Observability*. GitHub. https://github.com/diogobaltazar/rose
+[R] diogobaltazar. *topgun — Claude Code Configuration and Observability*. GitHub. https://github.com/diogobaltazar/topgun

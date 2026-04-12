@@ -10,7 +10,7 @@ app = typer.Typer(name="session", help="Manage Claude Code session transcripts."
 console = Console()
 
 CLAUDE_PROJECTS = Path("/claude/projects")
-VAULT = Path("/rose-vault")
+VAULT = Path("/topgun-vault")
 
 
 def _find_transcript(session_id: str) -> tuple[Path, Path]:
@@ -76,7 +76,7 @@ def list_sessions():
 def archive(
     session_id: str = typer.Argument(..., help="Session UUID to archive"),
 ):
-    """Move a session transcript from ~/.claude to ~/.rose-vault/archive/projects/."""
+    """Move a session transcript from ~/.claude to ~/.topgun-vault/archive/projects/."""
     transcript, project_dir = _find_transcript(session_id)
     dest_dir = VAULT / "archive" / "projects" / project_dir.name
     dest_dir.mkdir(parents=True, exist_ok=True)
@@ -104,7 +104,7 @@ def delete(
 def clone(
     session_id: str = typer.Argument(..., help="Session UUID to clone"),
 ):
-    """Copy a session transcript from ~/.claude to ~/.rose-vault/clone/projects/{id}/{datetime}/."""
+    """Copy a session transcript from ~/.claude to ~/.topgun-vault/clone/projects/{id}/{datetime}/."""
     transcript, _project_dir = _find_transcript(session_id)
     timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
     dest_dir = VAULT / "clone" / "projects" / session_id / timestamp

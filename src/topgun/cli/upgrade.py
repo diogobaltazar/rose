@@ -10,7 +10,7 @@ from rich import box
 
 console = Console()
 
-ROSE_DIR = Path("/rose")
+ROSE_DIR = Path("/topgun")
 
 
 def _merge_hooks(dest: dict, src: dict) -> list[str]:
@@ -93,10 +93,10 @@ def upgrade(
         show_default=False,
     ),
 ):
-    """Safely upgrade commands, hooks, and hook settings from the rose source."""
+    """Safely upgrade commands, hooks, and hook settings from the topgun source."""
 
     console.print()
-    console.print(Panel("[bold magenta]rose upgrade[/bold magenta]", expand=False))
+    console.print(Panel("[bold magenta]topgun upgrade[/bold magenta]", expand=False))
     console.print(f"  Target: [cyan]~/.claude[/cyan]\n")
 
     if not claude_dir.exists():

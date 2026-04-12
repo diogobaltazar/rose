@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from typer.testing import CliRunner
 
-from rose.cli.session import _format_size, app
+from topgun.cli.session import _format_size, app
 
 runner = CliRunner()
 
@@ -43,7 +43,7 @@ def test_list_no_projects_dir(tmp_path):
     Without this guard, iterating a missing directory raises a FileNotFoundError
     and produces an unhelpful traceback instead of a friendly message.
     """
-    with patch("rose.cli.session.CLAUDE_PROJECTS", tmp_path / "nonexistent"):
+    with patch("topgun.cli.session.CLAUDE_PROJECTS", tmp_path / "nonexistent"):
         result = runner.invoke(app, ["list"])
     assert result.exit_code == 0
     assert "No projects directory" in result.output
@@ -52,11 +52,11 @@ def test_list_no_projects_dir(tmp_path):
 def test_list_no_sessions(tmp_path):
     """list command must exit cleanly when the projects directory is empty.
 
-    A freshly installed rose instance has no sessions yet; this test ensures the
+    A freshly installed topgun instance has no sessions yet; this test ensures the
     command handles that state gracefully rather than rendering an empty table.
     """
     (tmp_path / "projects").mkdir()
-    with patch("rose.cli.session.CLAUDE_PROJECTS", tmp_path / "projects"):
+    with patch("topgun.cli.session.CLAUDE_PROJECTS", tmp_path / "projects"):
         result = runner.invoke(app, ["list"])
     assert result.exit_code == 0
     assert "No session transcripts found" in result.output
@@ -78,7 +78,7 @@ def test_list_shows_sessions(tmp_path):
     (proj_a / "abc-123.jsonl").write_text('{"role":"user"}')
     (proj_b / "def-456.jsonl").write_text('{"role":"user"}' * 100)
 
-    with patch("rose.cli.session.CLAUDE_PROJECTS", projects):
+    with patch("topgun.cli.session.CLAUDE_PROJECTS", projects):
         result = runner.invoke(app, ["list"])
 
     assert result.exit_code == 0
@@ -106,7 +106,7 @@ def test_list_sorted_newest_first(tmp_path):
     newer = proj / "new-session.jsonl"
     newer.write_text("{}")
 
-    with patch("rose.cli.session.CLAUDE_PROJECTS", projects):
+    with patch("topgun.cli.session.CLAUDE_PROJECTS", projects):
         result = runner.invoke(app, ["list"])
 
     assert result.exit_code == 0

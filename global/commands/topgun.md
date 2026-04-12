@@ -131,18 +131,18 @@ To determine which server to use: inspect the repository's remote URL (`git remo
 
 Upon receiving the user prompt, immediately create a team and spawn three research teammates in parallel before responding:
 
-1. Call `TeamCreate` with a descriptive team name (e.g. `rose-intake-<short-slug>`) to initialise the team and its shared task list.
+1. Call `TeamCreate` with a descriptive team name (e.g. `topgun-intake-<short-slug>`) to initialise the team and its shared task list.
 2. Create three tasks via `TaskCreate` — one for each research area below — then spawn three teammates simultaneously using the `Agent` tool with `team_name` set to the team you just created and distinct `name` values (e.g. `codebase-agent`, `pr-agent`, `issues-agent`). Assign each task to its teammate via `TaskUpdate`.
 
 **Before spawning:** determine which GitHub MCP server prefix to use by running `git remote get-url origin`. If the org is `cscoe` or `roche-innersource`, the prefix is `mcp__github-roche__`. For everything else it is `mcp__github-personal__`. Include this prefix explicitly in the prompts for `pr-agent` and `issues-agent`.
 
 Research areas and agent types:
 
-- **codebase-agent** — explore the repository structure, relevant source files, and existing patterns related to the user's request. Use `subagent_type: "general-purpose"`. Report findings via `SendMessage(to: "rose", ...)`.
+- **codebase-agent** — explore the repository structure, relevant source files, and existing patterns related to the user's request. Use `subagent_type: "general-purpose"`. Report findings via `SendMessage(to: "topgun", ...)`.
 
-- **pr-agent** — search open and recently closed PRs for context related to the user's request. Use `subagent_type: "rose-github-researcher"`. Include the repository owner, repo name, MCP prefix, and topic in the prompt. Report via `SendMessage(to: "rose", ...)`.
+- **pr-agent** — search open and recently closed PRs for context related to the user's request. Use `subagent_type: "topgun-github-researcher"`. Include the repository owner, repo name, MCP prefix, and topic in the prompt. Report via `SendMessage(to: "topgun", ...)`.
 
-- **issues-agent** — search open and closed issues and their threads for context related to the user's request. Use `subagent_type: "rose-github-researcher"`. Include the repository owner, repo name, MCP prefix, and topic in the prompt. Report via `SendMessage(to: "rose", ...)`.
+- **issues-agent** — search open and closed issues and their threads for context related to the user's request. Use `subagent_type: "topgun-github-researcher"`. Include the repository owner, repo name, MCP prefix, and topic in the prompt. Report via `SendMessage(to: "topgun", ...)`.
 
 While spawning, also assess whether the user's request requires **deep online research** (e.g. unfamiliar third-party APIs, emerging design patterns, novel infrastructure choices). Flag this need internally — it will be addressed in Phase 2 if confirmed.
 

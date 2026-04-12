@@ -149,7 +149,7 @@ function AgentMatrix({ session }) {
 
   // Main session row label
   const titleLower = (session.title || '').trim().toLowerCase();
-  const mainName = titleLower.startsWith('/rose') ? 'rose' : 'claude';
+  const mainName = titleLower.startsWith('/topgun') ? 'topgun' : 'claude';
   const mainSid = sid.replace(/-/g, '').slice(0, 17);
 
   return (
@@ -293,7 +293,7 @@ function Sidebar({ sessions, selectedId, onSelect }) {
 
   return (
     <div id="sidebar">
-      <div id="sidebar-header">rose observe</div>
+      <div id="sidebar-header">topgun observe</div>
       {sorted.length === 0 && (
         <div className="sidebar-empty">no sessions</div>
       )}

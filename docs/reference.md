@@ -1,6 +1,6 @@
 # Claude Code configuration reference
 
-This document explains every file and concept behind the `.claude/` configuration tree. Rose is built on top of these primitives. Understanding them lets you extend or replace any part of the setup.
+This document explains every file and concept behind the `.claude/` configuration tree. Topgun is built on top of these primitives. Understanding them lets you extend or replace any part of the setup.
 
 ## Two config scopes
 
@@ -61,7 +61,7 @@ Key-value pairs injected as environment variables into every Claude Code session
 
 ### `permissions`
 
-Controls which Bash commands Claude may run without prompting the user for approval. Rose installs a curated allow-list via `rose upgrade` — merged additively, so any entries you have added are never removed.
+Controls which Bash commands Claude may run without prompting the user for approval. Topgun installs a curated allow-list via `topgun upgrade` — merged additively, so any entries you have added are never removed.
 
 ```json
 "permissions": {
@@ -73,7 +73,7 @@ Controls which Bash commands Claude may run without prompting the user for appro
 }
 ```
 
-#### Curated allow-list installed by rose
+#### Curated allow-list installed by topgun
 
 | Category | Commands | Rationale |
 |---|---|---|
@@ -93,18 +93,18 @@ Controls which Bash commands Claude may run without prompting the user for appro
 
 #### Extending the list
 
-Add entries to `global/settings.json` under `permissions.allow` and run `rose upgrade`. Never edit `~/.claude/settings.json` directly — the change will be overwritten on the next upgrade.
+Add entries to `global/settings.json` under `permissions.allow` and run `topgun upgrade`. Never edit `~/.claude/settings.json` directly — the change will be overwritten on the next upgrade.
 
 ---
 
-## CLI (`rose`)
+## CLI (`topgun`)
 
-The `rose` CLI manages the global config installation. It runs inside the rose Docker container and mounts `~/.claude` from the host.
+The `topgun` CLI manages the global config installation. It runs inside the topgun Docker container and mounts `~/.claude` from the host.
 
 | Command | Description |
 |---------|-------------|
-| `rose install` | Copy global config from the image into `~/.claude/` |
-| `rose upgrade` |  |
+| `topgun install` | Copy global config from the image into `~/.claude/` |
+| `topgun upgrade` |  |
 
 Project-level configuration (scaffolding `.claude/` inside a project, configuring agents and commands) is handled by Claude itself via the `/project` slash command — not the CLI.
 
@@ -146,7 +146,7 @@ Markdown formatted. Can be as long as needed.
 
 Claude sees all available agents' `name` and `description` fields in its context. When a task matches an agent's description, Claude spawns it via the `Agent` tool, passing a prompt. The agent runs to completion and returns a result.
 
-**Rose's global agents:**
+**Topgun's global agents:**
 
 | Agent | Description |
 |-------|-------------|
@@ -187,7 +187,7 @@ Use $ARGUMENTS to capture anything the user types after the command name.
 - `~/.claude/commands/` — global commands, available in every session
 - `<project>/.claude/commands/` — project-scoped commands
 
-**Rose's global commands:**
+**Topgun's global commands:**
 
 | Command | What it does |
 |---------|-------------|

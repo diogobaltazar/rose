@@ -1,8 +1,8 @@
 """
-rose observe — session inspector
+topgun observe — session inspector
 
 Commands:
-  rose observe watch    # live tabbed view, updates on file changes
+  topgun observe watch    # live tabbed view, updates on file changes
 """
 
 import json
@@ -838,9 +838,9 @@ def _render_session_body(s: dict) -> "Text":
             _cell(f"×{r['invocations']}",         k+"inv",   r["invocations"], STYLE_DIM),
         )
 
-    # Main session row ("claude" or "rose" if started with /rose)
+    # Main session row ("claude" or "topgun" if started with /topgun)
     title_lower = (s.get("title") or "").lstrip().lower()
-    main_name   = "rose" if title_lower.startswith("/rose") else "claude"
+    main_name   = "topgun" if title_lower.startswith("/topgun") else "claude"
     main_sid    = session_id.replace("-", "")[:agent_id_len]
     dot_s       = (STYLE_NEON + " blink") if status == "live" else STYLE_DIM
     dot_c       = "●" if status == "live" else "○"
@@ -944,12 +944,12 @@ app = typer.Typer(name="observe", help="Session inspector.", add_completion=Fals
 
 @app.command("watch")
 def watch_cmd(
-    web: bool = typer.Option(False, "--web", help="Launch the rose-web container (browser UI)"),
+    web: bool = typer.Option(False, "--web", help="Launch the topgun-web container (browser UI)"),
 ):
     """Live tabbed view — updates on file changes."""
     if web:
         from rich.console import Console as _Console
-        _Console().print("[yellow]TODO:[/yellow] launch rose-web container")
+        _Console().print("[yellow]TODO:[/yellow] launch topgun-web container")
         return
     from watchdog.observers import Observer
     from watchdog.events import FileSystemEventHandler

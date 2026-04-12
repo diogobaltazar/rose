@@ -6,20 +6,20 @@ shift || true
 
 case "$COMMAND" in
   init)
-    bash /rose/commands/init.sh "$@"
+    bash /topgun/commands/init.sh "$@"
     ;;
   help|--help|-h)
-    echo "rose — coding agent scaffolding tool"
+    echo "topgun — coding agent scaffolding tool"
     echo ""
-    echo "Usage: rose <command>"
+    echo "Usage: topgun <command>"
     echo ""
     echo "Commands:"
-    echo "  init    Copy rose template into the current project"
+    echo "  init    Copy topgun template into the current project"
     echo "  help    Show this help"
     ;;
   *)
     echo "Unknown command: $COMMAND" >&2
-    echo "Run 'rose help' for usage." >&2
+    echo "Run 'topgun help' for usage." >&2
     exit 1
     ;;
 esac

@@ -1,22 +1,22 @@
-# rose
+# topgun
 
 Installs and manages Claude Code configuration.
 
 ## Prerequisites
 
-**GitHub CLI** authenticated: `gh auth login` — rose uses `gh` for all GitHub operations. Run this once per host.
+**GitHub CLI** authenticated: `gh auth login` — topgun uses `gh` for all GitHub operations. Run this once per host.
 
 ## Setup
 
 Add an alias to your shell config (`~/.zshrc` or `~/.bashrc`):
 
 ```bash
-alias rose='docker run --rm -it \
+alias topgun='docker run --rm -it \
   -v "$(pwd):/project" \
   -v "$HOME/.claude:/claude" \
   -v "$HOME/.ssh:/root/.ssh:ro" \
   -e GITHUB_TOKEN="$(gh auth token 2>/dev/null)" \
-  rose:latest'
+  topgun:latest'
 ```
 
 Then reload your shell:
@@ -25,26 +25,26 @@ Then reload your shell:
 source ~/.zshrc
 ```
 
-You can now run any rose command — `rose upgrade`, `rose install`, `rose observe start` — from any directory.
+You can now run any topgun command — `topgun upgrade`, `topgun install`, `topgun observe start` — from any directory.
 
-> **Developing rose?** Run `docker compose build rose` to build from source, then update your alias to use the local image name.
+> **Developing topgun?** Run `docker compose build topgun` to build from source, then update your alias to use the local image name.
 
 ## Commands
 
 | Command | Does |
 |---|---|
-| `rose install` | Install global Claude config onto host (`~/.claude`) |
-| `rose reinstall` | Wipe `~/.claude` and reinstall from scratch |
-| `rose uninstall` | Remove rose config from `~/.claude` |
-| `rose observe start` | Start the live session dashboard at `http://localhost:5100` (detached) |
-| `rose observe stop` | Stop the dashboard containers |
-| `rose observe restart` | Restart the dashboard containers |
-| `rose observe status` | Show running (green) / down (red) status for each container |
-| `rose config observe add <path>` | Register a project for the dashboard to monitor |
-| `rose config observe remove <path>` | Deregister a project |
-| `rose config observe list` | List registered projects |
+| `topgun install` | Install global Claude config onto host (`~/.claude`) |
+| `topgun reinstall` | Wipe `~/.claude` and reinstall from scratch |
+| `topgun uninstall` | Remove topgun config from `~/.claude` |
+| `topgun observe start` | Start the live session dashboard at `http://localhost:5100` (detached) |
+| `topgun observe stop` | Stop the dashboard containers |
+| `topgun observe restart` | Restart the dashboard containers |
+| `topgun observe status` | Show running (green) / down (red) status for each container |
+| `topgun config observe add <path>` | Register a project for the dashboard to monitor |
+| `topgun config observe remove <path>` | Deregister a project |
+| `topgun config observe list` | List registered projects |
 
-### rose install
+### topgun install
 
 Run once per host. Installs to `~/.claude`:
 
@@ -69,52 +69,52 @@ Run once per host. Installs to `~/.claude`:
 ```
 
 ```bash
-rose install          # install into ~/.claude
-rose install --force  # overwrite existing files
-rose reinstall        # wipe ~/.claude and reinstall from scratch
+topgun install          # install into ~/.claude
+topgun install --force  # overwrite existing files
+topgun reinstall        # wipe ~/.claude and reinstall from scratch
 ```
 
-### rose observe
+### topgun observe
 
 ```bash
-rose observe start    # build and start rose-api + rose-web, detached
-rose observe stop     # stop containers
-rose observe restart  # restart containers
-rose observe status   # green ● running / red ● down per container
+topgun observe start    # build and start topgun-api + topgun-web, detached
+topgun observe stop     # stop containers
+topgun observe restart  # restart containers
+topgun observe status   # green ● running / red ● down per container
 ```
 
 The dashboard runs at **http://localhost:5100**. It watches `~/.claude/logs/` for active Claude sessions and renders the lifecycle state machine with the current step highlighted.
 
-Register projects to observe (see [rose config](#rose-config)):
+Register projects to observe (see [topgun config](#topgun-config)):
 
 ```bash
-rose config observe add ~/source/my-project
+topgun config observe add ~/source/my-project
 ```
 
-### rose config
+### topgun config
 
-A CLI command that runs inside the rose container. Config is stored at `~/.config/rose/config.json` (mounted read-write into the container).
+A CLI command that runs inside the topgun container. Config is stored at `~/.config/topgun/config.json` (mounted read-write into the container).
 
 ```bash
-rose config observe add ~/source/my-project     # register a project
-rose config observe remove ~/source/my-project  # deregister
-rose config observe list                        # print registered projects
+topgun config observe add ~/source/my-project     # register a project
+topgun config observe remove ~/source/my-project  # deregister
+topgun config observe list                        # print registered projects
 ```
 
-Paths are resolved to absolute form. `rose observe` will filter sessions to registered projects only; if no projects are registered it shows all active sessions.
+Paths are resolved to absolute form. `topgun observe` will filter sessions to registered projects only; if no projects are registered it shows all active sessions.
 
-### rose uninstall
+### topgun uninstall
 
-Removes rose's global config from `~/.claude`.
+Removes topgun's global config from `~/.claude`.
 
 ```bash
-rose uninstall      # prompts for confirmation
-rose uninstall -y   # skip confirmation
+topgun uninstall      # prompts for confirmation
+topgun uninstall -y   # skip confirmation
 ```
 
 ## Feature Lifecycle
 
-Rose implements a structured engineering workflow as a state machine. Every unit of work — feature, bug fix, dependency upgrade, or investigation — passes through the same pipeline.
+Topgun implements a structured engineering workflow as a state machine. Every unit of work — feature, bug fix, dependency upgrade, or investigation — passes through the same pipeline.
 
 ```mermaid
 stateDiagram-v2
@@ -204,18 +204,18 @@ See [CLAUDE.md](CLAUDE.md) for the full process specification with actors, trigg
 
 ## This repo IS the config
 
-The `global/` directory is the source of truth. All definitions flow via `rose install`:
+The `global/` directory is the source of truth. All definitions flow via `topgun install`:
 
 ```
-global/  →  rose install  →  ~/.claude/
+global/  →  topgun install  →  ~/.claude/
 ```
 
-Never edit `~/.claude` directly — changes are overwritten on the next `rose reinstall`.
+Never edit `~/.claude` directly — changes are overwritten on the next `topgun reinstall`.
 
 ## Build
 
 ```bash
-docker build -t rose .
+docker build -t topgun .
 ```
 
 ---
@@ -234,7 +234,7 @@ The setup is built around three Claude Code primitives:
 
 | Primitive | What it is | Where |
 |-----------|-----------|-------|
-| **Command** | A slash command (`/feature`) that runs in the main session as Rose | `global/commands/feature.md` |
+| **Command** | A slash command (`/feature`) that runs in the main session as Topgun | `global/commands/feature.md` |
 | **Agent** | A specialist subagent spawned by the command | `global/agents/` |
 | **Hook** | A shell script fired at lifecycle events | `global/hooks/` |
 
@@ -259,7 +259,7 @@ The original design used `Agent` tool calls with `run_in_background: true`. This
 
 **Model selection rationale**
 
-- `claude-opus-4-6` for the orchestrator (Rose): synthesis across multiple research streams requires the strongest reasoning.
+- `claude-opus-4-6` for the orchestrator (Topgun): synthesis across multiple research streams requires the strongest reasoning.
 - `claude-sonnet-4-6` for research agents: capable web search and code reading, faster and cheaper than Opus.
 - `claude-haiku-4-5-20251001` for backlog-inspect: purely JSON parsing and pattern matching against GitHub issue data — no reasoning depth needed.
 
@@ -301,7 +301,7 @@ A `statusline.sh` script provides a live progress bar at the bottom of every Cla
 
 Colour transitions: green → yellow (60%) → red (85%).
 
-The script lives at `~/.claude/statusline.sh` directly (not inside `global/`) and is wired into `settings.json`. If you run `rose reinstall`, the settings entry is preserved but the script must be recreated manually — or moved into `global/` to be managed by rose.
+The script lives at `~/.claude/statusline.sh` directly (not inside `global/`) and is wired into `settings.json`. If you run `topgun reinstall`, the settings entry is preserved but the script must be recreated manually — or moved into `global/` to be managed by topgun.
 
 ### Teammate mode display
 

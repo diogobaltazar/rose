@@ -1,9 +1,9 @@
 services:
-  rose:
+  topgun:
     build:
       context: .
       dockerfile: Dockerfile
-    image: rose:latest
+    image: topgun:latest
     volumes:
       - type: bind
         source: ${TARGET_PROJECT:-.}
@@ -16,36 +16,36 @@ services:
         target: /root/.ssh
         read_only: true
       - type: bind
-        source: ${HOME}/.config/rose
-        target: /rose-config
+        source: ${HOME}/.config/topgun
+        target: /topgun-config
       - type: bind
-        source: ${HOME}/.rose-vault
-        target: /rose-vault
+        source: ${HOME}/.topgun-vault
+        target: /topgun-vault
     environment:
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
 
   api:
-    container_name: rose-api
-    build: src/rose/api
+    container_name: topgun-api
+    build: src/topgun/api
     volumes:
       - "${HOME}/.claude/logs:/logs:ro"
       - "${HOME}/.claude/projects:/projects:ro"
       - "${HOME}/.claude/sessions:/sessions:ro"
       - "${HOME}/.claude/teams:/teams:ro"
-      - "${HOME}/.config/rose:/rose-config:ro"
+      - "${HOME}/.config/topgun:/topgun-config:ro"
     environment:
       - LOG_DIR=/logs
       - PROJECTS_DIR=/projects
       - SESSIONS_DIR=/sessions
       - TEAMS_DIR=/teams
-      - ROSE_CONFIG=/rose-config/config.json
+      - TOPGUN_CONFIG=/topgun-config/config.json
       - WATCHFILES_FORCE_POLLING=true
     ports:
       - "5101:8000"
 
   web:
-    container_name: rose-web
-    build: src/rose/web
+    container_name: topgun-web
+    build: src/topgun/web
     ports:
       - "5100:80"
     depends_on:

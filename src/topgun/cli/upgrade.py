@@ -88,7 +88,7 @@ def _merge_permissions(dest: dict, src: dict) -> list[str]:
 
 def upgrade(
     claude_dir: Path = typer.Argument(
-        Path("/claude"),
+        Path.home() / ".claude",
         help="Host ~/.claude directory (mounted into container)",
         show_default=False,
     ),

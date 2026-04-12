@@ -7,7 +7,7 @@ from topgun.cli.upgrade import upgrade
 
 def install(
     claude_dir: Path = typer.Argument(
-        Path("/claude"),
+        Path.home() / ".claude",
         help="Host ~/.claude directory (mounted into container)",
         show_default=False,
     ),

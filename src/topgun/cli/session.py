@@ -1,3 +1,4 @@
+import os
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -9,8 +10,8 @@ from rich.table import Table
 app = typer.Typer(name="session", help="Manage Claude Code session transcripts.", add_completion=False)
 console = Console()
 
-CLAUDE_PROJECTS = Path("/claude/projects")
-VAULT = Path("/topgun-vault")
+CLAUDE_PROJECTS = Path(os.environ.get("PROJECTS_DIR", Path.home() / ".claude" / "projects"))
+VAULT           = Path(os.environ.get("TOPGUN_VAULT", Path.home() / ".topgun-vault"))
 
 
 def _find_transcript(session_id: str) -> tuple[Path, Path]:

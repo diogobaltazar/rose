@@ -212,6 +212,29 @@ global/  →  topgun install  →  ~/.claude/
 
 Never edit `~/.claude` directly — changes are overwritten on the next `topgun reinstall`.
 
+## Contributing
+
+### Commit signing
+
+All commits must be signed. This repo uses SSH signing — no GPG required.
+
+Add to your `~/.gitconfig` (or the repo-local `.git/config`):
+
+```ini
+[user]
+    signingkey = ~/.ssh/<your-signing-key>.pub
+
+[gpg]
+    format = ssh
+
+[commit]
+    gpgsign = true
+```
+
+The signing key should be an SSH key whose **public** half is registered as a *signing key* on your GitHub account (Settings → SSH and GPG keys → New signing key). It does not need to be the same key you use for authentication.
+
+With that in place, `git commit` signs automatically — no extra flags needed. GitHub will show a "Verified" badge on each commit.
+
 ## Build
 
 ```bash

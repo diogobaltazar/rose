@@ -3,6 +3,8 @@ topgun-api — session data backend for topgun-web.
 
 Serves the same rich session data that the CLI's `topgun observe watch` renders,
 including agent metrics, token counts, costs, and subagent details.
+
+Also serves federated backlog data from configured GitHub repos and Obsidian vaults.
 """
 
 import asyncio
@@ -12,6 +14,9 @@ import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
+
+import httpx
 
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
@@ -623,6 +628,275 @@ async def websocket_endpoint(websocket: WebSocket):
         await watch_changes()
     except Exception:
         pass
+
+
+# ── Backlog — config ─────────────────────────────────────────────────────────
+
+BACKLOG_CACHE_TTL = int(os.environ.get("BACKLOG_CACHE_TTL", "60"))
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+USER_HOME = Path(os.environ.get("USER_HOME", str(Path.home())))
+
+_PRIORITY_EMOJIS: dict[str, str] = {"⏫": "high", "🔼": "medium", "🔽": "low"}
+_TASK_RE = re.compile(r"^- \[([ x])\] (.+)$")
+_DUE_RE = re.compile(r"📅 (\d{4}-\d{2}-\d{2})")
+_SCHED_RE = re.compile(r"⏳ (\d{4}-\d{2}-\d{2})")
+_DONE_RE = re.compile(r"✅ (\d{4}-\d{2}-\d{2})")
+_RECUR_RE = re.compile(r"🔁 (every [^\s⏫🔼🔽📅⏳✅\n]+)")
+
+# ── Backlog — in-memory cache ────────────────────────────────────────────────
+
+_backlog_cache: list[dict] = []
+_backlog_cache_time: float = 0.0
+_backlog_cache_lock = asyncio.Lock()
+_backlog_ws_clients: set[WebSocket] = set()
+
+
+# ── Backlog — helpers ────────────────────────────────────────────────────────
+
+
+def _backlog_sources() -> list[dict]:
+    """Read configured backlog sources from the topgun config file."""
+    try:
+        cfg = json.loads(CONFIG_FILE.read_text())
+        return cfg.get("backlog", {}).get("sources", [])
+    except (OSError, json.JSONDecodeError):
+        return []
+
+
+def _resolve_vault_path(path_str: str) -> Path:
+    """Resolve a vault path, replacing ~ with the mounted user home."""
+    if path_str.startswith("~/"):
+        return USER_HOME / path_str[2:]
+    if path_str.startswith("~"):
+        return USER_HOME / path_str[1:]
+    return Path(path_str)
+
+
+def _parse_body_section(body: str, section: str) -> str:
+    """Extract the text content of a ## Section from a GitHub issue body."""
+    pattern = rf"## {re.escape(section)}\s*\n(.*?)(?=\n## |\Z)"
+    m = re.search(pattern, body, re.DOTALL)
+    return m.group(1).strip() if m else ""
+
+
+def _parse_github_issue(issue: dict, source: dict) -> dict:
+    """Normalise a raw GitHub API issue into the unified backlog item shape."""
+    body = issue.get("body") or ""
+    labels = {lbl["name"] for lbl in (issue.get("labels") or [])}
+    priority = next((v for k, v in {"priority:high": "high", "priority:medium": "medium", "priority:low": "low"}.items() if k in labels), None)
+
+    ac_raw = _parse_body_section(body, "Acceptance Criteria")
+    ac = [line.lstrip("- [ ]").lstrip("- [x]").strip() for line in ac_raw.splitlines() if line.strip().startswith("- ")]
+
+    deps_raw = _parse_body_section(body, "Dependencies")
+    deps = [w.strip() for w in deps_raw.splitlines() if w.strip() and w.strip() != "none"]
+
+    return {
+        "id": f"gh:{source['repo']}#{issue['number']}",
+        "source_type": "github",
+        "source_repo": source["repo"],
+        "source_description": source.get("description", ""),
+        "number": issue["number"],
+        "title": issue.get("title", ""),
+        "state": issue.get("state", "open"),
+        "created_at": issue.get("created_at"),
+        "closed_at": issue.get("closed_at"),
+        "priority": priority,
+        "best_before": _parse_body_section(body, "Best Before") or None,
+        "must_before": _parse_body_section(body, "Must Before") or None,
+        "about": _parse_body_section(body, "About") or None,
+        "motivation": _parse_body_section(body, "Motivation") or None,
+        "acceptance_criteria": ac,
+        "dependencies": deps,
+        "url": issue.get("html_url"),
+        "file": None,
+        "line": None,
+    }
+
+
+def _parse_obsidian_file(file_path: Path, vault_root: Path, source: dict) -> list[dict]:
+    """Extract Tasks-plugin tasks from a single markdown file."""
+    items = []
+    try:
+        lines = file_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return items
+
+    rel_path = str(file_path.relative_to(vault_root))
+
+    for lineno, line in enumerate(lines, start=1):
+        m = _TASK_RE.match(line.strip())
+        if not m:
+            continue
+
+        state_char, rest = m.group(1), m.group(2)
+        state = "closed" if state_char == "x" else "open"
+
+        priority = next((v for emoji, v in _PRIORITY_EMOJIS.items() if emoji in rest), None)
+        must_before = _DUE_RE.search(rest)
+        best_before = _SCHED_RE.search(rest)
+        closed_at = _DONE_RE.search(rest)
+
+        # Strip metadata emojis from title
+        title = rest
+        for pat in (_DUE_RE, _SCHED_RE, _DONE_RE, _RECUR_RE):
+            title = pat.sub("", title)
+        for emoji in list(_PRIORITY_EMOJIS) + ["🔁"]:
+            title = title.replace(emoji, "")
+        title = title.strip()
+
+        items.append({
+            "id": f"obsidian:{rel_path}#L{lineno}",
+            "source_type": "obsidian",
+            "source_repo": None,
+            "source_description": source.get("description", ""),
+            "number": None,
+            "title": title,
+            "state": state,
+            "created_at": None,
+            "closed_at": closed_at.group(1) if closed_at else None,
+            "priority": priority,
+            "best_before": best_before.group(1) if best_before else None,
+            "must_before": must_before.group(1) if must_before else None,
+            "about": None,
+            "motivation": None,
+            "acceptance_criteria": [],
+            "dependencies": [],
+            "url": None,
+            "file": rel_path,
+            "line": lineno,
+        })
+
+    return items
+
+
+async def _fetch_github_source(source: dict) -> list[dict]:
+    """Fetch all issues (open + closed) from a GitHub repo via the REST API."""
+    repo = source["repo"]
+    headers: dict[str, str] = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+    if GITHUB_TOKEN:
+        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+
+    items: list[dict] = []
+    page = 1
+    async with httpx.AsyncClient(timeout=15) as client:
+        while True:
+            try:
+                r = await client.get(
+                    f"https://api.github.com/repos/{repo}/issues",
+                    headers=headers,
+                    params={"state": "all", "per_page": 100, "page": page},
+                )
+                r.raise_for_status()
+            except Exception:
+                break
+            batch = r.json()
+            if not batch:
+                break
+            for issue in batch:
+                # Skip pull requests (GitHub includes them in /issues)
+                if "pull_request" not in issue:
+                    items.append(_parse_github_issue(issue, source))
+            if len(batch) < 100:
+                break
+            page += 1
+    return items
+
+
+def _fetch_obsidian_source(source: dict) -> list[dict]:
+    """Read all Tasks-plugin tasks from an Obsidian vault."""
+    vault_root = _resolve_vault_path(source["path"])
+    if not vault_root.exists():
+        return []
+    items: list[dict] = []
+    for md_file in vault_root.rglob("*.md"):
+        items.extend(_parse_obsidian_file(md_file, vault_root, source))
+    return items
+
+
+async def _build_backlog() -> list[dict]:
+    """Fetch from all configured sources and return a unified item list."""
+    sources = _backlog_sources()
+    all_items: list[dict] = []
+
+    github_tasks = [_fetch_github_source(s) for s in sources if s.get("type") == "github"]
+    github_results = await asyncio.gather(*github_tasks, return_exceptions=True)
+    for result in github_results:
+        if isinstance(result, list):
+            all_items.extend(result)
+
+    for s in sources:
+        if s.get("type") == "obsidian":
+            all_items.extend(_fetch_obsidian_source(s))
+
+    all_items.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+    return all_items
+
+
+async def _refresh_and_broadcast() -> None:
+    """Rebuild cache and push to all connected WebSocket clients."""
+    global _backlog_cache, _backlog_cache_time
+    items = await _build_backlog()
+    async with _backlog_cache_lock:
+        _backlog_cache = items
+        _backlog_cache_time = time.time()
+    dead: set[WebSocket] = set()
+    for ws in list(_backlog_ws_clients):
+        try:
+            await ws.send_json(items)
+        except Exception:
+            dead.add(ws)
+    _backlog_ws_clients.difference_update(dead)
+
+
+async def _backlog_refresh_loop() -> None:
+    """Background task: refresh the backlog cache every BACKLOG_CACHE_TTL seconds."""
+    while True:
+        try:
+            await _refresh_and_broadcast()
+        except Exception:
+            pass
+        await asyncio.sleep(BACKLOG_CACHE_TTL)
+
+
+# ── Backlog — endpoints ──────────────────────────────────────────────────────
+
+
+@app.on_event("startup")
+async def _startup_backlog() -> None:
+    asyncio.create_task(_backlog_refresh_loop())
+
+
+@app.get("/backlog")
+async def get_backlog() -> list[dict[str, Any]]:
+    """Return the cached backlog item list, refreshing if the cache is empty."""
+    if not _backlog_cache:
+        await _refresh_and_broadcast()
+    return _backlog_cache
+
+
+@app.post("/backlog/refresh")
+async def post_backlog_refresh() -> dict[str, str]:
+    """Trigger an immediate cache refresh and push to WebSocket clients."""
+    await _refresh_and_broadcast()
+    return {"status": "ok", "items": len(_backlog_cache)}
+
+
+@app.websocket("/backlog/ws")
+async def backlog_websocket(websocket: WebSocket) -> None:
+    """WebSocket: sends current cache on connect, then pushes on every refresh."""
+    await websocket.accept()
+    _backlog_ws_clients.add(websocket)
+    try:
+        await websocket.send_json(_backlog_cache)
+        while True:
+            # Keep alive — the refresh loop pushes data proactively
+            await asyncio.sleep(30)
+            await websocket.send_json({"type": "ping"})
+    except Exception:
+        pass
+    finally:
+        _backlog_ws_clients.discard(websocket)
 
 
 # Mount static files last so API routes take priority

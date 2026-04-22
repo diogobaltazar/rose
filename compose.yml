@@ -33,6 +33,7 @@ services:
       - "${HOME}/.claude/sessions:/sessions:ro"
       - "${HOME}/.claude/teams:/teams:ro"
       - "${HOME}/.config/topgun:/topgun-config:ro"
+      - "${HOME}:/user-home:ro"
     environment:
       - LOG_DIR=/logs
       - PROJECTS_DIR=/projects
@@ -40,6 +41,8 @@ services:
       - TEAMS_DIR=/teams
       - TOPGUN_CONFIG=/topgun-config/config.json
       - WATCHFILES_FORCE_POLLING=true
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - USER_HOME=/user-home
     ports:
       - "5101:8000"
 

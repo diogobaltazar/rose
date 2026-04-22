@@ -5,6 +5,7 @@ from topgun.cli.upgrade import upgrade
 from topgun.cli.config import app as config_app
 from topgun.cli.observe import app as observe_app
 from topgun.cli.session import app as session_app
+from topgun.cli.backlog import app as backlog_app
 
 app = typer.Typer(
     name="topgun",
@@ -18,6 +19,7 @@ app.command()(upgrade)
 app.add_typer(config_app)
 app.add_typer(observe_app)
 app.add_typer(session_app)
+app.add_typer(backlog_app)
 
 
 if __name__ == "__main__":

@@ -36,6 +36,28 @@ PRIORITY_ICON = {"⏫": "high", "🔼": "medium", "🔽": "low"}
 _DUE_RE = re.compile(r"📅\s*(\d{4}-\d{2}-\d{2})")
 _PRI_RE = re.compile(r"(⏫|🔼|🔽)")
 _TASK_RE = re.compile(r"^\s*- \[ \]\s*")
+_SECTION_RE = re.compile(r"^##\s+(.+)$", re.MULTILINE)
+
+
+def _parse_body_section(body: str | None, section: str) -> str:
+    """Return trimmed text under a '## Section' heading in a GitHub issue body."""
+    if not body:
+        return ""
+    parts = _SECTION_RE.split(body)
+    # parts: ["preamble", "Heading1", "content1", "Heading2", "content2", ...]
+    for i in range(1, len(parts) - 1, 2):
+        if parts[i].strip() == section:
+            return parts[i + 1].strip()
+    return ""
+
+
+def _is_overdue(item: dict) -> bool:
+    """Return True if the item is open and past its must_before (or best_before) date."""
+    if item.get("state") != "open":
+        return False
+    today = datetime.now(timezone.utc).date().isoformat()
+    date = item.get("must_before") or item.get("best_before")
+    return bool(date and date < today)
 
 
 def _read_config() -> dict:
@@ -245,7 +267,7 @@ def _fetch_github(repo: str, token_env: str) -> tuple[list[dict], str]:
             "gh", "issue", "list",
             "--repo", repo,
             "--state", "open",
-            "--json", "number,title,labels,createdAt",
+            "--json", "number,title,labels,createdAt,body",
             "--limit", "200",
         ],
         capture_output=True,
@@ -269,14 +291,20 @@ def _fetch_github(repo: str, token_env: str) -> tuple[list[dict], str]:
                 priority = "medium"
             elif "low" in name:
                 priority = "low"
+        body = issue.get("body") or ""
+        must_before = _parse_body_section(body, "Must Before") or None
+        best_before = _parse_body_section(body, "Best Before") or None
         created = datetime.fromisoformat(issue["createdAt"].replace("Z", "+00:00"))
         age = (datetime.now(timezone.utc) - created).days
         items.append({
             "title": f"#{issue['number']} {issue['title']}",
             "source": repo,
             "priority": priority,
-            "due": "",
+            "due": must_before or best_before or "",
             "age": age,
+            "state": "open",
+            "must_before": must_before,
+            "best_before": best_before,
         })
     return items, ""
 

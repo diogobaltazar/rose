@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 from pathlib import Path
 
@@ -88,7 +89,7 @@ def _merge_permissions(dest: dict, src: dict) -> list[str]:
 
 def upgrade(
     claude_dir: Path = typer.Argument(
-        Path.home() / ".claude",
+        default_factory=lambda: Path(os.environ.get("CLAUDE_DIR", str(Path.home() / ".claude"))),
         help="Host ~/.claude directory (mounted into container)",
         show_default=False,
     ),

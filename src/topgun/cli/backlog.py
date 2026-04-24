@@ -1,18 +1,12 @@
 import json
 import os
 import re
-import socket
 import subprocess
-import sys
-import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 
 import typer
 from rich.console import Console
-from rich.live import Live
-from rich.panel import Panel
 from rich.table import Table
 from rich import box
 
@@ -183,50 +177,46 @@ def sources_cmd():
         console.print(f"  {_type_tag(s['type'])}\t[cyan]{label}[/cyan]\t[dim]{desc}[/dim]")
 
 
-WEB_PORT = 5100
-WEB_URL = f"http://localhost:{WEB_PORT}"
-
-
-def _web_running() -> bool:
-    try:
-        with socket.create_connection(("localhost", WEB_PORT), timeout=1):
-            return True
-    except OSError:
-        return False
-
-
-@app.command("watch")
-def watch(
-    refresh: int = typer.Option(30, "--refresh", "-r", help="Refresh interval in seconds"),
-    web: bool = typer.Option(False, "--web", help="Open the web UI instead of the terminal table"),
+@app.command("list")
+def list_cmd(
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show source path column"),
 ):
-    """Live table of all open backlog items across sources."""
-    if web:
-        if _web_running():
-            typer.echo(WEB_URL)
-        else:
-            typer.echo(f"web UI is not running — start it with:")
-            typer.echo(f"  GITHUB_TOKEN=$(gh auth token) docker compose up api web")
-        raise typer.Exit()
-
+    """Print all open backlog items across sources."""
     sources = _get_sources()
     if not sources:
         typer.echo("no sources tracked — run: topgun backlog track")
         raise typer.Exit()
 
-    if not sys.stdout.isatty():
-        items, errors = _fetch_all(sources)
-        console.print(_render(items, errors, refresh))
-        return
+    items, errors = _fetch_all(sources)
 
-    try:
-        with Live(console=console, refresh_per_second=4, screen=True) as live:
-            while True:
-                items, errors = _fetch_all(sources)
-                live.update(_render(items, errors, refresh))
-                time.sleep(refresh)
-    except KeyboardInterrupt:
-        pass
+    table = Table(box=box.SIMPLE, show_header=True, header_style="bold", pad_edge=False)
+    table.add_column("Type", no_wrap=True)
+    table.add_column("Title")
+    table.add_column("Priority", width=8)
+    table.add_column("Due", width=12)
+    table.add_column("Status", width=8)
+    if verbose:
+        table.add_column("Source", style="dim")
+
+    for item in sorted(items, key=_sort_key):
+        pri = item["priority"]
+        color = PRIORITY_COLOR.get(pri, "dim")
+        status = item.get("state", "open")
+        row = [
+            _type_tag(item["type"]),
+            item["title"],
+            f"[{color}]{pri}[/{color}]" if pri else "",
+            item["due"],
+            status,
+        ]
+        if verbose:
+            row.append(item["source_full"])
+        table.add_row(*row)
+
+    console.print(table)
+    if errors:
+        for e in errors:
+            console.print(f"[yellow]⚠ {e}[/yellow]")
 
 
 # ---------------------------------------------------------------------------
@@ -294,14 +284,12 @@ def _fetch_github(repo: str, token_env: str) -> tuple[list[dict], str]:
         body = issue.get("body") or ""
         must_before = _parse_body_section(body, "Must Before") or None
         best_before = _parse_body_section(body, "Best Before") or None
-        created = datetime.fromisoformat(issue["createdAt"].replace("Z", "+00:00"))
-        age = (datetime.now(timezone.utc) - created).days
         items.append({
+            "type": "github",
             "title": f"#{issue['number']} {issue['title']}",
-            "source": repo,
+            "source_full": repo,
             "priority": priority,
             "due": must_before or best_before or "",
-            "age": age,
             "state": "open",
             "must_before": must_before,
             "best_before": best_before,
@@ -353,54 +341,24 @@ def _fetch_obsidian(vault_path: str) -> list[dict]:
             title = _PRI_RE.sub("", title).strip()
 
             items.append({
+                "type": "obsidian",
                 "title": title,
-                "source": md_file.stem,
+                "source_full": vault_path,
                 "priority": priority,
                 "due": due,
-                "age": "",
+                "state": "open",
             })
     return items
 
 
 # ---------------------------------------------------------------------------
-# Rendering
+# Sorting
 # ---------------------------------------------------------------------------
 
 def _sort_key(item: dict):
     return (
         PRIORITY_ORDER.get(item["priority"], 3),
         item["due"] or "9999-99-99",
-        item["source"],
+        item["source_full"],
         item["title"],
     )
-
-
-def _render(items: list[dict], errors: list[str], refresh: int) -> Panel:
-    from rich.console import Group
-    from rich.text import Text
-
-    table = Table(box=box.SIMPLE, show_header=True, header_style="bold", pad_edge=False)
-    table.add_column("Title")
-    table.add_column("Source", style="cyan", no_wrap=True)
-    table.add_column("Priority", width=8)
-    table.add_column("Due", width=12)
-    table.add_column("Age", width=4, justify="right")
-
-    for item in sorted(items, key=_sort_key):
-        pri = item["priority"]
-        color = PRIORITY_COLOR.get(pri, "dim")
-        table.add_row(
-            item["title"],
-            item["source"],
-            f"[{color}]{pri}[/{color}]" if pri else "",
-            item["due"],
-            f"{item['age']}d" if item["age"] != "" else "",
-        )
-
-    content: Any = table
-    if errors:
-        error_lines = Text("\n".join(f"  ⚠ {e}" for e in errors), style="yellow")
-        content = Group(table, error_lines)
-
-    subtitle = f"[dim]{len(items)} items · refreshes every {refresh}s · ctrl+c to exit[/dim]"
-    return Panel(content, title="[bold magenta]backlog[/bold magenta]", subtitle=subtitle)

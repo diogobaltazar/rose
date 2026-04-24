@@ -372,5 +372,360 @@ function App() {
   );
 }
 
+// ─── Backlog helpers ────────────────────────────────────────────────────────
+
+const PRIORITY_RANK = { high: 0, medium: 1, low: 2 };
+
+function priorityLabel(p) {
+  if (p === 'high') return '⏫ high';
+  if (p === 'medium') return '🔼 med';
+  if (p === 'low') return '🔽 low';
+  return '—';
+}
+
+function priorityColor(p) {
+  if (p === 'high') return COLORS.usd;
+  if (p === 'medium') return COLORS.tok;
+  if (p === 'low') return COLORS.time;
+  return COLORS.dim;
+}
+
+function ageLabel(isoDate) {
+  if (!isoDate) return '—';
+  const d = Math.floor((Date.now() - new Date(isoDate).getTime()) / 86400000);
+  if (d === 0) return 'today';
+  if (d < 30) return `${d}d`;
+  return `${Math.floor(d / 30)}mo`;
+}
+
+function isOverdue(item) {
+  if (item.state !== 'open') return false;
+  const d = item.must_before || item.best_before;
+  return d ? new Date(d) < new Date() : false;
+}
+
+function closedPerDay(items, days) {
+  const counts = {};
+  const now = new Date();
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    counts[d.toISOString().slice(0, 10)] = 0;
+  }
+  for (const item of items) {
+    if (item.state === 'closed' && item.closed_at) {
+      const day = item.closed_at.slice(0, 10);
+      if (day in counts) counts[day]++;
+    }
+  }
+  return Object.entries(counts);
+}
+
+function streakDays(items) {
+  const closedDays = new Set(
+    items.filter(i => i.state === 'closed' && i.closed_at).map(i => i.closed_at.slice(0, 10))
+  );
+  let streak = 0;
+  const now = new Date();
+  for (let i = 0; i < 365; i++) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    if (closedDays.has(d.toISOString().slice(0, 10))) streak++;
+    else if (i > 0) break;
+  }
+  return streak;
+}
+
+function weeklyVelocity(items) {
+  const now = Date.now();
+  const W = 7 * 86400000;
+  let thisWeek = 0, lastWeek = 0;
+  for (const item of items) {
+    if (item.state !== 'closed' || !item.closed_at) continue;
+    const age = now - new Date(item.closed_at).getTime();
+    if (age < W) thisWeek++;
+    else if (age < 2 * W) lastWeek++;
+  }
+  return { thisWeek, lastWeek };
+}
+
+// ─── Backlog — Bar Chart ────────────────────────────────────────────────────
+
+function BurnChart({ items }) {
+  const data = closedPerDay(items, 30);
+  const max = Math.max(1, ...data.map(([, v]) => v));
+  return (
+    <div className="burn-chart">
+      <div className="burn-chart-title">closed / day — 30d</div>
+      <div className="burn-bars">
+        {data.map(([day, count]) => (
+          <div key={day} className="burn-bar-wrap" title={`${day}: ${count}`}>
+            <div className="burn-bar" style={{ height: `${Math.max(2, Math.round((count / max) * 56))}px`, opacity: count === 0 ? 0.15 : 0.85 }} />
+            {count > 0 && <div className="burn-bar-count">{count}</div>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Backlog — Gamification Panel ───────────────────────────────────────────
+
+function GamificationPanel({ items }) {
+  const streak = streakDays(items);
+  const { thisWeek, lastWeek } = weeklyVelocity(items);
+  const delta = thisWeek - lastWeek;
+  const overdue = items.filter(isOverdue).length;
+  const open = items.filter(i => i.state === 'open').length;
+  const closed = items.filter(i => i.state === 'closed').length;
+
+  return (
+    <div className="gamification-panel">
+      <div className="gp-stat">
+        <span className="gp-value" style={{ color: streak > 0 ? COLORS.usd : COLORS.dim }}>{streak}🔥</span>
+        <span className="gp-label">streak</span>
+      </div>
+      <div className="gp-stat">
+        <span className="gp-value" style={{ color: delta >= 0 ? COLORS.neon : COLORS.usd }}>{thisWeek}{delta > 0 ? '↑' : delta < 0 ? '↓' : ''}</span>
+        <span className="gp-label">this week (vs {lastWeek})</span>
+      </div>
+      <div className="gp-stat">
+        <span className="gp-value" style={{ color: overdue > 0 ? COLORS.usd : COLORS.dim }}>{overdue}</span>
+        <span className="gp-label">overdue</span>
+      </div>
+      <div className="gp-stat">
+        <span className="gp-value" style={{ color: COLORS.tok }}>{open}</span>
+        <span className="gp-label">open</span>
+      </div>
+      <div className="gp-stat">
+        <span className="gp-value" style={{ color: COLORS.silver }}>{closed}</span>
+        <span className="gp-label">done</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Backlog — Table ────────────────────────────────────────────────────────
+
+function BacklogTable({ items, sortKey, sortDir, onSort }) {
+  function Th({ k, label, style }) {
+    const active = sortKey === k;
+    return (
+      <th onClick={() => onSort(k)} className={`bl-th ${active ? 'bl-th-active' : ''}`} style={style}>
+        {label}{active ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
+      </th>
+    );
+  }
+  return (
+    <div className="bl-table-wrap">
+      <table className="bl-table">
+        <thead>
+          <tr>
+            <Th k="state"       label="state"  style={{ width: 52 }} />
+            <Th k="title"       label="title"  style={{ textAlign: 'left' }} />
+            <Th k="source"      label="source" style={{ width: 130 }} />
+            <Th k="priority"    label="pri"    style={{ width: 80 }} />
+            <Th k="must_before" label="due"    style={{ width: 96 }} />
+            <Th k="best_before" label="sched"  style={{ width: 96 }} />
+            <Th k="age"         label="age"    style={{ width: 60 }} />
+          </tr>
+        </thead>
+        <tbody>
+          {items.map(item => {
+            const od = isOverdue(item);
+            return (
+              <tr key={item.id} className={`bl-row${od ? ' bl-row-overdue' : ''}${item.state === 'closed' ? ' bl-row-closed' : ''}`}>
+                <td className="bl-td" style={{ color: item.state === 'open' ? COLORS.neon : COLORS.dim, textAlign: 'center' }}>
+                  {item.state === 'open' ? '○' : '✓'}
+                </td>
+                <td className="bl-td bl-title">
+                  {item.url
+                    ? <a href={item.url} target="_blank" rel="noreferrer" className="bl-link">{item.title}</a>
+                    : item.title}
+                  {item.file && <span className="bl-file"> {item.file}:{item.line}</span>}
+                </td>
+                <td className="bl-td bl-source" title={item.source_description} style={{ color: COLORS.dim }}>
+                  {item.source_repo || 'obsidian'}
+                </td>
+                <td className="bl-td" style={{ color: priorityColor(item.priority), textAlign: 'center' }}>
+                  {priorityLabel(item.priority)}
+                </td>
+                <td className="bl-td" style={{ color: od ? COLORS.usd : COLORS.time, textAlign: 'center' }}>
+                  {item.must_before || '—'}
+                </td>
+                <td className="bl-td" style={{ color: COLORS.dim, textAlign: 'center' }}>
+                  {item.best_before || '—'}
+                </td>
+                <td className="bl-td" style={{ color: COLORS.dim, textAlign: 'right' }}>
+                  {ageLabel(item.created_at)}
+                </td>
+              </tr>
+            );
+          })}
+          {items.length === 0 && (
+            <tr><td colSpan="7" className="bl-empty">no items</td></tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ─── Backlog — Main View ────────────────────────────────────────────────────
+
+function BacklogView() {
+  const [items, setItems] = useState([]);
+  const [lastSync, setLastSync] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [sortKey, setSortKey] = useState('state');
+  const [sortDir, setSortDir] = useState('asc');
+  const [showClosed, setShowClosed] = useState(false);
+  const wsRef = useRef(null);
+
+  useEffect(() => {
+    function connect() {
+      const ws = new WebSocket(`${WS_BASE}/backlog/ws`);
+      wsRef.current = ws;
+      ws.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (Array.isArray(data)) { setItems(data); setLastSync(new Date().toLocaleTimeString()); }
+        } catch {}
+      };
+      ws.onclose = () => setTimeout(connect, 3000);
+    }
+    connect();
+    return () => wsRef.current?.close();
+  }, []);
+
+  function handleSort(key) {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(key); setSortDir('asc'); }
+  }
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      await fetch(`http://${window.location.hostname}:${window.location.port || 8000}/backlog/refresh`, { method: 'POST' });
+    } catch {}
+    setRefreshing(false);
+  }
+
+  const visible = showClosed ? items : items.filter(i => i.state === 'open');
+
+  const sorted = [...visible].sort((a, b) => {
+    let va, vb;
+    if (sortKey === 'priority') { va = PRIORITY_RANK[a.priority] ?? 9; vb = PRIORITY_RANK[b.priority] ?? 9; }
+    else if (sortKey === 'must_before') { va = a.must_before || 'zzzz'; vb = b.must_before || 'zzzz'; }
+    else if (sortKey === 'best_before') { va = a.best_before || 'zzzz'; vb = b.best_before || 'zzzz'; }
+    else if (sortKey === 'source') { va = a.source_repo || 'obsidian'; vb = b.source_repo || 'obsidian'; }
+    else if (sortKey === 'age') { va = a.created_at || ''; vb = b.created_at || ''; }
+    else { va = a[sortKey] || ''; vb = b[sortKey] || ''; }
+    const c = String(va).localeCompare(String(vb));
+    return sortDir === 'asc' ? c : -c;
+  });
+
+  return (
+    <div className="backlog-view">
+      <div className="backlog-toolbar">
+        <span className="backlog-view-title">backlog</span>
+        <label className="bl-toggle">
+          <input type="checkbox" checked={showClosed} onChange={e => setShowClosed(e.target.checked)} />
+          &nbsp;show closed
+        </label>
+        {lastSync && <span className="bl-sync-time">synced {lastSync}</span>}
+        <button className={`bl-refresh-btn${refreshing ? ' refreshing' : ''}`} onClick={handleRefresh} disabled={refreshing}>
+          {refreshing ? '↻ …' : '↻ refresh'}
+        </button>
+      </div>
+      <GamificationPanel items={items} />
+      <BurnChart items={items} />
+      <BacklogTable items={sorted} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+    </div>
+  );
+}
+
+// ─── App (with backlog nav) ─────────────────────────────────────────────────
+
+function AppWithBacklog() {
+  const [sessions, setSessions] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [activeView, setActiveView] = useState('observe');
+  const wsRef = useRef(null);
+
+  useEffect(() => {
+    function connect() {
+      const ws = new WebSocket(`${WS_BASE}/ws`);
+      wsRef.current = ws;
+      ws.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (Array.isArray(data)) {
+            setSessions(data);
+            setSelectedId(prev => {
+              if (prev) return prev;
+              const live = data.filter(s => s.status === 'live');
+              live.sort((a, b) => (b.started_at || '').localeCompare(a.started_at || ''));
+              return live[0]?.session_id || data[0]?.session_id || null;
+            });
+          }
+        } catch {}
+      };
+      ws.onclose = () => setTimeout(connect, 2000);
+    }
+    connect();
+    return () => wsRef.current?.close();
+  }, []);
+
+  const selectedSession = useMemo(
+    () => sessions.find(s => s.session_id === selectedId) || null,
+    [sessions, selectedId]
+  );
+
+  return (
+    <div id="layout">
+      <div id="sidebar">
+        <div id="sidebar-header">topgun</div>
+
+        <div className={`sidebar-nav-item${activeView === 'backlog' ? ' active' : ''}`} onClick={() => setActiveView('backlog')}>
+          <span className="snav-icon">▦</span> backlog
+        </div>
+        <div className={`sidebar-nav-item${activeView === 'observe' ? ' active' : ''}`} onClick={() => setActiveView('observe')}>
+          <span className="snav-icon">◈</span> observe
+        </div>
+
+        {activeView === 'observe' && (
+          <>
+            <div className="sidebar-section-sep" />
+            {sessions.length === 0 && <div className="sidebar-empty">no sessions</div>}
+            {[...sessions]
+              .sort((a, b) => (b.started_at || '').localeCompare(a.started_at || ''))
+              .map(s => (
+                <div
+                  key={s.session_id}
+                  className={`session-row${s.session_id === selectedId ? ' selected' : ''}`}
+                  onClick={() => setSelectedId(s.session_id)}
+                >
+                  <div className={`session-row-dot${s.status === 'live' ? ' live' : ''}`} />
+                  <div className="session-row-body">
+                    <div className="session-row-title">{projectName(s)}</div>
+                    <div className="session-row-sub">
+                      {s.status === 'live' ? 'live' : 'done'}
+                      {s.started_at ? `  ${fmtDt(s.started_at).split(' ')[1] || ''}` : ''}
+                    </div>
+                  </div>
+                </div>
+              ))}
+          </>
+        )}
+      </div>
+
+      <div id="main">
+        {activeView === 'backlog' ? <BacklogView /> : <SessionDetail session={selectedSession} />}
+      </div>
+    </div>
+  );
+}
+
 const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(<App />);
+root.render(<AppWithBacklog />);

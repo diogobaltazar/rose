@@ -55,6 +55,17 @@ def _get_sources() -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+TYPE_COLOR = {"github": "blue", "obsidian": "magenta"}
+
+def _type_tag(t: str) -> str:
+    color = TYPE_COLOR.get(t, "white")
+    return f"[{color}]{t}[/{color}]"
+
+
+# ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
 
@@ -103,9 +114,9 @@ def track(
     sources.append(entry)
     _write_config(data)
     label = entry.get("repo") or entry.get("path")
-    typer.echo(f"ok: added {entry['type']} {label}")
+    console.print(f"[green]ok[/green]  {_type_tag(entry['type'])}\t[cyan]{label}[/cyan]")
     if entry["type"] == "github" and not os.environ.get(entry["token_env"]):
-        typer.echo(f"add to ~/.zshrc:  export {entry['token_env']}=$(gh auth token)")
+        console.print(f"[yellow]add to ~/.zshrc:[/yellow]  export {entry['token_env']}=$(gh auth token)")
 
 
 @app.command("untrack")
@@ -118,7 +129,7 @@ def untrack():
 
     for i, s in enumerate(sources, 1):
         label = s.get("repo") or s.get("path", "?")
-        typer.echo(f"  [{i}] {s['type']}  {label}")
+        console.print(f"  [dim]{i}[/dim]  {_type_tag(s['type'])}\t{label}")
 
     raw = typer.prompt("remove #")
     try:
@@ -133,7 +144,7 @@ def untrack():
     data.setdefault("backlog", {})["sources"] = sources
     _write_config(data)
     label = removed.get("repo") or removed.get("path", "?")
-    typer.echo(f"ok: removed {label}")
+    console.print(f"[green]ok[/green]  removed [cyan]{label}[/cyan]")
 
 
 @app.command("sources")
@@ -147,7 +158,7 @@ def sources_cmd():
     for s in sources:
         label = s.get("repo") or s.get("path", "?")
         desc = s.get("description", "")
-        typer.echo(f"{s['type']}  {label}  {desc}")
+        console.print(f"  {_type_tag(s['type'])}\t[cyan]{label}[/cyan]\t[dim]{desc}[/dim]")
 
 
 WEB_PORT = 5100

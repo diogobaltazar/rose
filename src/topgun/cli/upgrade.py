@@ -108,10 +108,26 @@ def upgrade(
 
     # Ensure ~/.topgun directory structure exists
     topgun_dir = Path.home() / ".topgun"
-    for d in [topgun_dir, topgun_dir / "archive"]:
+    notes_vault = topgun_dir / "notes" / "obsidian-vault" / "topgun"
+    notes_templates = notes_vault / "_templates"
+    for d in [topgun_dir, topgun_dir / "archive", notes_vault, notes_templates]:
         if not d.exists():
             d.mkdir(parents=True, exist_ok=True)
             results.add_row("[green]✓[/green]", str(d.relative_to(Path.home())), "created")
+
+    default_template = notes_templates / "note.md"
+    if not default_template.exists():
+        default_template.write_text(
+            "---\n"
+            "date: {{date}}\n"
+            "tags: []\n"
+            "---\n"
+            "\n"
+            "# {{title}}\n"
+            "\n"
+            "{{content}}\n"
+        )
+        results.add_row("[green]✓[/green]", str(default_template.relative_to(Path.home())), "created")
 
     # 1. Copy command files individually — never delete existing commands
     src_commands = global_src / "commands"

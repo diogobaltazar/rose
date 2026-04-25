@@ -20,7 +20,16 @@ GLOBAL_SRC = REPO_ROOT / "global"
 
 
 @pytest.fixture
-def installed(tmp_path, monkeypatch):
+def fake_home(tmp_path, monkeypatch):
+    """Redirect Path.home() to a temp directory for the duration of the test."""
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: home))
+    return home
+
+
+@pytest.fixture
+def installed(tmp_path, fake_home, monkeypatch):
     """Run upgrade() against a fresh temp directory and return that directory."""
     monkeypatch.setattr(upgrade_mod, "ROSE_DIR", REPO_ROOT)
     upgrade_mod.upgrade(claude_dir=tmp_path)
@@ -71,3 +80,31 @@ def test_settings_contains_permissions(installed):
     )
     for entry in src_allow:
         assert entry in installed_allow, f"missing permission: {entry}"
+
+
+def test_notes_vault_created(installed, fake_home):
+    """upgrade() must create the notes vault directory tree under ~/.topgun.
+
+    The slash command and topgun notes track depend on this directory
+    existing. If it is absent, note creation silently fails or errors.
+    """
+    vault = fake_home / ".topgun" / "notes" / "obsidian-vault" / "topgun"
+    assert vault.exists(), "notes vault directory not created by upgrade"
+
+
+def test_notes_template_created(installed, fake_home):
+    """upgrade() must write a default note.md template to _templates/.
+
+    The /topgun-notes command reads this template before creating any
+    note. A missing template causes the command to fall back to a
+    hardcoded default, which is acceptable but not ideal — the template
+    is the user's customisation point.
+    """
+    template = (
+        fake_home / ".topgun" / "notes" / "obsidian-vault" / "topgun"
+        / "_templates" / "note.md"
+    )
+    assert template.exists(), "_templates/note.md not created by upgrade"
+    content = template.read_text()
+    assert "{{title}}" in content
+    assert "{{content}}" in content

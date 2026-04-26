@@ -96,6 +96,13 @@ Field mapping:
 
 Respond in natural language. Be specific — include counts, dates, names. For date questions ("this week", "this month", "today"), use today's date as the reference.
 
+### Title format
+
+Titles must use imperative verb form and be as short as possible. Drop articles, filler words, and context that belongs in the body.
+
+Good: `Fix login redirect`, `Add pagination to backlog list`, `Remove duplicate tag rendering`
+Bad: `We should fix the login redirect issue`, `Adding pagination support to the backlog list command`
+
 ### Creating a GitHub issue
 
 ```bash

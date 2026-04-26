@@ -7,6 +7,7 @@ from topgun.cli.config import app as config_app
 from topgun.cli.notes import app as notes_app
 from topgun.cli.observe import app as observe_app
 from topgun.cli.session import app as session_app
+from topgun.cli.timer import app as timer_app
 
 app = typer.Typer(
     name="topgun",
@@ -30,6 +31,7 @@ app.add_typer(config_app)
 app.add_typer(notes_app)
 app.add_typer(observe_app)
 app.add_typer(session_app)
+app.add_typer(timer_app)
 
 
 if __name__ == "__main__":

@@ -41,7 +41,50 @@ The `backlog.sources` array lists every source. Each source has:
 
 If `~/.config/topgun/config.json` does not exist or has no `backlog.sources`, tell the user and stop.
 
-## Step 2 — Route intelligently
+## Step 2 — Read the task template
+
+Before creating any Obsidian task, read the template from the primary Obsidian vault:
+
+```bash
+cat <vault_path>/_templates/task.md
+```
+
+If the template does not exist, use this default:
+
+```
+---
+date: {{date}}
+tags: [{{tags}}]
+---
+
+# {{title}}
+
+## About
+
+{{about}}
+
+## Motivation
+
+{{motivation}}
+
+## Acceptance Criteria
+
+- [ ] {{criterion}}
+
+## Dependencies
+
+_none_
+
+## Best Before
+
+{{best_before}}
+
+## Must Before
+
+{{must_before}}
+```
+
+## Step 3 — Route intelligently
 
 Read the user's request and decide which sources are relevant based on their `description`. Do not query sources that are clearly unrelated.
 
@@ -49,7 +92,7 @@ Read the user's request and decide which sources are relevant based on their `de
 - "Any open issues on topgun?" → topgun GitHub repo only
 - "What do I have on this week?" → all sources
 
-## Step 3 — Query relevant sources
+## Step 4 — Query relevant sources
 
 ### GitHub sources
 
@@ -70,27 +113,31 @@ Parse labels for priority: a label named `priority:high`, `priority:medium`, or 
 
 ### Obsidian sources
 
-Find all markdown files in the vault:
+Task files live in the `Tasks/` subdirectory of the vault. Read all task files:
+
 ```bash
-grep -r --include="*.md" -l "\- \[" <path>
+ls <vault_path>/Tasks/*.md 2>/dev/null
 ```
 
-Then read relevant files and extract tasks in Obsidian Tasks plugin format:
+For each file, read it and parse these frontmatter fields and section headings:
 
-```
-- [ ] Task title ⏫ 📅 2026-04-30
-- [x] Completed task ✅ 2026-04-20 🔁 every week
-```
+**Frontmatter fields:**
+- `date` — creation date
+- `tags` — array of tags; look for `source:notes` to identify auto-suggested tasks
+- `status` — `open` or `closed`
+- `priority` — `high`, `medium`, `low`, or absent
 
-Field mapping:
-- `[ ]` = open, `[x]` = closed
-- `⏫` = high priority, `🔼` = medium, `🔽` = low (absent = no priority)
-- `📅 YYYY-MM-DD` = must-before / due date
-- `⏳ YYYY-MM-DD` = best-before / scheduled date
-- `✅ YYYY-MM-DD` = completion date
-- `🔁 <recurrence>` = recurring task
+**Section headings:**
+- `## About`
+- `## Motivation`
+- `## Acceptance Criteria`
+- `## Dependencies`
+- `## Best Before`
+- `## Must Before`
 
-## Step 4 — Answer or act
+**When displaying tasks tagged `source:notes`:** show a `[suggested]` indicator after the title, and display the `Motivation` section content so the user can see why the task was created. This allows the user to decide whether to keep, edit, or delete the task.
+
+## Step 5 — Answer or act
 
 ### Answering queries
 
@@ -140,25 +187,62 @@ gh issue close <number> --repo <repo>
 
 ### Creating an Obsidian task
 
-Add a new line to the appropriate file (or create a new file if the user specifies one):
+1. Infer a concise title from the request (3–6 words, title case).
+2. Slugify the title: lowercase, spaces to hyphens, remove punctuation.
+3. Name the file `YYYY-MM-DD-slugified-title.md` using today's date.
+4. Determine tags: include `priority:<level>` if known; include any other relevant tags.
+5. Apply the template, replacing all `{{placeholders}}`. Leave sparse sections as `_none_`.
+6. Ensure the `Tasks/` subdirectory exists:
 
-```
-- [ ] <title> <priority emoji> 📅 <YYYY-MM-DD>
+```bash
+mkdir -p <vault_path>/Tasks
 ```
 
-Append to the end of the relevant section or file. If no file is obvious, add to a `Tasks.md` in the vault root.
+7. Write the file to `<vault_path>/Tasks/YYYY-MM-DD-slugified-title.md`.
+
+**Example output file:**
+
+```markdown
+---
+date: 2026-04-26
+tags: [priority:medium]
+status: open
+---
+
+# Buy Groceries
+
+## About
+
+Weekly grocery run — restock fridge and pantry essentials.
+
+## Motivation
+
+_none_
+
+## Acceptance Criteria
+
+- [ ] Groceries purchased and put away
+
+## Dependencies
+
+_none_
+
+## Best Before
+
+2026-04-27
+
+## Must Before
+
+_none_
+```
 
 ### Completing an Obsidian task
 
-Replace `- [ ]` with `- [x]` and append `✅ <today's date>`:
-
-```
-- [x] Buy groceries ✅ 2026-04-22
-```
+Read the task file, update the frontmatter `status` field to `closed`, and append `✅ <today's date>` to the title line in the `About` section or as a completion note. Then confirm in one sentence.
 
 ### Editing an Obsidian task
 
-Read the file, find the task line, and rewrite it with the updated fields using the Edit tool.
+Read the file, make the change with the Edit tool, and confirm what was updated in one sentence.
 
 ## Tone
 

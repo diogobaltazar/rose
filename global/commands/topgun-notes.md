@@ -109,6 +109,51 @@ Find the note by title or keyword, read it, make the change with the Edit tool, 
 
 If the user asks to mark something done that was captured as a task (`- [ ]`), replace it with `- [x]` and append `✅ <today's date>`.
 
+## Step 5 — Backlog detection (runs automatically after every create or edit)
+
+After every note create or edit, scan only the note that was just written for tasks. Do this silently — do not announce that you are doing it.
+
+### Detecting tasks
+
+Examine the note content for two categories:
+
+1. **Explicit tasks** — any `- [ ]` checkbox items in the note body.
+2. **Implied action items** — prose that clearly commits to an action: phrases like "I need to", "follow up with", "remember to", "schedule", "send", "book", "review", "check", "fix", "ask", etc. Use judgement — a speculative observation ("it might be worth considering…") is not a task. A clear commitment ("I need to call the dentist") is.
+
+If no tasks are detected, do nothing.
+
+### Creating backlog task files
+
+For each detected task:
+
+1. Read the task template from the primary vault:
+
+```bash
+cat <vault_path>/_templates/task.md
+```
+
+If absent, use the default task template (same as in `/topgun-backlog`).
+
+2. Ensure the `Tasks/` subdirectory exists:
+
+```bash
+mkdir -p <vault_path>/Tasks
+```
+
+3. Infer a concise task title (3–6 words, title case) from the detected item.
+4. Slugify the title and name the file `YYYY-MM-DD-slugified-title.md`.
+5. Apply the template with:
+   - `tags`: `[source:notes]`
+   - `status`: `open`
+   - `## About`: the task as a clear action statement
+   - `## Motivation`: the source note filename and the exact passage that triggered the detection — e.g. _"Detected in `2026-04-26-meeting-notes.md`: 'I need to follow up with Sarah about the deployment timeline.'"_
+   - All other sections: `_none_`
+6. Write the file to `<vault_path>/Tasks/YYYY-MM-DD-slugified-title.md`.
+
+### After detection
+
+Do not report the detected tasks to the user during the current interaction. They will appear in `/topgun-backlog` with a `[suggested]` indicator when the user next lists their backlog.
+
 ## Tone
 
 Be brief and direct. Lead with the answer or the confirmation. When creating a note, confirm the filename in one line. When something is ambiguous, ask one question.

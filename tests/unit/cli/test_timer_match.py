@@ -1,31 +1,45 @@
 """
 Unit tests for topgun.cli.timer_match.
 
-Covers task ID derivation and the two direct-lookup paths (branch inference
-and explicit ID). These paths deliberately bypass the Anthropic SDK so they
-must work correctly without any API credentials or network access.
+Covers UID derivation, task ID formatting, and the direct-lookup paths
+(explicit UID, explicit ID, bare issue number). All paths bypass the
+Anthropic SDK so they work without credentials or network access.
 
-What is NOT covered here:
-- The fuzzy match() function — it requires a live SDK call and is an
-  integration concern tested separately.
+What is NOT covered:
+- The fuzzy match() function — requires a live SDK call (integration concern).
 - Backlog fetching from GitHub or Obsidian — tested in test_backlog.py.
 """
 
 import pytest
 
-from topgun.cli.timer_match import _task_id, match_by_id
+from topgun.cli.timer_match import _task_id, _uid, match_by_id
+
+
+# ── _uid ──────────────────────────────────────────────────────────────────────
+
+def test_uid_format():
+    """UIDs must follow the 'tg-<8hex>' format."""
+    uid = _uid("github:owner/repo#1")
+    assert uid.startswith("tg-")
+    assert len(uid) == 11
+    assert all(c in "0123456789abcdef" for c in uid[3:])
+
+
+def test_uid_independent_of_github_number():
+    """
+    The topgun UID must be distinct from the GitHub issue number.
+
+    This confirms that UIDs are topgun-owned identities, not wrappers
+    around source IDs.
+    """
+    uid = _uid("github:owner/repo#127")
+    assert "127" not in uid
 
 
 # ── _task_id ──────────────────────────────────────────────────────────────────
 
 def test_task_id_github_extracts_number():
-    """
-    GitHub task IDs must encode the issue number and repo in a stable format.
-
-    Consumers (timer report, event log lookup) key on this string. A change
-    in format would silently break aggregation across start/stop pairs that
-    were written with the old format.
-    """
+    """GitHub task IDs must encode the issue number and repo in a stable format."""
     item = {"type": "github", "title": "#124 Fix auth bug", "source_full": "owner/repo"}
     assert _task_id(item) == "github:owner/repo#124"
 
@@ -38,30 +52,54 @@ def test_task_id_obsidian_uses_title():
 
 # ── match_by_id ───────────────────────────────────────────────────────────────
 
-def test_match_by_id_exact_full_id(monkeypatch):
-    """Full IDs must resolve directly without Claude."""
-    tasks = [{"id": "github:owner/repo#42", "title": "#42 A task", "source": "github"}]
+def _make_tasks():
+    return [
+        {"uid": _uid("github:owner/repo#42"), "id": "github:owner/repo#42",
+         "title": "#42 A task", "source": "github", "source_full": "owner/repo"},
+        {"uid": _uid("github:owner/repo#99"), "id": "github:owner/repo#99",
+         "title": "#99 Another task", "source": "github", "source_full": "owner/repo"},
+    ]
+
+
+def test_match_by_id_topgun_uid(monkeypatch):
+    """
+    A topgun UID must resolve directly to the correct task without an SDK call.
+
+    This is the primary lookup path shown in `topgun task list` output.
+    """
+    tasks = _make_tasks()
     monkeypatch.setattr("topgun.cli.timer_match.fetch_tasks", lambda: tasks)
-    result = match_by_id("github:owner/repo#42")
+    uid = _uid("github:owner/repo#42")
+    result = match_by_id(uid)
     assert result is not None
     assert result["id"] == "github:owner/repo#42"
 
 
+def test_match_by_id_full_source_id(monkeypatch):
+    """Full source IDs must resolve directly."""
+    tasks = _make_tasks()
+    monkeypatch.setattr("topgun.cli.timer_match.fetch_tasks", lambda: tasks)
+    assert match_by_id("github:owner/repo#42") is not None
+
+
 def test_match_by_id_bare_number(monkeypatch):
     """
-    Bare numbers like "42" or "#42" must resolve to the matching GitHub task.
+    Bare numbers like '42' or '#42' must resolve to the matching GitHub task.
 
-    This covers the common case where a user runs `topgun timer start --task 42`.
-    Requiring the full ID string would be poor UX.
+    Requiring the full UID or source ID every time would be poor UX.
     """
-    tasks = [{"id": "github:owner/repo#42", "title": "#42 A task", "source": "github"}]
+    tasks = _make_tasks()
     monkeypatch.setattr("topgun.cli.timer_match.fetch_tasks", lambda: tasks)
-
     assert match_by_id("42") is not None
     assert match_by_id("#42") is not None
 
 
-def test_match_by_id_not_found_returns_none(monkeypatch):
-    """Unknown IDs must return None so the caller can fall through to fuzzy match."""
+def test_match_by_id_unknown_uid_returns_none(monkeypatch):
+    """Unknown UIDs must return None so the caller can fall through to fuzzy match."""
+    monkeypatch.setattr("topgun.cli.timer_match.fetch_tasks", lambda: [])
+    assert match_by_id("tg-00000000") is None
+
+
+def test_match_by_id_unknown_number_returns_none(monkeypatch):
     monkeypatch.setattr("topgun.cli.timer_match.fetch_tasks", lambda: [])
     assert match_by_id("999") is None

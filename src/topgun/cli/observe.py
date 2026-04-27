@@ -31,6 +31,38 @@ OBSERVE_CONFIG  = Path(os.environ.get("OBSERVE_CONFIG", _claude_dir / "observe-c
 DEBOUNCE_S      = 0.15   # seconds after last event before redrawing
 HIGHLIGHT_TTL   = 2.0    # seconds a changed-value highlight stays lit
 
+# ── Transcript and subagent read caches ────────────────────────────────────
+#
+# Profiling (525 sessions, 108 MB of main transcripts + 485 subagent files,
+# 52 MB) shows that scan_sessions() spends ~700 ms parsing main transcripts
+# and ~9 s parsing subagent JSONL files on a cold run. Both caches below
+# eliminate repeated I/O for sessions whose files have not changed.
+#
+# The design is identical for both caches:
+#   cache[path] = (mtime, parsed_result)
+#
+# Before parsing, each read function checks whether the file's current mtime
+# matches the cached value:
+#   - Cache hit  → return stored result immediately (0 I/O).
+#   - Cache miss → parse the file, store the result, return it.
+#
+# Correctness invariant: transcripts and subagent files are append-only JSONL.
+# A changed mtime always means new content was appended. Done sessions are
+# never appended to after the process exits, so their mtime is stable and they
+# are parsed exactly once per process lifetime. Live sessions receive a cache
+# miss on every refresh because their mtime advances with each new message —
+# which is exactly the desired behaviour.
+#
+# _subagent_cache stores only the file-derived metrics (timestamps, tool count,
+# token usage, size). Status determination (live/done) depends on dynamic
+# inputs (hook_states, shutdown_requests, agent_tool_use) that change between
+# scans and are therefore applied after the cache lookup, not stored in it.
+#
+# Thread safety: scan_sessions() is only called from the single main-thread
+# refresh loop (or the non-TTY one-shot path), so no lock is needed.
+_transcript_cache: dict[Path, tuple[float, dict]] = {}
+_subagent_cache:   dict[Path, tuple[float, dict]] = {}
+
 # ── Rich styles ────────────────────────────────────────────────────────────────
 STYLE_NEON     = "bold color(118)"   # live dot / session ID
 STYLE_NEON_DIM = "color(28)"         # branch / worktree / agent name
@@ -202,28 +234,44 @@ def encode_cwd(cwd: str) -> str:
 
 
 def live_transcripts() -> dict[str, dict]:
+    """Return a map of session-id → {pid, sessionId} for every live session.
+
+    A session is live when its PID is still running (checked via os.kill(pid, 0))
+    and either its transcript already exists on disk or the session has not yet
+    written its first message.
+
+    Previous implementation used glob() to find the first transcript in the
+    project directory whose mtime was >= the session start time. Because glob()
+    returns files in arbitrary filesystem order, it frequently identified the
+    wrong transcript as belonging to the live session — causing the actual
+    current session to appear as "done" in the UI.
+
+    The session file already contains the sessionId, which is identical to the
+    transcript filename (without the .jsonl extension). We therefore look up the
+    transcript directly by path, eliminating the ambiguity entirely. If the
+    transcript does not yet exist (session just started), we still register the
+    session as live so it appears in the UI immediately.
+    """
     result = {}
     if not SESSIONS_DIR.exists():
         return result
     for f in SESSIONS_DIR.glob("*.json"):
         try:
-            data       = json.loads(f.read_text())
-            pid        = data.get("pid")
-            sid        = data.get("sessionId")
-            cwd        = data.get("cwd", "")
-            started_ms = data.get("startedAt", 0)
+            data = json.loads(f.read_text())
+            pid  = data.get("pid")
+            sid  = data.get("sessionId")
+            cwd  = data.get("cwd", "")
         except (json.JSONDecodeError, OSError):
             continue
-        if not pid or not cwd or not pid_running(pid):
+        if not pid or not sid or not cwd or not pid_running(pid):
             continue
-        started_s   = started_ms / 1000
         project_dir = PROJECTS_DIR / encode_cwd(cwd)
         if not project_dir.exists():
             continue
-        for transcript in project_dir.glob("*.jsonl"):
-            if transcript.stat().st_mtime >= started_s:
-                result[transcript.stem] = {"pid": pid, "sessionId": sid}
-                break
+        # Register the session as live whether or not the transcript exists yet.
+        # scan_sessions() will skip sessions with no transcript; the fallback
+        # block at the bottom of that function picks them up via SESSIONS_DIR.
+        result[sid] = {"pid": pid, "sessionId": sid}
     return result
 
 
@@ -340,6 +388,19 @@ def _empty_usage() -> dict:
 
 
 def read_transcript(path: Path) -> dict:
+    # Cache check — return immediately if the file has not changed since last parse.
+    # Transcripts are append-only JSONL files: a changed mtime always means new
+    # content. Done sessions are never appended to, so they are parsed exactly once.
+    try:
+        current_mtime = path.stat().st_mtime
+    except OSError:
+        current_mtime = None
+
+    if current_mtime is not None:
+        cached = _transcript_cache.get(path)
+        if cached is not None and cached[0] == current_mtime:
+            return cached[1]
+
     title        = None
     branch       = None
     cwd          = None
@@ -408,7 +469,7 @@ def read_transcript(path: Path) -> dict:
 
     total_tokens = usage["input"] + usage["output"] + usage["cache_write"] + usage["cache_read"]
 
-    return {
+    result = {
         "cwd":                cwd,
         "branch":             branch,
         "started_at":         started_at,
@@ -421,6 +482,11 @@ def read_transcript(path: Path) -> dict:
         "agent_tool_use":     agent_tool_use,
         "completed_tool_uses": completed_tool_uses,
     }
+
+    if current_mtime is not None:
+        _transcript_cache[path] = (current_mtime, result)
+
+    return result
 
 
 def read_subagents(
@@ -454,41 +520,70 @@ def read_subagents(
         agent_cwd    = None
         jsonl_mtime  = None
         usage        = _empty_usage()
+        agent_branch = None
+        agent_gi     = {"project": None, "worktree": None}
 
         if jsonl_file.exists():
             st          = jsonl_file.stat()
-            size_kb     = round(st.st_size / 1024, 1)
             jsonl_mtime = st.st_mtime
-            try:
-                with jsonl_file.open() as f:
-                    for line in f:
-                        line = line.strip()
-                        if not line:
-                            continue
-                        try:
-                            entry = json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
-                        ts = entry.get("timestamp")
-                        if ts:
-                            if started_at is None:
-                                started_at = ts
-                            ended_at = ts
-                        if agent_cwd is None and entry.get("type") == "user":
-                            agent_cwd = entry.get("cwd")
-                        if entry.get("type") == "assistant":
-                            content = entry.get("message", {}).get("content", [])
-                            if isinstance(content, list):
-                                tool_count += sum(
-                                    1 for b in content
-                                    if isinstance(b, dict) and b.get("type") == "tool_use"
-                                )
-                            _accumulate_usage(entry, usage)
-            except OSError:
-                pass
 
-        agent_branch = git(agent_cwd, "rev-parse", "--abbrev-ref", "HEAD") if agent_cwd else None
-        agent_gi     = git_info(agent_cwd) if agent_cwd else {"project": None, "worktree": None}
+            # Cache check — subagent JSONL files are append-only. If mtime is
+            # unchanged the previously parsed metrics are still valid.
+            cached_sub = _subagent_cache.get(jsonl_file)
+            if cached_sub is not None and cached_sub[0] == jsonl_mtime:
+                m            = cached_sub[1]
+                started_at   = m["started_at"]
+                ended_at     = m["ended_at"]
+                tool_count   = m["tool_count"]
+                size_kb      = m["size_kb"]
+                agent_cwd    = m["agent_cwd"]
+                usage        = m["usage"]
+                agent_branch = m["agent_branch"]
+                agent_gi     = m["agent_gi"]
+            else:
+                size_kb = round(st.st_size / 1024, 1)
+                try:
+                    with jsonl_file.open() as f:
+                        for line in f:
+                            line = line.strip()
+                            if not line:
+                                continue
+                            try:
+                                entry = json.loads(line)
+                            except json.JSONDecodeError:
+                                continue
+                            ts = entry.get("timestamp")
+                            if ts:
+                                if started_at is None:
+                                    started_at = ts
+                                ended_at = ts
+                            if agent_cwd is None and entry.get("type") == "user":
+                                agent_cwd = entry.get("cwd")
+                            if entry.get("type") == "assistant":
+                                content = entry.get("message", {}).get("content", [])
+                                if isinstance(content, list):
+                                    tool_count += sum(
+                                        1 for b in content
+                                        if isinstance(b, dict) and b.get("type") == "tool_use"
+                                    )
+                                _accumulate_usage(entry, usage)
+                except OSError:
+                    pass
+                # git calls are expensive (subprocess per invocation). agent_cwd
+                # is stable — it is written once when the agent starts — so the
+                # branch and worktree results are safe to cache alongside the metrics.
+                agent_branch = git(agent_cwd, "rev-parse", "--abbrev-ref", "HEAD") if agent_cwd else None
+                agent_gi     = git_info(agent_cwd) if agent_cwd else {"project": None, "worktree": None}
+                _subagent_cache[jsonl_file] = (jsonl_mtime, {
+                    "started_at":   started_at,
+                    "ended_at":     ended_at,
+                    "tool_count":   tool_count,
+                    "size_kb":      size_kb,
+                    "agent_cwd":    agent_cwd,
+                    "usage":        usage,
+                    "agent_branch": agent_branch,
+                    "agent_gi":     agent_gi,
+                })
 
         tool_use_id      = agent_tool_use.get(agent_id, "")
         tool_result_done = bool(tool_use_id and tool_use_id in completed_tool_uses)

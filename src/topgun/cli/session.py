@@ -26,15 +26,30 @@ ARCHIVE         = Path(os.environ.get("TOPGUN_ARCHIVE",  _TOPGUN_DIR / "archive"
 _UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 
-def _dir_size(path: Path) -> int:
-    """Return the total size in bytes of all files under path."""
-    return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+def _dir_stats(path: Path) -> tuple[int, float]:
+    """Return (total_size_bytes, newest_mtime) for all files under path in one pass.
 
-
-def _dir_mtime(path: Path) -> float:
-    """Return the newest mtime of any file under path, or the dir's own mtime."""
-    mtimes = [f.stat().st_mtime for f in path.rglob("*") if f.is_file()]
-    return max(mtimes) if mtimes else path.stat().st_mtime
+    Uses os.scandir() recursively rather than Path.rglob() because scandir()
+    populates DirEntry.stat() from the OS directory-listing syscall — no
+    additional stat() call per entry on most filesystems. On macOS Docker bind
+    mounts, where each stat() round-trip through the virtual filesystem layer
+    carries measurable overhead, this halves the number of syscalls compared to
+    calling _dir_size() and _dir_mtime() separately.
+    """
+    total_size = 0
+    newest_mtime = path.stat().st_mtime
+    stack = [str(path)]
+    while stack:
+        with os.scandir(stack.pop()) as it:
+            for entry in it:
+                if entry.is_dir(follow_symlinks=False):
+                    stack.append(entry.path)
+                else:
+                    st = entry.stat(follow_symlinks=False)
+                    total_size += st.st_size
+                    if st.st_mtime > newest_mtime:
+                        newest_mtime = st.st_mtime
+    return total_size, newest_mtime
 
 
 def _collect_sessions() -> list[dict]:
@@ -68,12 +83,13 @@ def _collect_sessions() -> list[dict]:
         # New format — UUID-named subdirectories.
         for entry in project_dir.iterdir():
             if entry.is_dir() and _UUID_RE.match(entry.name):
+                size, mtime = _dir_stats(entry)
                 sessions.append({
                     "session_id": entry.name,
                     "project": project_dir.name,
                     "project_dir": project_dir,
-                    "modified": datetime.fromtimestamp(_dir_mtime(entry)),
-                    "size": _dir_size(entry),
+                    "modified": datetime.fromtimestamp(mtime),
+                    "size": size,
                     "format": "new",
                 })
 

@@ -6,7 +6,7 @@ WORKDIR /topgun
 
 COPY pyproject.toml .
 COPY src/ src/
-RUN pip3 install --no-cache-dir --break-system-packages .
+RUN pip3 install --no-cache-dir --break-system-packages ".[test]"
 
 # topgun install — global Claude config
 COPY global/ global/

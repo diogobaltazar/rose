@@ -11,6 +11,8 @@ dependencies = [
     "typer>=0.12",
     "rich>=13",
     "watchdog>=4",
+    "anthropic>=0.25",
+    "python-dotenv>=1.0",
 ]
 
 [project.scripts]

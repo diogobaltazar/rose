@@ -302,6 +302,7 @@ def _fetch_github(repo: str, token_env: str) -> tuple[list[dict], str]:
             "must_before": must_before,
             "best_before": best_before,
             "tags": tags,
+            "url": f"https://github.com/{repo}/issues/{issue['number']}",
         })
     return items, ""
 
@@ -326,16 +327,28 @@ def _resolve_vault_path(vault_path: str) -> Path:
 
 
 def _fetch_obsidian(vault_path: str) -> list[dict]:
+    from urllib.parse import quote
     vault = _resolve_vault_path(vault_path)
     if not vault.exists():
         return []
 
+    # host_vault is the path Obsidian on the host OS knows about.
+    # Inside Docker, vault may be remapped (e.g. /topgun-data/...), so we
+    # reconstruct the host path from the original vault_path in config.
+    host_vault = Path(vault_path).expanduser()
     items = []
     for md_file in vault.rglob("*.md"):
         try:
             text = md_file.read_text(encoding="utf-8")
         except Exception:
             continue
+        relative = md_file.relative_to(vault)
+        host_file = host_vault / relative
+        # Files inside topgun/ are standalone task files — open them directly.
+        # Checkboxes in ordinary notes fall back to search so the exact line
+        # is surfaced in context.
+        is_task_file = relative.parts[0] == "topgun"
+
         for line in text.splitlines():
             if not _TASK_RE.match(line):
                 continue
@@ -352,6 +365,11 @@ def _fetch_obsidian(vault_path: str) -> list[dict]:
             tags = _TAG_RE.findall(title)
             title = _TAG_RE.sub("", title).strip()
 
+            if is_task_file:
+                obs_url = f"obsidian://open?path={quote(str(host_file))}"
+            else:
+                obs_url = f"obsidian://search?query={quote(title)}"
+
             items.append({
                 "type": "obsidian",
                 "title": title,
@@ -360,6 +378,7 @@ def _fetch_obsidian(vault_path: str) -> list[dict]:
                 "due": due,
                 "state": "open",
                 "tags": tags,
+                "url": obs_url,
             })
     return items
 

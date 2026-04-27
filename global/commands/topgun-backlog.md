@@ -113,10 +113,10 @@ Parse labels for priority: a label named `priority:high`, `priority:medium`, or 
 
 ### Obsidian sources
 
-Task files live in the `Tasks/` subdirectory of the vault. Read all task files:
+Task files live in the `topgun/` subdirectory of the vault. Read all task files:
 
 ```bash
-ls <vault_path>/Tasks/*.md 2>/dev/null
+ls <vault_path>/topgun/*.md 2>/dev/null
 ```
 
 For each file, read it and parse these frontmatter fields and section headings:
@@ -199,13 +199,13 @@ gh issue close <number> --repo <repo>
 3. Name the file `YYYY-MM-DD-slugified-title.md` using today's date.
 4. Determine tags: include `priority:<level>` if known; include any other relevant tags.
 5. Apply the template, replacing all `{{placeholders}}`. Leave sparse sections as `_none_`.
-6. Ensure the `Tasks/` subdirectory exists:
+6. Ensure the `topgun/` subdirectory exists:
 
 ```bash
 mkdir -p <vault_path>/Tasks
 ```
 
-7. Write the file to `<vault_path>/Tasks/YYYY-MM-DD-slugified-title.md`.
+7. Write the file to `<vault_path>/topgun/YYYY-MM-DD-slugified-title.md`.
 
 **Example output file:**
 

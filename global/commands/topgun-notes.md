@@ -134,10 +134,10 @@ cat <vault_path>/_templates/task.md
 
 If absent, use the default task template (same as in `/topgun-backlog`).
 
-2. Ensure the `Tasks/` subdirectory exists:
+2. Ensure the `topgun/` subdirectory exists:
 
 ```bash
-mkdir -p <vault_path>/Tasks
+mkdir -p <vault_path>/topgun
 ```
 
 3. Infer a concise task title (3–6 words, title case) from the detected item.
@@ -148,7 +148,7 @@ mkdir -p <vault_path>/Tasks
    - `## About`: the task as a clear action statement
    - `## Motivation`: the source note filename and the exact passage that triggered the detection — e.g. _"Detected in `2026-04-26-meeting-notes.md`: 'I need to follow up with Sarah about the deployment timeline.'"_
    - All other sections: `_none_`
-6. Write the file to `<vault_path>/Tasks/YYYY-MM-DD-slugified-title.md`.
+6. Write the file to `<vault_path>/topgun/YYYY-MM-DD-slugified-title.md`.
 
 ### After detection
 

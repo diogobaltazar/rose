@@ -521,6 +521,9 @@ def _write_obsidian_task(vault_path: str, structured: dict) -> Path:
 @app.command("add")
 def add():
     """Create a new task. Select a source, describe the task in $EDITOR."""
+    import sys
+    from urllib.parse import quote
+
     sources = _get_sources()
     if not sources:
         typer.echo("no sources tracked — run: topgun task track")
@@ -529,28 +532,25 @@ def add():
     obsidian_sources = [s for s in sources if s["type"] == "obsidian"]
     github_sources = [s for s in sources if s["type"] == "github"]
 
+    if not obsidian_sources:
+        console.print("[yellow]no Obsidian sources tracked — run: topgun task track --type obsidian[/yellow]")
+        raise typer.Exit(1)
+
     console.print()
     console.print("[bold]Select a source:[/bold]\n")
 
-    idx = 1
     numbered: list[dict] = []
-    for s in obsidian_sources:
+    for idx, s in enumerate(obsidian_sources, 1):
         label = s.get("path", "?")
         desc = s.get("description", "")
         console.print(f"  [dim]{idx}[/dim]  [magenta]obsidian[/magenta]  [cyan]{label}[/cyan]  [dim]{desc}[/dim]")
         numbered.append(s)
-        idx += 1
     for s in github_sources:
         label = s.get("repo", "?")
         desc = s.get("description", "")
         console.print(f"      [dim]github[/dim]    [dim]{label}[/dim]  [dim]{desc}  [unavailable][/dim]")
 
     console.print()
-
-    if not obsidian_sources:
-        console.print("[yellow]no Obsidian sources tracked — run: topgun task track --type obsidian[/yellow]")
-        raise typer.Exit(1)
-
     raw = typer.prompt("source #", default="1")
     try:
         choice_idx = int(raw.strip()) - 1
@@ -559,6 +559,16 @@ def add():
         console.print("[red]invalid selection[/red]")
         raise typer.Exit(1)
     chosen = numbered[choice_idx]
+
+    # Erase source list and prompt; replace with a single compact line.
+    # Lines printed: blank(1) + "Select a source:\n"(2) + sources + blank(1) + prompt(1)
+    n_erase = 5 + len(obsidian_sources) + len(github_sources)
+    sys.stdout.write(f"\033[{n_erase}A\033[J")
+    sys.stdout.flush()
+    console.print(
+        f"  [magenta]obsidian[/magenta]  "
+        f"[cyan]{chosen.get('description', chosen.get('path', '?'))}[/cyan]"
+    )
 
     today = date.today().isoformat()
     text = click.edit(_ADD_EDITOR_TEMPLATE)
@@ -571,11 +581,11 @@ def add():
         console.print("[yellow]no description entered — cancelled[/yellow]")
         raise typer.Exit(1)
 
-    console.print("[dim]structuring task…[/dim]")
     from topgun.inference.anthropic import call, load_prompt
     system = load_prompt("task_add")
     user_msg = f"Today's date: {today}\n\nTask description:\n{description}"
-    raw_json = call(prompt=user_msg, system=system, command="task_add")
+    with console.status("[dim]structuring task…[/dim]"):
+        raw_json = call(prompt=user_msg, system=system, command="task_add")
 
     # Strip markdown code fences if the model wrapped the JSON.
     clean = raw_json.strip()
@@ -591,8 +601,11 @@ def add():
         raise typer.Exit(1)
 
     task_dir = _write_obsidian_task(chosen["path"], structured)
-    console.print(f"[green]created[/green]  [cyan]{structured.get('title', 'Untitled')}[/cyan]")
-    console.print(f"[dim]{task_dir}[/dim]")
+
+    host_task_file = Path(chosen["path"]).expanduser() / task_dir.name / "task.md"
+    obs_url = f"obsidian://open?path={quote(str(host_task_file))}"
+    title = structured.get("title", "Untitled")
+    console.print(f"[green]created[/green]  [link={obs_url}]{title}[/link]  [dim]↗[/dim]")
 
 
 @app.command("close")

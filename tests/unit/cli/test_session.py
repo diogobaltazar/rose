@@ -107,7 +107,7 @@ def test_archive_session_moves_transcript_and_session_dir(tmp_path):
     archive_root = tmp_path / "archive"
 
     with patch("topgun.cli.session.ARCHIVE", archive_root):
-        _archive_session(session_id, proj)
+        _archive_session({"session_id": session_id, "project_dir": proj, "format": "legacy"})
 
     dest_dir = archive_root / "projects" / "-Users-alice-project"
     assert (dest_dir / f"{session_id}.jsonl").exists(), "transcript must be in archive"
@@ -131,7 +131,7 @@ def test_archive_session_works_without_session_dir(tmp_path):
     archive_root = tmp_path / "archive"
 
     with patch("topgun.cli.session.ARCHIVE", archive_root):
-        _archive_session(session_id, proj)
+        _archive_session({"session_id": session_id, "project_dir": proj, "format": "legacy"})
 
     dest_dir = archive_root / "projects" / "-Users-alice-project"
     assert (dest_dir / f"{session_id}.jsonl").exists()
@@ -155,7 +155,7 @@ def test_archive_session_multiple(tmp_path):
 
     with patch("topgun.cli.session.ARCHIVE", archive_root):
         for sid in ("aaa-111", "bbb-222"):
-            _archive_session(sid, proj)
+            _archive_session({"session_id": sid, "project_dir": proj, "format": "legacy"})
 
     dest_dir = archive_root / "projects" / "-Users-alice-project"
     assert (dest_dir / "aaa-111.jsonl").exists()

@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -21,14 +22,82 @@ _TOPGUN_DIR     = Path(os.environ.get("TOPGUN_DIR",      Path.home() / ".topgun"
 CLAUDE_PROJECTS = Path(os.environ.get("PROJECTS_DIR",    _CLAUDE_DIR / "projects"))
 ARCHIVE         = Path(os.environ.get("TOPGUN_ARCHIVE",  _TOPGUN_DIR / "archive"))
 
+# Matches a UUID v4 directory name — used to identify new-format session dirs.
+_UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
-def _find_transcript(session_id: str) -> tuple[Path, Path]:
-    """Return (transcript_path, project_dir) for the given session ID, or raise."""
+
+def _dir_size(path: Path) -> int:
+    """Return the total size in bytes of all files under path."""
+    return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+
+
+def _dir_mtime(path: Path) -> float:
+    """Return the newest mtime of any file under path, or the dir's own mtime."""
+    mtimes = [f.stat().st_mtime for f in path.rglob("*") if f.is_file()]
+    return max(mtimes) if mtimes else path.stat().st_mtime
+
+
+def _collect_sessions() -> list[dict]:
+    """
+    Discover all sessions under CLAUDE_PROJECTS, supporting two storage formats:
+
+    - Legacy: a {session_id}.jsonl file directly inside the project directory.
+    - New: a UUID-named subdirectory inside the project directory (contains
+      a subagents/ tree; no top-level transcript file).
+
+    Returns a list of dicts with keys:
+        session_id, project, project_dir, modified, size, format
+    """
+    sessions = []
     for project_dir in CLAUDE_PROJECTS.iterdir():
-        candidate = project_dir / f"{session_id}.jsonl"
-        if candidate.exists():
-            return candidate, project_dir
-    raise typer.BadParameter(f"No transcript found for session '{session_id}' under {CLAUDE_PROJECTS}")
+        if not project_dir.is_dir():
+            continue
+
+        # Legacy format — top-level *.jsonl files.
+        for transcript in project_dir.glob("*.jsonl"):
+            stat = transcript.stat()
+            sessions.append({
+                "session_id": transcript.stem,
+                "project": project_dir.name,
+                "project_dir": project_dir,
+                "modified": datetime.fromtimestamp(stat.st_mtime),
+                "size": stat.st_size,
+                "format": "legacy",
+            })
+
+        # New format — UUID-named subdirectories.
+        for entry in project_dir.iterdir():
+            if entry.is_dir() and _UUID_RE.match(entry.name):
+                sessions.append({
+                    "session_id": entry.name,
+                    "project": project_dir.name,
+                    "project_dir": project_dir,
+                    "modified": datetime.fromtimestamp(_dir_mtime(entry)),
+                    "size": _dir_size(entry),
+                    "format": "new",
+                })
+
+    return sessions
+
+
+def _find_session(session_id: str) -> tuple[Path, Path, str]:
+    """
+    Locate a session by ID across both storage formats.
+
+    Returns (session_path, project_dir, format) where session_path is:
+    - the .jsonl file for legacy sessions
+    - the UUID directory for new-format sessions
+    """
+    for project_dir in CLAUDE_PROJECTS.iterdir():
+        if not project_dir.is_dir():
+            continue
+        legacy = project_dir / f"{session_id}.jsonl"
+        if legacy.exists():
+            return legacy, project_dir, "legacy"
+        new_fmt = project_dir / session_id
+        if new_fmt.is_dir() and _UUID_RE.match(session_id):
+            return new_fmt, project_dir, "new"
+    raise typer.BadParameter(f"No session found for '{session_id}' under {CLAUDE_PROJECTS}")
 
 
 def _format_size(size_bytes: int) -> str:
@@ -40,23 +109,12 @@ def _format_size(size_bytes: int) -> str:
 
 @app.command("list")
 def list_sessions():
-    """List all session transcripts in ~/.claude/projects/, newest first."""
+    """List all sessions in ~/.claude/projects/, newest first."""
     if not CLAUDE_PROJECTS.exists():
         console.print(f"[dim]No projects directory found at {CLAUDE_PROJECTS}[/dim]")
         raise typer.Exit()
 
-    sessions = []
-    for project_dir in CLAUDE_PROJECTS.iterdir():
-        if not project_dir.is_dir():
-            continue
-        for transcript in project_dir.glob("*.jsonl"):
-            stat = transcript.stat()
-            sessions.append({
-                "session_id": transcript.stem,
-                "project": project_dir.name,
-                "modified": datetime.fromtimestamp(stat.st_mtime),
-                "size": stat.st_size,
-            })
+    sessions = _collect_sessions()
 
     if not sessions:
         console.print("[dim]No session transcripts found.[/dim]")
@@ -81,18 +139,21 @@ def list_sessions():
     console.print(table)
 
 
-def _archive_session(session_id: str, project_dir: Path) -> None:
-    """Move a single session's transcript and uuid/ directory to the archive."""
-    transcript = project_dir / f"{session_id}.jsonl"
-    dest_dir = ARCHIVE / "projects" / project_dir.name
+def _archive_session(session: dict) -> None:
+    """Move a session to the archive, handling both storage formats."""
+    dest_dir = ARCHIVE / "projects" / session["project_dir"].name
     dest_dir.mkdir(parents=True, exist_ok=True)
 
-    dest_transcript = dest_dir / transcript.name
-    shutil.move(str(transcript), dest_transcript)
-
-    session_dir = project_dir / session_id
-    if session_dir.exists():
-        shutil.move(str(session_dir), dest_dir / session_id)
+    if session["format"] == "legacy":
+        transcript = session["project_dir"] / f"{session['session_id']}.jsonl"
+        shutil.move(str(transcript), dest_dir / transcript.name)
+        # Move the accompanying UUID dir if it exists (pre-existing convention).
+        session_dir = session["project_dir"] / session["session_id"]
+        if session_dir.exists():
+            shutil.move(str(session_dir), dest_dir / session["session_id"])
+    else:
+        session_dir = session["project_dir"] / session["session_id"]
+        shutil.move(str(session_dir), dest_dir / session["session_id"])
 
 
 @app.command("archive")
@@ -105,19 +166,7 @@ def archive():
         console.print(f"[dim]No projects directory found at {CLAUDE_PROJECTS}[/dim]")
         raise typer.Exit()
 
-    sessions = []
-    for project_dir in CLAUDE_PROJECTS.iterdir():
-        if not project_dir.is_dir():
-            continue
-        for transcript in project_dir.glob("*.jsonl"):
-            stat = transcript.stat()
-            sessions.append({
-                "session_id": transcript.stem,
-                "project": project_dir.name,
-                "project_dir": project_dir,
-                "modified": datetime.fromtimestamp(stat.st_mtime),
-                "size": stat.st_size,
-            })
+    sessions = _collect_sessions()
 
     if not sessions:
         console.print("[dim]No sessions found.[/dim]")
@@ -148,18 +197,14 @@ def archive():
         for s in sessions
     ]
 
-    selected = questionary.checkbox(
-        "Select sessions to archive:",
-        choices=choices,
-        style=questionary.Style([("text", "fg:ansigreen")]),
-    ).ask()
+    selected = questionary.checkbox("Select sessions to archive:", choices=choices).ask()
 
     if not selected:
         console.print("[dim]nothing selected[/dim]")
         raise typer.Exit()
 
     for s in selected:
-        _archive_session(s["session_id"], s["project_dir"])
+        _archive_session(s)
         console.print(f"[green]archived[/green]  {s['session_id']}")
 
 
@@ -168,9 +213,12 @@ def delete(
     session_id: str = typer.Argument(..., help="Session UUID to delete"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
 ):
-    """Permanently delete a session transcript from ~/.claude."""
-    transcript, _project_dir = _find_transcript(session_id)
+    """Permanently delete a session from ~/.claude."""
+    session_path, _project_dir, fmt = _find_session(session_id)
     if not yes:
-        typer.confirm(f"Delete {transcript}?", abort=True)
-    transcript.unlink()
-    console.print(f"[red]Deleted[/red] {transcript}")
+        typer.confirm(f"Delete {session_path}?", abort=True)
+    if fmt == "legacy":
+        session_path.unlink()
+    else:
+        shutil.rmtree(session_path)
+    console.print(f"[red]Deleted[/red] {session_path}")

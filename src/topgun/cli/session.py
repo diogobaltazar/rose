@@ -99,7 +99,7 @@ def _archive_session(session_id: str, project_dir: Path) -> None:
 def archive():
     """Interactively select and archive sessions from ~/.claude to ~/.topgun/archive/."""
     import questionary
-    from prompt_toolkit.formatted_text import ANSI
+    from prompt_toolkit.formatted_text import ANSI, to_formatted_text
 
     if not CLAUDE_PROJECTS.exists():
         console.print(f"[dim]No projects directory found at {CLAUDE_PROJECTS}[/dim]")
@@ -137,18 +137,22 @@ def archive():
 
     choices = [
         questionary.Choice(
-            title=ANSI(
+            title=to_formatted_text(ANSI(
                 f"{_DIM}{s['modified'].strftime('%Y-%m-%d %H:%M')}{_RESET}  "
                 f"{_CYAN}{s['session_id']}{_RESET}  "
                 f"{_GREEN}{_format_size(s['size']).rjust(max_size)}{_RESET}  "
                 f"{_MAG}{s['project']}{_RESET}"
-            ),
+            )),
             value=s,
         )
         for s in sessions
     ]
 
-    selected = questionary.checkbox("Select sessions to archive:", choices=choices).ask()
+    selected = questionary.checkbox(
+        "Select sessions to archive:",
+        choices=choices,
+        style=questionary.Style([("text", "fg:ansigreen")]),
+    ).ask()
 
     if not selected:
         console.print("[dim]nothing selected[/dim]")

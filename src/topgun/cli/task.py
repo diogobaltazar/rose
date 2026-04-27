@@ -207,11 +207,28 @@ def _editor_query() -> str | None:
     return query or None
 
 
+def _is_structured_id(ref: str) -> bool:
+    """Return True if *ref* looks like a UID, source ID, or bare issue number."""
+    from topgun.cli.timer_match import _UID_RE, _GITHUB_NUM_RE
+
+    if _UID_RE.match(ref):
+        return True
+    if _GITHUB_NUM_RE.match(ref.strip()):
+        return True
+    if ":" in ref:          # source IDs contain a colon, e.g. "github:owner/repo#1"
+        return True
+    return False
+
+
 def _resolve_task(task_arg: str) -> dict:
     """Resolve task by UID, source ID, bare issue number, or fuzzy description."""
     task = match_by_id(task_arg)
     if task:
         return task
+
+    if _is_structured_id(task_arg):
+        console.print(f"[yellow]no task found for id:[/yellow] {task_arg}")
+        raise typer.Exit(1)
 
     console.print(f"[dim]searching for:[/dim] {task_arg}")
     candidates = match(task_arg)
@@ -584,8 +601,7 @@ def add():
     from topgun.inference.anthropic import call, load_prompt
     system = load_prompt("task_add")
     user_msg = f"Today's date: {today}\n\nTask description:\n{description}"
-    with console.status("[dim]structuring task…[/dim]"):
-        raw_json = call(prompt=user_msg, system=system, command="task_add")
+    raw_json = call(prompt=user_msg, system=system, command="task_add", status_message="structuring task…")
 
     # Strip markdown code fences if the model wrapped the JSON.
     clean = raw_json.strip()

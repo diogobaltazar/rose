@@ -81,30 +81,69 @@ def list_sessions():
     console.print(table)
 
 
-@app.command("archive")
-def archive(
-    session_id: str = typer.Argument(..., help="Session UUID to archive"),
-):
-    """Move a session (transcript + subagents) from ~/.claude to ~/.topgun/archive/."""
-    transcript, project_dir = _find_transcript(session_id)
+def _archive_session(session_id: str, project_dir: Path) -> None:
+    """Move a single session's transcript and uuid/ directory to the archive."""
+    transcript = project_dir / f"{session_id}.jsonl"
     dest_dir = ARCHIVE / "projects" / project_dir.name
     dest_dir.mkdir(parents=True, exist_ok=True)
 
-    # Move the .jsonl transcript.
     dest_transcript = dest_dir / transcript.name
     shutil.move(str(transcript), dest_transcript)
 
-    # Move the matching session directory (subagents etc.) if it exists.
     session_dir = project_dir / session_id
-    dest_session_dir = dest_dir / session_id
-    has_session_dir = session_dir.exists()
-    if has_session_dir:
-        shutil.move(str(session_dir), dest_session_dir)
+    if session_dir.exists():
+        shutil.move(str(session_dir), dest_dir / session_id)
 
-    console.print(f"[green]archived[/green]  {transcript.name}")
-    console.print(f"  → [dim]{dest_transcript}[/dim]")
-    if has_session_dir:
-        console.print(f"  → [dim]{dest_session_dir}/[/dim]")
+
+@app.command("archive")
+def archive():
+    """Interactively select and archive sessions from ~/.claude to ~/.topgun/archive/."""
+    import questionary
+
+    if not CLAUDE_PROJECTS.exists():
+        console.print(f"[dim]No projects directory found at {CLAUDE_PROJECTS}[/dim]")
+        raise typer.Exit()
+
+    sessions = []
+    for project_dir in CLAUDE_PROJECTS.iterdir():
+        if not project_dir.is_dir():
+            continue
+        for transcript in project_dir.glob("*.jsonl"):
+            stat = transcript.stat()
+            sessions.append({
+                "session_id": transcript.stem,
+                "project": project_dir.name,
+                "project_dir": project_dir,
+                "modified": datetime.fromtimestamp(stat.st_mtime),
+                "size": stat.st_size,
+            })
+
+    if not sessions:
+        console.print("[dim]No sessions found.[/dim]")
+        raise typer.Exit()
+
+    sessions.sort(key=lambda s: s["modified"], reverse=True)
+
+    choices = [
+        questionary.Choice(
+            title=f"{s['modified'].strftime('%Y-%m-%d %H:%M')}  "
+                  f"{s['session_id']}  "
+                  f"[{_format_size(s['size'])}]  "
+                  f"{s['project']}",
+            value=s,
+        )
+        for s in sessions
+    ]
+
+    selected = questionary.checkbox("Select sessions to archive:", choices=choices).ask()
+
+    if not selected:
+        console.print("[dim]nothing selected[/dim]")
+        raise typer.Exit()
+
+    for s in selected:
+        _archive_session(s["session_id"], s["project_dir"])
+        console.print(f"[green]archived[/green]  {s['session_id']}")
 
 
 @app.command("delete")

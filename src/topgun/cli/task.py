@@ -608,7 +608,7 @@ def add():
     relative_file = quote(f"{task_dir.name}/task.md")
     obs_url = f"obsidian://open?vault={quote(vault_name)}&file={relative_file}"
     title = structured.get("title", "Untitled")
-    console.print(f"[green]created[/green]  {title}  [link={obs_url}]↗[/link]")
+    console.print(f"[green]created[/green]  [link={obs_url}]{title}[/link]")
 
 
 @app.command("close")

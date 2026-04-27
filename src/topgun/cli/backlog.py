@@ -344,10 +344,10 @@ def _fetch_obsidian(vault_path: str) -> list[dict]:
             continue
         relative = md_file.relative_to(vault)
         host_file = host_vault / relative
-        # Files inside topgun/ are standalone task files — open them directly.
+        # Directory-based task files (slug/task.md) are opened directly in Obsidian.
         # Checkboxes in ordinary notes fall back to search so the exact line
         # is surfaced in context.
-        is_task_file = relative.parts[0] == "topgun"
+        is_task_file = relative.name == "task.md"
 
         for line in text.splitlines():
             if not _TASK_RE.match(line):

@@ -27,6 +27,8 @@ The `notes.sources` array lists every vault. Each source has:
 - `path`: absolute path to the vault root
 - `description`: plain-English summary of what lives there
 
+The `backlog.sources` array lists task sources. Identify the Obsidian task vault (type `"obsidian"` in `backlog.sources`) — you will need its `path` for backlog detection.
+
 If `~/.config/topgun/config.json` does not exist or has no `notes.sources`, tell the user and stop. They can add a vault with `topgun notes track`.
 
 ## Step 2 — Read the template
@@ -124,35 +126,35 @@ If no tasks are detected, do nothing.
 
 ### Creating backlog task files
 
-For each detected task:
+For each detected task, write it to the Obsidian task vault (`backlog.sources` → type `"obsidian"`):
 
-1. Read the task template from the primary vault:
-
-```bash
-cat <vault_path>/_templates/task.md
-```
-
-If absent, use the default task template (same as in `/topgun-backlog`).
-
-2. Ensure the `topgun/` subdirectory exists:
+1. Read the task template from the task vault:
 
 ```bash
-mkdir -p <vault_path>/topgun
+cat <task_vault_path>/_templates/task.md
 ```
 
-3. Infer a concise task title (3–6 words, title case) from the detected item.
-4. Slugify the title and name the file `YYYY-MM-DD-slugified-title.md`.
+If absent, use the default task template (same as in `/topgun-task`).
+
+2. Infer a concise task title (3–6 words, imperative verb form).
+3. Slugify the title and form the directory name: `YYYY-MM-DD-slugified-title`.
+4. Create the task directory:
+
+```bash
+mkdir -p <task_vault_path>/YYYY-MM-DD-slugified-title
+```
+
 5. Apply the template with:
    - `tags`: `[source:notes]`
    - `status`: `open`
    - `## About`: the task as a clear action statement
    - `## Motivation`: the source note filename and the exact passage that triggered the detection — e.g. _"Detected in `2026-04-26-meeting-notes.md`: 'I need to follow up with Sarah about the deployment timeline.'"_
    - All other sections: `_none_`
-6. Write the file to `<vault_path>/topgun/YYYY-MM-DD-slugified-title.md`.
+6. Write the file to `<task_vault_path>/YYYY-MM-DD-slugified-title/task.md`.
 
 ### After detection
 
-Do not report the detected tasks to the user during the current interaction. They will appear in `/topgun-backlog` with a `[suggested]` indicator when the user next lists their backlog.
+Do not report the detected tasks to the user during the current interaction. They will appear in `/topgun-task` with a `[suggested]` indicator when the user next lists their backlog.
 
 ## Tone
 

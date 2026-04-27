@@ -33,7 +33,7 @@ The `backlog.sources` array lists every source. Each source has:
   "backlog": {
     "sources": [
       { "type": "github", "repo": "diogobaltazar/topgun", "description": "topgun development tasks and feature work" },
-      { "type": "obsidian", "path": "~/Documents/Obsidian", "description": "personal tasks — groceries, gym, bills, errands" }
+      { "type": "obsidian", "path": "/Users/you/.topgun/backlog/obsidian-vault/topgun-task", "description": "personal tasks" }
     ]
   }
 }
@@ -43,7 +43,7 @@ If `~/.config/topgun/config.json` does not exist or has no `backlog.sources`, te
 
 ## Step 2 — Read the task template
 
-Before creating any Obsidian task, read the template from the primary Obsidian vault:
+Before creating any Obsidian task, read the template from the tasks vault:
 
 ```bash
 cat <vault_path>/_templates/task.md
@@ -55,6 +55,7 @@ If the template does not exist, use this default:
 ---
 date: {{date}}
 tags: [{{tags}}]
+status: open
 ---
 
 # {{title}}
@@ -113,13 +114,13 @@ Parse labels for priority: a label named `priority:high`, `priority:medium`, or 
 
 ### Obsidian sources
 
-Task files live in the `topgun/` subdirectory of the vault. Read all task files:
+Each task is a directory containing a `task.md` file. List all tasks:
 
 ```bash
-ls <vault_path>/topgun/*.md 2>/dev/null
+ls -d <vault_path>/*/  2>/dev/null | grep -v '_templates'
 ```
 
-For each file, read it and parse these frontmatter fields and section headings:
+For each directory, read `<dir>/task.md` and parse these frontmatter fields and section headings:
 
 **Frontmatter fields:**
 - `date` — creation date
@@ -196,16 +197,18 @@ gh issue close <number> --repo <repo>
 
 1. Infer a concise title from the request (3–6 words, title case).
 2. Slugify the title: lowercase, spaces to hyphens, remove punctuation.
-3. Name the file `YYYY-MM-DD-slugified-title.md` using today's date.
+3. Use today's date to form the slug: `YYYY-MM-DD-slugified-title`.
 4. Determine tags: include `priority:<level>` if known; include any other relevant tags.
 5. Apply the template, replacing all `{{placeholders}}`. Leave sparse sections as `_none_`.
-6. Ensure the `topgun/` subdirectory exists:
+6. Create the task directory and write `task.md` inside it:
 
 ```bash
-mkdir -p <vault_path>/Tasks
+mkdir -p <vault_path>/YYYY-MM-DD-slugified-title
 ```
 
-7. Write the file to `<vault_path>/topgun/YYYY-MM-DD-slugified-title.md`.
+7. Write the file to `<vault_path>/YYYY-MM-DD-slugified-title/task.md`.
+
+**Example output path:** `<vault_path>/2026-04-26-buy-groceries/task.md`
 
 **Example output file:**
 
@@ -245,11 +248,11 @@ _none_
 
 ### Completing an Obsidian task
 
-Read the task file, update the frontmatter `status` field to `closed`, and append `✅ <today's date>` to the title line in the `About` section or as a completion note. Then confirm in one sentence.
+Read `<task_dir>/task.md`, update the frontmatter `status` field to `closed`, and append `✅ <today's date>` as a completion note. Then confirm in one sentence.
 
 ### Editing an Obsidian task
 
-Read the file, make the change with the Edit tool, and confirm what was updated in one sentence.
+Read `<task_dir>/task.md`, make the change with the Edit tool, and confirm what was updated in one sentence.
 
 ## Tone
 

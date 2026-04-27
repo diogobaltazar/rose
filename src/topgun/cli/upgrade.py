@@ -108,9 +108,11 @@ def upgrade(
 
     # Ensure ~/.topgun directory structure exists
     topgun_dir = Path.home() / ".topgun"
-    notes_vault = topgun_dir / "notes" / "obsidian-vault" / "topgun"
+    notes_vault = topgun_dir / "notes" / "obsidian-vault" / "topgun-thought"
     notes_templates = notes_vault / "_templates"
-    for d in [topgun_dir, topgun_dir / "archive", notes_vault, notes_templates]:
+    task_vault = topgun_dir / "backlog" / "obsidian-vault" / "topgun-task"
+    task_templates = task_vault / "_templates"
+    for d in [topgun_dir, topgun_dir / "archive", notes_vault, notes_templates, task_vault, task_templates]:
         if not d.exists():
             d.mkdir(parents=True, exist_ok=True)
             results.add_row("[green]✓[/green]", str(d.relative_to(Path.home())), "created")
@@ -128,6 +130,43 @@ def upgrade(
             "{{content}}\n"
         )
         results.add_row("[green]✓[/green]", str(default_template.relative_to(Path.home())), "created")
+
+    default_task_template = task_templates / "task.md"
+    if not default_task_template.exists():
+        default_task_template.write_text(
+            "---\n"
+            "date: {{date}}\n"
+            "tags: [{{tags}}]\n"
+            "status: open\n"
+            "---\n"
+            "\n"
+            "# {{title}}\n"
+            "\n"
+            "## About\n"
+            "\n"
+            "{{about}}\n"
+            "\n"
+            "## Motivation\n"
+            "\n"
+            "{{motivation}}\n"
+            "\n"
+            "## Acceptance Criteria\n"
+            "\n"
+            "- [ ] {{criterion}}\n"
+            "\n"
+            "## Dependencies\n"
+            "\n"
+            "_none_\n"
+            "\n"
+            "## Best Before\n"
+            "\n"
+            "{{best_before}}\n"
+            "\n"
+            "## Must Before\n"
+            "\n"
+            "{{must_before}}\n"
+        )
+        results.add_row("[green]✓[/green]", str(default_task_template.relative_to(Path.home())), "created")
 
     # 1. Copy command files individually — never delete existing commands
     src_commands = global_src / "commands"

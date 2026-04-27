@@ -83,28 +83,54 @@ def test_settings_contains_permissions(installed):
 
 
 def test_notes_vault_created(installed, fake_home):
-    """upgrade() must create the notes vault directory tree under ~/.topgun.
+    """upgrade() must create the topgun-thought vault under ~/.topgun/notes/obsidian-vault/.
 
-    The slash command and topgun notes track depend on this directory
+    The /topgun-thought command and topgun notes track depend on this directory
     existing. If it is absent, note creation silently fails or errors.
     """
-    vault = fake_home / ".topgun" / "notes" / "obsidian-vault" / "topgun"
-    assert vault.exists(), "notes vault directory not created by upgrade"
+    vault = fake_home / ".topgun" / "notes" / "obsidian-vault" / "topgun-thought"
+    assert vault.exists(), "topgun-thought vault directory not created by upgrade"
 
 
 def test_notes_template_created(installed, fake_home):
-    """upgrade() must write a default note.md template to _templates/.
+    """upgrade() must write a default note.md template to topgun-thought/_templates/.
 
-    The /topgun-notes command reads this template before creating any
+    The /topgun-thought command reads this template before creating any
     note. A missing template causes the command to fall back to a
     hardcoded default, which is acceptable but not ideal — the template
     is the user's customisation point.
     """
     template = (
-        fake_home / ".topgun" / "notes" / "obsidian-vault" / "topgun"
+        fake_home / ".topgun" / "notes" / "obsidian-vault" / "topgun-thought"
         / "_templates" / "note.md"
     )
     assert template.exists(), "_templates/note.md not created by upgrade"
     content = template.read_text()
     assert "{{title}}" in content
     assert "{{content}}" in content
+
+
+def test_task_vault_created(installed, fake_home):
+    """upgrade() must create the topgun-task vault under ~/.topgun/backlog/obsidian-vault/.
+
+    The /topgun-task command writes new tasks here. If the directory is absent,
+    task creation fails immediately.
+    """
+    vault = fake_home / ".topgun" / "backlog" / "obsidian-vault" / "topgun-task"
+    assert vault.exists(), "topgun-task vault directory not created by upgrade"
+
+
+def test_task_template_created(installed, fake_home):
+    """upgrade() must write a default task.md template to topgun-task/_templates/.
+
+    Both /topgun-task and /topgun-thought read this template before creating tasks.
+    A missing template causes both commands to fall back to a hardcoded default.
+    """
+    template = (
+        fake_home / ".topgun" / "backlog" / "obsidian-vault" / "topgun-task"
+        / "_templates" / "task.md"
+    )
+    assert template.exists(), "_templates/task.md not created by upgrade"
+    content = template.read_text()
+    assert "{{title}}" in content
+    assert "{{criterion}}" in content

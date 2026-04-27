@@ -26,13 +26,22 @@ _MODEL = "claude-haiku-4-5-20251001"
 
 
 def _get_token() -> str:
+    # Prefer a direct API key if provided — works in Docker and CI without
+    # needing the helper binary mounted into the container.
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if api_key:
+        return api_key
+
+    # Fall back to the auth helper (e.g. `claude auth token`) for native installs
+    # where the claude CLI is available on the host.
     helper = os.environ.get("TOPGUN_AUTH_HELPER", "").strip()
-    if not helper:
-        raise EnvironmentError(
-            "TOPGUN_AUTH_HELPER is not set. "
-            "Copy .env.example to .env and fill in the value."
-        )
-    return subprocess.check_output([helper, "auth", "token"]).decode().strip()
+    if helper:
+        return subprocess.check_output([helper, "auth", "token"]).decode().strip()
+
+    raise EnvironmentError(
+        "No Anthropic credentials found. Set ANTHROPIC_API_KEY or "
+        "TOPGUN_AUTH_HELPER in your environment or .env file."
+    )
 
 
 def _append_log(record: dict) -> None:

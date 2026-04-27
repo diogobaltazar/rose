@@ -124,12 +124,24 @@ def archive():
 
     sessions.sort(key=lambda s: s["modified"], reverse=True)
 
+    # Pre-calculate column widths for alignment.
+    max_size = max(len(_format_size(s["size"])) for s in sessions)
+
+    # ANSI codes — prompt_toolkit renders these natively in questionary titles.
+    _DIM    = "\033[2m"
+    _CYAN   = "\033[36m"
+    _GREEN  = "\033[32m"
+    _MAG    = "\033[35m"
+    _RESET  = "\033[0m"
+
     choices = [
         questionary.Choice(
-            title=f"{s['modified'].strftime('%Y-%m-%d %H:%M')}  "
-                  f"{s['session_id']}  "
-                  f"[{_format_size(s['size'])}]  "
-                  f"{s['project']}",
+            title=(
+                f"{_DIM}{s['modified'].strftime('%Y-%m-%d %H:%M')}{_RESET}  "
+                f"{_CYAN}{s['session_id']}{_RESET}  "
+                f"{_GREEN}{_format_size(s['size']).rjust(max_size)}{_RESET}  "
+                f"{_MAG}{s['project']}{_RESET}"
+            ),
             value=s,
         )
         for s in sessions

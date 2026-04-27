@@ -30,12 +30,19 @@ def _task_id(item: dict) -> str:
     return f"obsidian:{item['source_full']}:{item['title']}"
 
 
-def fetch_tasks() -> list[dict]:
-    """Return all open backlog tasks as {uid, id, title, source, due, url} dicts."""
+def fetch_tasks(statuses: list[str] | None = None) -> list[dict]:
+    """Return backlog tasks as {uid, id, title, source, due, url, state} dicts.
+
+    Args:
+        statuses: Status values to include (e.g. ["open"], ["open", "closed"]).
+                  Defaults to ["open"] to preserve existing behaviour.
+    """
+    if statuses is None:
+        statuses = ["open"]
     sources = _get_sources()
     if not sources:
         return []
-    items, _ = _fetch_all(sources)
+    items, _ = _fetch_all(sources, statuses=statuses)
     result = []
     for item in items:
         source_id = _task_id(item)
@@ -47,6 +54,7 @@ def fetch_tasks() -> list[dict]:
             "source_full": item.get("source_full", ""),
             "due": item.get("due", ""),
             "url": item.get("url", ""),
+            "state": item.get("state", "open"),
         })
     return result
 

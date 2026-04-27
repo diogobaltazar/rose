@@ -227,16 +227,18 @@ def list_cmd(
 # Fetching
 # ---------------------------------------------------------------------------
 
-def _fetch_all(sources: list[dict]) -> tuple[list[dict], list[str]]:
+def _fetch_all(sources: list[dict], statuses: list[str] | None = None) -> tuple[list[dict], list[str]]:
+    if statuses is None:
+        statuses = ["open"]
     items, errors = [], []
     for s in sources:
         if s["type"] == "github":
-            fetched, err = _fetch_github(s["repo"], s.get("token_env", "GITHUB_TOKEN"))
+            fetched, err = _fetch_github(s["repo"], s.get("token_env", "GITHUB_TOKEN"), statuses=statuses)
             items.extend(fetched)
             if err:
                 errors.append(err)
         elif s["type"] == "obsidian":
-            items.extend(_fetch_obsidian(s["path"]))
+            items.extend(_fetch_obsidian(s["path"], statuses=statuses))
     return items, errors
 
 
@@ -250,18 +252,32 @@ def _fetch_github_description(repo: str, token_env: str) -> str:
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
-def _fetch_github(repo: str, token_env: str) -> tuple[list[dict], str]:
+def _fetch_github(repo: str, token_env: str, statuses: list[str] | None = None) -> tuple[list[dict], str]:
+    if statuses is None:
+        statuses = ["open"]
     token = os.environ.get(token_env, "")
     if not token:
         return [], f"{repo}: {token_env} not set — run: export {token_env}=$(gh auth token)"
+
+    # GitHub only understands "open", "closed", "all".
+    # "inprogress" is an Obsidian-only concept; map it to "open" for GitHub.
+    gh_statuses = {s for s in statuses if s in ("open", "closed")}
+    if not gh_statuses:
+        return [], ""
+    if "open" in gh_statuses and "closed" in gh_statuses:
+        gh_state = "all"
+    elif "closed" in gh_statuses:
+        gh_state = "closed"
+    else:
+        gh_state = "open"
 
     env = {**os.environ, "GITHUB_TOKEN": token}
     result = subprocess.run(
         [
             "gh", "issue", "list",
             "--repo", repo,
-            "--state", "open",
-            "--json", "number,title,labels,createdAt,body",
+            "--state", gh_state,
+            "--json", "number,title,labels,createdAt,body,state",
             "--limit", "200",
         ],
         capture_output=True,
@@ -276,6 +292,9 @@ def _fetch_github(repo: str, token_env: str) -> tuple[list[dict], str]:
 
     items = []
     for issue in json.loads(result.stdout or "[]"):
+        issue_state = (issue.get("state") or "OPEN").upper()
+        # Normalise GitHub state strings to lowercase "open"/"closed".
+        state = "closed" if issue_state == "CLOSED" else "open"
         priority = ""
         tags = []
         for label in issue.get("labels", []):
@@ -298,7 +317,7 @@ def _fetch_github(repo: str, token_env: str) -> tuple[list[dict], str]:
             "source_full": repo,
             "priority": priority,
             "due": must_before or best_before or "",
-            "state": "open",
+            "state": state,
             "must_before": must_before,
             "best_before": best_before,
             "tags": tags,
@@ -326,8 +345,22 @@ def _resolve_vault_path(vault_path: str) -> Path:
     return path
 
 
-def _fetch_obsidian(vault_path: str) -> list[dict]:
+_FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---", re.DOTALL)
+_FM_FIELD_RE = re.compile(r"^(\w+):\s*(.*)$", re.MULTILINE)
+
+
+def _parse_frontmatter(text: str) -> dict:
+    """Extract key-value pairs from YAML frontmatter (simple scalar values only)."""
+    m = _FRONTMATTER_RE.match(text)
+    if not m:
+        return {}
+    return {k: v.strip().strip('"').strip("'") for k, v in _FM_FIELD_RE.findall(m.group(1))}
+
+
+def _fetch_obsidian(vault_path: str, statuses: list[str] | None = None) -> list[dict]:
     from urllib.parse import quote
+    if statuses is None:
+        statuses = ["open"]
     vault = _resolve_vault_path(vault_path)
     if not vault.exists():
         return []
@@ -349,25 +382,49 @@ def _fetch_obsidian(vault_path: str) -> list[dict]:
         # is surfaced in context.
         is_task_file = relative.name == "task.md"
 
+        # For directory-based task files, read status and due dates from
+        # frontmatter and section headings rather than checkbox emoji patterns.
+        if is_task_file:
+            fm = _parse_frontmatter(text)
+            status = fm.get("status", "open")
+            if status not in statuses:
+                continue
+            # Due date: prefer Must Before, fall back to Best Before.
+            # Strip null placeholders first so the `or` chain works correctly.
+            _null = {"_none_", "none", ""}
+            must_before = _parse_body_section(text, "Must Before").strip()
+            must_before = must_before if must_before.lower() not in _null else ""
+            best_before = _parse_body_section(text, "Best Before").strip()
+            best_before = best_before if best_before.lower() not in _null else ""
+            due = must_before or best_before
+
         for line in text.splitlines():
             if not _TASK_RE.match(line):
                 continue
             title = _TASK_RE.sub("", line).strip()
 
-            due_match = _DUE_RE.search(title)
-            due = due_match.group(1) if due_match else ""
-            title = _DUE_RE.sub("", title).strip()
-
-            pri_match = _PRI_RE.search(title)
-            priority = PRIORITY_ICON.get(pri_match.group(1), "") if pri_match else ""
-            title = _PRI_RE.sub("", title).strip()
-
-            tags = _TAG_RE.findall(title)
-            title = _TAG_RE.sub("", title).strip()
-
             if is_task_file:
+                # Due date and priority already resolved from frontmatter/sections.
+                title = _DUE_RE.sub("", title).strip()
+                pri_match = _PRI_RE.search(title)
+                priority = PRIORITY_ICON.get(pri_match.group(1), "") if pri_match else fm.get("priority", "")
+                title = _PRI_RE.sub("", title).strip()
+                tags = _TAG_RE.findall(title)
+                title = _TAG_RE.sub("", title).strip()
                 obs_url = f"obsidian://open?path={quote(str(host_file))}"
             else:
+                due_match = _DUE_RE.search(title)
+                due = due_match.group(1) if due_match else ""
+                title = _DUE_RE.sub("", title).strip()
+
+                pri_match = _PRI_RE.search(title)
+                priority = PRIORITY_ICON.get(pri_match.group(1), "") if pri_match else ""
+                title = _PRI_RE.sub("", title).strip()
+
+                tags = _TAG_RE.findall(title)
+                title = _TAG_RE.sub("", title).strip()
+                status = "open"
+
                 obs_url = f"obsidian://search?query={quote(title)}"
 
             items.append({
@@ -376,7 +433,7 @@ def _fetch_obsidian(vault_path: str) -> list[dict]:
                 "source_full": vault_path,
                 "priority": priority,
                 "due": due,
-                "state": "open",
+                "state": status,
                 "tags": tags,
                 "url": obs_url,
             })

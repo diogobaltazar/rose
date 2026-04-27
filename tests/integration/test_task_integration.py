@@ -109,3 +109,109 @@ def test_multiple_cycles_accumulate(isolated_log):
     runner.invoke(app, ["start", "--task", "1"])
     runner.invoke(app, ["stop"])
     assert len(_events(isolated_log)) == 4
+
+
+# ── list --filter ───────────────────────────────────────────────────────────────
+
+
+def _task(uid_str: str, title: str, state: str = "open", due: str = "") -> dict:
+    """Build a minimal task dict as returned by fetch_tasks."""
+    return {
+        "uid": _uid(uid_str),
+        "id": uid_str,
+        "title": title,
+        "source": "obsidian",
+        "source_full": "/fake/vault",
+        "due": due,
+        "url": "",
+        "state": state,
+    }
+
+
+def test_list_filter_shows_open_by_default(monkeypatch):
+    """
+    `topgun task list` must show only open tasks when no filter is given.
+
+    What is tested: the fetch_tasks call receives statuses=["open"] and the
+    command output excludes closed tasks.
+    What is NOT tested: GitHub fetching or real vault I/O.
+    """
+    captured = {}
+
+    def fake_fetch(statuses=None):
+        captured["statuses"] = statuses
+        return [_task("obsidian:/vault:open-task", "Open Task", state="open")]
+
+    monkeypatch.setattr("topgun.cli.task.fetch_tasks", fake_fetch)
+    monkeypatch.setattr("topgun.cli.task._get_sources", lambda: [{"type": "obsidian"}])
+
+    result = runner.invoke(app, ["list"])
+    assert result.exit_code == 0
+    assert captured["statuses"] == ["open"]
+    assert "Open Task" in result.output
+
+
+def test_list_filter_closed(monkeypatch):
+    """
+    `topgun task list --filter status=closed` must pass ["closed"] to fetch_tasks.
+
+    What is tested: the status filter propagates from the CLI flag through
+    _parse_filter to the fetch_tasks call.
+    What is NOT tested: actual vault or GitHub fetching.
+    """
+    captured = {}
+
+    def fake_fetch(statuses=None):
+        captured["statuses"] = statuses
+        return [_task("obsidian:/vault:closed-task", "Closed Task", state="closed")]
+
+    monkeypatch.setattr("topgun.cli.task.fetch_tasks", fake_fetch)
+    monkeypatch.setattr("topgun.cli.task._get_sources", lambda: [{"type": "obsidian"}])
+
+    result = runner.invoke(app, ["list", "--filter", "status=closed"])
+    assert result.exit_code == 0
+    assert "closed" in captured["statuses"]
+    assert "Closed Task" in result.output
+
+
+def test_list_filter_multiple_shows_status_column(monkeypatch):
+    """
+    `topgun task list --filter status=open,closed` must include a Status column.
+
+    What is tested: the Status column appears when more than one status is
+    requested. This column is the user's signal that they are viewing a mixed
+    result set and need to distinguish states at a glance.
+    What is NOT tested: column formatting details or exact alignment.
+    """
+    def fake_fetch(statuses=None):
+        return [
+            _task("obsidian:/vault:open-task", "Open Task", state="open"),
+            _task("obsidian:/vault:closed-task", "Closed Task", state="closed"),
+        ]
+
+    monkeypatch.setattr("topgun.cli.task.fetch_tasks", fake_fetch)
+    monkeypatch.setattr("topgun.cli.task._get_sources", lambda: [{"type": "obsidian"}])
+
+    result = runner.invoke(app, ["list", "--filter", "status=open,closed"])
+    assert result.exit_code == 0
+    assert "Status" in result.output
+
+
+def test_list_due_date_populated_from_section(monkeypatch):
+    """
+    Due dates returned by fetch_tasks must appear in `topgun task list` output.
+
+    What is tested: the due field flows from fetch_tasks through list_cmd
+    to the rendered Rich table. Verifies the end-to-end rendering path,
+    not the parsing (covered in unit tests).
+    What is NOT tested: date colour coding or real vault I/O.
+    """
+    def fake_fetch(statuses=None):
+        return [_task("obsidian:/vault:dated-task", "Dated Task", state="open", due="2026-06-01")]
+
+    monkeypatch.setattr("topgun.cli.task.fetch_tasks", fake_fetch)
+    monkeypatch.setattr("topgun.cli.task._get_sources", lambda: [{"type": "obsidian"}])
+
+    result = runner.invoke(app, ["list"])
+    assert result.exit_code == 0
+    assert "2026-06-01" in result.output

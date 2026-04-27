@@ -7,6 +7,7 @@ Replaces the separate `backlog` and `timer` commands. All task sources
 
 import json
 import os
+import re
 from datetime import datetime, timezone, date, timedelta
 from pathlib import Path
 from typing import Optional
@@ -304,19 +305,40 @@ def _list_sort_key(t: dict) -> tuple:
     return (due or "9999-99-99", t.get("source_full", ""), t["title"])
 
 
+def _parse_filter(filter_str: str) -> list[str]:
+    """Parse '--filter status=open,closed' into a list of status strings."""
+    statuses = []
+    for part in filter_str.split(","):
+        part = part.strip()
+        if "=" in part:
+            key, _, val = part.partition("=")
+            if key.strip() == "status":
+                statuses.extend(v.strip() for v in val.split(",") if v.strip())
+        else:
+            # Bare value, treat as status directly.
+            if part:
+                statuses.append(part)
+    return statuses or ["open"]
+
+
 @app.command("list")
 def list_cmd(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show source path column"),
+    filter: Optional[str] = typer.Option(None, "--filter", "-f", help="Filter e.g. status=open,closed"),
 ):
-    """List all open tasks with accumulated time where recorded."""
+    """List tasks with accumulated time where recorded. Defaults to open tasks only."""
     sources = _get_sources()
     if not sources:
         typer.echo("no sources tracked — run: topgun task track")
         raise typer.Exit()
 
-    tasks = fetch_tasks()
+    statuses = _parse_filter(filter) if filter else ["open"]
+    show_status = len(statuses) > 1
+
+    tasks = fetch_tasks(statuses=statuses)
     if not tasks:
-        console.print("[dim]no open tasks found[/dim]")
+        label = "/".join(statuses)
+        console.print(f"[dim]no {label} tasks found[/dim]")
         return
 
     totals = _totals_by_task_id()
@@ -328,9 +350,13 @@ def list_cmd(
     table.add_column("Type", no_wrap=True)
     table.add_column("Title")
     table.add_column("Due", width=12, no_wrap=True)
+    if show_status:
+        table.add_column("Status", width=10, no_wrap=True)
     table.add_column("Time", justify="right")
     if verbose:
         table.add_column("Source", style="dim")
+
+    _STATUS_COLOR = {"open": "green", "closed": "dim", "inprogress": "yellow"}
 
     has_links = False
     for t in sorted(tasks, key=_list_sort_key):
@@ -349,7 +375,12 @@ def list_cmd(
         else:
             title_cell = t["title"]
 
-        row = [t["uid"], _type_tag(t["source"]), title_cell, due_cell, f"{time_str}{marker}"]
+        row = [t["uid"], _type_tag(t["source"]), title_cell, due_cell]
+        if show_status:
+            st = t.get("state", "open")
+            sc = _STATUS_COLOR.get(st, "dim")
+            row.append(f"[{sc}]{st}[/{sc}]")
+        row.append(f"{time_str}{marker}")
         if verbose:
             row.append(t.get("source_full", ""))
         table.add_row(*row)
@@ -398,6 +429,254 @@ def show(
 
     console.print(table)
     console.print(f"\n  [bold]Total[/bold]  {_fmt_duration(total_s)}\n")
+
+
+# ---------------------------------------------------------------------------
+# Commands — task creation and closing
+# ---------------------------------------------------------------------------
+
+_ADD_EDITOR_TEMPLATE = """\
+# New task — describe it below in plain language.
+# Include: what you want to do, why, any deadlines, and priority.
+# Lines starting with '#' are ignored.
+
+"""
+
+_OBSIDIAN_TASK_TEMPLATE = """\
+---
+date: {date}
+tags: [{tags}]
+status: open
+priority: {priority}
+---
+
+# {title}
+
+## About
+
+{about}
+
+## Motivation
+
+{motivation}
+
+## Acceptance Criteria
+
+{criteria}
+
+## Dependencies
+
+_none_
+
+## Best Before
+
+{best_before}
+
+## Must Before
+
+{must_before}
+"""
+
+
+def _slugify(title: str) -> str:
+    import unicodedata
+    title = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode()
+    title = title.lower()
+    title = re.sub(r"[^\w\s-]", "", title)
+    title = re.sub(r"[\s_]+", "-", title).strip("-")
+    return title
+
+
+def _write_obsidian_task(vault_path: str, structured: dict) -> Path:
+    """Write a new task.md to the vault. Returns the task directory path."""
+    vault = _resolve_vault_path(vault_path)
+    today = date.today().isoformat()
+    slug = _slugify(structured.get("title", "untitled"))
+    task_dir = vault / f"{today}-{slug}"
+    task_dir.mkdir(parents=True, exist_ok=True)
+
+    tags_list = structured.get("tags") or []
+    tags_str = ", ".join(f'"{t}"' for t in tags_list)
+
+    criteria = structured.get("acceptance_criteria") or []
+    criteria_str = "\n".join(f"- [ ] {c}" for c in criteria) or "- [ ] Done"
+
+    content = _OBSIDIAN_TASK_TEMPLATE.format(
+        date=today,
+        tags=tags_str,
+        priority=structured.get("priority") or "",
+        title=structured.get("title", "Untitled"),
+        about=structured.get("about") or "_none_",
+        motivation=structured.get("motivation") or "_none_",
+        criteria=criteria_str,
+        best_before=structured.get("best_before") or "_none_",
+        must_before=structured.get("must_before") or "_none_",
+    )
+
+    task_file = task_dir / "task.md"
+    task_file.write_text(content, encoding="utf-8")
+    return task_dir
+
+
+@app.command("add")
+def add():
+    """Create a new task. Select a source, describe the task in $EDITOR."""
+    sources = _get_sources()
+    if not sources:
+        typer.echo("no sources tracked — run: topgun task track")
+        raise typer.Exit()
+
+    obsidian_sources = [s for s in sources if s["type"] == "obsidian"]
+    github_sources = [s for s in sources if s["type"] == "github"]
+
+    console.print()
+    console.print("[bold]Select a source:[/bold]\n")
+
+    idx = 1
+    numbered: list[dict] = []
+    for s in obsidian_sources:
+        label = s.get("path", "?")
+        desc = s.get("description", "")
+        console.print(f"  [dim]{idx}[/dim]  [magenta]obsidian[/magenta]  [cyan]{label}[/cyan]  [dim]{desc}[/dim]")
+        numbered.append(s)
+        idx += 1
+    for s in github_sources:
+        label = s.get("repo", "?")
+        desc = s.get("description", "")
+        console.print(f"      [dim]github[/dim]    [dim]{label}[/dim]  [dim]{desc}  [unavailable][/dim]")
+
+    console.print()
+
+    if not obsidian_sources:
+        console.print("[yellow]no Obsidian sources tracked — run: topgun task track --type obsidian[/yellow]")
+        raise typer.Exit(1)
+
+    if len(numbered) == 1:
+        chosen = numbered[0]
+    else:
+        raw = typer.prompt("source #", default="1")
+        try:
+            choice_idx = int(raw.strip()) - 1
+            assert 0 <= choice_idx < len(numbered)
+        except (ValueError, AssertionError):
+            console.print("[red]invalid selection[/red]")
+            raise typer.Exit(1)
+        chosen = numbered[choice_idx]
+
+    today = date.today().isoformat()
+    text = click.edit(_ADD_EDITOR_TEMPLATE)
+    if not text:
+        console.print("[yellow]no input — cancelled[/yellow]")
+        raise typer.Exit(1)
+    lines = [l for l in text.splitlines() if not l.startswith("#")]
+    description = " ".join(lines).strip()
+    if not description:
+        console.print("[yellow]no description entered — cancelled[/yellow]")
+        raise typer.Exit(1)
+
+    console.print("[dim]structuring task…[/dim]")
+    from topgun.inference.anthropic import call, load_prompt
+    system = load_prompt("task_add")
+    user_msg = f"Today's date: {today}\n\nTask description:\n{description}"
+    raw_json = call(prompt=user_msg, system=system, command="task_add")
+
+    try:
+        structured = json.loads(raw_json)
+    except json.JSONDecodeError:
+        console.print("[red]could not parse model response — task not saved[/red]")
+        console.print(f"[dim]{raw_json}[/dim]")
+        raise typer.Exit(1)
+
+    task_dir = _write_obsidian_task(chosen["path"], structured)
+    console.print(f"[green]created[/green]  [cyan]{structured.get('title', 'Untitled')}[/cyan]")
+    console.print(f"[dim]{task_dir}[/dim]")
+
+
+@app.command("close")
+def close(
+    task_ref: Optional[str] = typer.Argument(None, help="Task UID, issue number, source ID, or description"),
+):
+    """Close a task. Accepts a UID/issue number, or uses fuzzy search if omitted."""
+    if task_ref:
+        resolved = _resolve_task(task_ref)
+    else:
+        query = _editor_query()
+        if not query:
+            console.print("[yellow]no description entered — cancelled[/yellow]")
+            raise typer.Exit(1)
+        resolved = _resolve_task(query)
+
+    source_id: str = resolved["id"]
+
+    if source_id.startswith("obsidian:"):
+        # Derive the vault path and task directory from the source ID.
+        # Format: "obsidian:<vault_path>:<title>"
+        parts = source_id.split(":", 2)
+        if len(parts) < 3:
+            console.print(f"[red]cannot parse obsidian source ID:[/red] {source_id}")
+            raise typer.Exit(1)
+        vault_path = parts[1]
+        task_title = parts[2]
+
+        # Locate the task.md file by searching for a directory whose task.md
+        # contains an Acceptance Criteria checkbox with a matching title.
+        vault = _resolve_vault_path(vault_path)
+        task_file: Path | None = None
+        for md_file in vault.rglob("task.md"):
+            try:
+                text = md_file.read_text(encoding="utf-8")
+            except Exception:
+                continue
+            for line in text.splitlines():
+                from topgun.cli.backlog import _TASK_RE
+                if _TASK_RE.match(line):
+                    line_title = _TASK_RE.sub("", line).strip()
+                    if line_title == task_title:
+                        task_file = md_file
+                        break
+            if task_file:
+                break
+
+        if task_file is None:
+            console.print(f"[yellow]task file not found for:[/yellow] {task_title}")
+            raise typer.Exit(1)
+
+        text = task_file.read_text(encoding="utf-8")
+        # Update status in frontmatter.
+        if "status: open" in text:
+            text = text.replace("status: open", "status: closed", 1)
+        elif "status:" in text:
+            text = re.sub(r"(status:\s*)(\S+)", r"\1closed", text, count=1)
+        else:
+            # Append status to frontmatter if missing.
+            text = text.replace("---\n", "---\nstatus: closed\n", 1)
+
+        today = date.today().isoformat()
+        text = text.rstrip() + f"\n\n✅ {today}\n"
+        task_file.write_text(text, encoding="utf-8")
+        console.print(f"[green]closed[/green]  [cyan]{resolved['title']}[/cyan]")
+
+    elif source_id.startswith("github:"):
+        # Format: "github:<owner/repo>#<number>"
+        m = re.match(r"github:([^#]+)#(\d+)", source_id)
+        if not m:
+            console.print(f"[red]cannot parse github source ID:[/red] {source_id}")
+            raise typer.Exit(1)
+        repo, number = m.group(1), m.group(2)
+        import subprocess as _sp
+        result = _sp.run(
+            ["gh", "issue", "close", number, "--repo", repo],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            err = result.stderr.strip() or result.stdout.strip()
+            console.print(f"[red]gh issue close failed:[/red] {err}")
+            raise typer.Exit(1)
+        console.print(f"[green]closed[/green]  [cyan]{resolved['title']}[/cyan]")
+
+    else:
+        console.print(f"[yellow]unknown source type for:[/yellow] {source_id}")
+        raise typer.Exit(1)
 
 
 # ---------------------------------------------------------------------------

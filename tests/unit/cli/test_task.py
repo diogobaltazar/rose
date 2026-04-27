@@ -18,6 +18,9 @@ from topgun.cli.task import (
     _read_events,
     _totals_by_task_id,
     _intervals_by_task_id,
+    _parse_filter,
+    _slugify,
+    _write_obsidian_task,
     TIMER_LOG,
 )
 from topgun.cli.timer_match import _uid
@@ -153,3 +156,102 @@ def test_intervals_returns_correct_count(isolated_timer_log):
     intervals = _intervals_by_task_id("github:owner/repo#1")
     assert len(intervals) == 2
     assert all(i["end"] is not None for i in intervals)
+
+
+# ── _parse_filter ─────────────────────────────────────────────────────────────
+
+
+def test_parse_filter_single_status():
+    """status=closed must return ['closed'].
+
+    _parse_filter drives the fetch_tasks statuses argument; wrong parsing
+    means the wrong tasks are fetched.
+    """
+    assert _parse_filter("status=closed") == ["closed"]
+
+
+def test_parse_filter_multiple_statuses():
+    """Comma-separated statuses must all be returned."""
+    result = _parse_filter("status=open,closed")
+    assert set(result) == {"open", "closed"}
+
+
+def test_parse_filter_defaults_to_open_on_empty():
+    """An empty filter string must fall back to ['open']."""
+    assert _parse_filter("") == ["open"]
+
+
+def test_parse_filter_bare_value():
+    """A bare status value (no key=) must be accepted."""
+    assert _parse_filter("open") == ["open"]
+
+
+# ── _slugify ──────────────────────────────────────────────────────────────────
+
+
+def test_slugify_basic():
+    """Spaces become hyphens and the result is lowercase.
+
+    The slug is used as part of the vault directory name; a wrong slug
+    would create an unreadable path or fail mkdir.
+    """
+    assert _slugify("Book Dentist Appointment") == "book-dentist-appointment"
+
+
+def test_slugify_strips_punctuation():
+    """Punctuation must be removed without leaving double-hyphens."""
+    result = _slugify("Fix it! Now.")
+    assert "!" not in result
+    assert "--" not in result
+
+
+def test_slugify_handles_unicode():
+    """Non-ASCII characters must be transliterated or dropped, not raise."""
+    result = _slugify("Café au lait")
+    assert isinstance(result, str)
+    assert all(c in "abcdefghijklmnopqrstuvwxyz0123456789-" for c in result)
+
+
+# ── _write_obsidian_task ──────────────────────────────────────────────────────
+
+
+def test_write_obsidian_task_creates_file(tmp_path):
+    """write_obsidian_task must create a task.md inside a dated slug directory.
+
+    This is the terminal action of `topgun task add`. If the file is not
+    created, the task is silently lost.
+    """
+    structured = {
+        "title": "Buy Groceries",
+        "about": "Weekly restock.",
+        "motivation": None,
+        "acceptance_criteria": ["Groceries purchased"],
+        "best_before": "2026-05-10",
+        "must_before": None,
+        "priority": "medium",
+        "tags": ["personal"],
+    }
+    task_dir = _write_obsidian_task(str(tmp_path), structured)
+    task_file = task_dir / "task.md"
+    assert task_file.exists()
+    content = task_file.read_text()
+    assert "# Buy Groceries" in content
+    assert "status: open" in content
+    assert "2026-05-10" in content
+    assert "- [ ] Groceries purchased" in content
+
+
+def test_write_obsidian_task_slug_from_title(tmp_path):
+    """The directory name must be based on a slugified version of the title."""
+    structured = {
+        "title": "Call The Bank",
+        "about": "Monthly check.",
+        "motivation": None,
+        "acceptance_criteria": [],
+        "best_before": None,
+        "must_before": None,
+        "priority": None,
+        "tags": [],
+    }
+    task_dir = _write_obsidian_task(str(tmp_path), structured)
+    assert "call-the-bank" in task_dir.name

@@ -23,8 +23,8 @@ services:
         target: /topgun-data
     environment:
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-}
+      - ANTHROPIC_API_KEY=${TOPGUN_ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_BASE_URL=${TOPGUN_ANTHROPIC_BASE_URL:-}
       - CLAUDE_DIR=/claude
       - TOPGUN_CONFIG=/topgun-config/config.json
       - TOPGUN_VAULT=/topgun-data/archive

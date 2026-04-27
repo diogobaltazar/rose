@@ -602,8 +602,11 @@ def add():
 
     task_dir = _write_obsidian_task(chosen["path"], structured)
 
-    host_task_file = Path(chosen["path"]).expanduser() / task_dir.name / "task.md"
-    obs_url = f"obsidian://open?path={quote(str(host_task_file))}"
+    # Use vault+file URL format — avoids VSCode's terminal file-path detector
+    # hijacking the click when an absolute path appears in the URL.
+    vault_name = Path(chosen["path"]).name
+    relative_file = quote(f"{task_dir.name}/task.md")
+    obs_url = f"obsidian://open?vault={quote(vault_name)}&file={relative_file}"
     title = structured.get("title", "Untitled")
     console.print(f"[green]created[/green]  [link={obs_url}]{title}[/link]  [dim]↗[/dim]")
 

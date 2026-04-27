@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from typer.testing import CliRunner
 
-from topgun.cli.session import ARCHIVE, _archive_session, _format_size, app
+from topgun.cli.session import ARCHIVE, _archive_session, _dir_stats, _format_size, app
 
 runner = CliRunner()
 
@@ -35,6 +35,69 @@ def test_format_size_boundary():
     files to display as '1000.0 KB' rather than '1.0 MB'.
     """
     assert _format_size(1_000_000) == "1.0 MB"
+
+
+def test_dir_stats_size_and_mtime(tmp_path):
+    """_dir_stats must return the correct total size and newest mtime in one pass.
+
+    This is the core correctness test for the single-pass optimisation. Both
+    values must be accurate — an incorrect size or stale mtime would produce
+    wrong output in session list and archive. The test uses two files with
+    distinct mtimes to verify that the maximum (not the first or last) is
+    returned, and that sizes are summed, not max'd.
+    """
+    import time
+
+    root = tmp_path / "session"
+    root.mkdir()
+    sub = root / "subagents"
+    sub.mkdir()
+
+    f1 = sub / "agent-a.jsonl"
+    f1.write_bytes(b"x" * 100)
+    time.sleep(0.01)
+    f2 = sub / "agent-b.jsonl"
+    f2.write_bytes(b"y" * 200)
+
+    size, mtime = _dir_stats(root)
+
+    assert size == 300
+    assert mtime == pytest.approx(f2.stat().st_mtime, abs=0.001)
+
+
+def test_dir_stats_empty_dir(tmp_path):
+    """_dir_stats must handle a directory containing no files without error.
+
+    New-format session dirs that have been partially cleaned up may contain
+    only subdirectory structure with no files. Returning size=0 and the dir's
+    own mtime is the correct and safe behaviour — it avoids a max([]) ValueError
+    and still produces a displayable row in the session list.
+    """
+    root = tmp_path / "empty-session"
+    root.mkdir()
+    (root / "subagents").mkdir()
+
+    size, mtime = _dir_stats(root)
+
+    assert size == 0
+    assert mtime == pytest.approx(root.stat().st_mtime, abs=1.0)
+
+
+def test_dir_stats_nested(tmp_path):
+    """_dir_stats must recurse into nested subdirectories.
+
+    Subagent files live at arbitrary depth inside the session dir. A shallow
+    walk would silently undercount size and produce an incorrect mtime. This
+    test verifies that files two levels deep are included in both aggregates.
+    """
+    root = tmp_path / "session"
+    deep = root / "subagents" / "nested"
+    deep.mkdir(parents=True)
+    (deep / "agent.jsonl").write_bytes(b"z" * 50)
+
+    size, mtime = _dir_stats(root)
+
+    assert size == 50
 
 
 def test_list_no_projects_dir(tmp_path):

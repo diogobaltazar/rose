@@ -27,6 +27,8 @@ services:
       - TOPGUN_CONFIG=/topgun-config/config.json
       - TOPGUN_VAULT=/topgun-data/archive
       - OBSIDIAN_DIR=/topgun-data
+      - TOPGUN_TIMER_LOG=/topgun-data/timer.jsonl
+      - TOPGUN_INFERENCE_LOG=/topgun-data/logs/inference/anthropic/calls.jsonl
 
   api:
     container_name: topgun-api

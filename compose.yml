@@ -24,7 +24,6 @@ services:
     environment:
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - TOPGUN_AUTH_HELPER=${TOPGUN_AUTH_HELPER:-}
       - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-}
       - CLAUDE_DIR=/claude
       - TOPGUN_CONFIG=/topgun-config/config.json

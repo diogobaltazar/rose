@@ -32,6 +32,31 @@ WEB_DIR = Path(__file__).parent.parent / "web"
 
 STALE_THRESHOLD = 120  # seconds — transcript older than this is considered done
 
+# ── Transcript read cache ─────────────────────────────────────────────────────
+#
+# _read_transcript() parses JSONL line-by-line. With hundreds of sessions on
+# disk this becomes the dominant cost of every _scan_sessions() call, which is
+# invoked synchronously inside the WebSocket handler — blocking the event loop
+# before the initial payload is sent to the browser.
+#
+# The cache maps an absolute Path to a (mtime, result) tuple. Before parsing,
+# _read_transcript() checks whether the file's current mtime matches the cached
+# value. A cache hit returns the stored dict immediately; a cache miss (new
+# file or mtime changed) parses the file and updates the entry. Live sessions
+# receive a cache miss on each refresh because their mtime advances with every
+# appended message, which is exactly the desired behaviour. Done sessions are
+# parsed exactly once.
+#
+# The cache is module-level and lives for the lifetime of the API process.
+# It is safe to grow without bound in practice: the number of sessions a user
+# accumulates is bounded by disk space, and each cached entry is a small dict.
+#
+# _subagent_cache stores only the file-derived metrics (timestamps, tool count,
+# token usage, size). Status determination (live/done) depends on dynamic
+# inputs applied after the cache lookup, not stored in it.
+_transcript_cache: dict[Path, tuple[float, dict]] = {}
+_subagent_cache:   dict[Path, tuple[float, dict]] = {}
+
 # ── Pricing ──────────────────────────────────────────────────────────────────
 
 FALLBACK_PRICING = {
@@ -87,7 +112,23 @@ def _encode_cwd(cwd: str) -> str:
 
 
 def _live_transcripts() -> dict[str, dict]:
-    """Map transcript stem → {pid, sessionId} for live sessions."""
+    """Map session-id → {pid, sessionId} for every session whose file is present.
+
+    Inside Docker the API cannot call os.kill() to verify host PIDs, so the
+    presence of a session file in SESSIONS_DIR is used as the liveness signal.
+
+    Previous implementation used glob() to find the first transcript in the
+    project directory whose mtime was >= the session start time. Because glob()
+    returns files in arbitrary filesystem order, it frequently identified the
+    wrong transcript as belonging to the live session — causing the actual
+    current session to appear as "done" in the UI.
+
+    The session file already contains the sessionId, which equals the transcript
+    filename (without the .jsonl extension). We look up the transcript directly
+    by path, eliminating the ambiguity. If the transcript does not yet exist
+    (session just started), we still register the session so it appears in the
+    UI immediately via the SESSIONS_DIR fallback in _scan_sessions().
+    """
     result = {}
     if not SESSIONS_DIR.exists():
         return result
@@ -97,21 +138,14 @@ def _live_transcripts() -> dict[str, dict]:
             pid = data.get("pid")
             sid = data.get("sessionId")
             cwd = data.get("cwd", "")
-            started_ms = data.get("startedAt", 0)
         except (json.JSONDecodeError, OSError):
             continue
-        if not pid or not cwd:
+        if not pid or not sid or not cwd:
             continue
-        # Inside Docker we can't check host PIDs; presence of the session file
-        # is our best signal that the process is still running.
-        started_s = started_ms / 1000
         project_dir = PROJECTS_DIR / _encode_cwd(cwd)
         if not project_dir.exists():
             continue
-        for transcript in project_dir.glob("*.jsonl"):
-            if transcript.stat().st_mtime >= started_s:
-                result[transcript.stem] = {"pid": pid, "sessionId": sid}
-                break
+        result[sid] = {"pid": pid, "sessionId": sid}
     return result
 
 
@@ -233,6 +267,19 @@ def _accumulate_usage(entry: dict, totals: dict) -> None:
 
 
 def _read_transcript(path: Path) -> dict:
+    # Cache check — return immediately if the file has not changed since last parse.
+    # Transcripts are append-only JSONL files: a changed mtime always means new
+    # content. Done sessions are never appended to, so they are parsed exactly once.
+    try:
+        current_mtime = path.stat().st_mtime
+    except OSError:
+        current_mtime = None
+
+    if current_mtime is not None:
+        cached = _transcript_cache.get(path)
+        if cached is not None and cached[0] == current_mtime:
+            return cached[1]
+
     title = None
     branch = None
     cwd = None
@@ -302,7 +349,7 @@ def _read_transcript(path: Path) -> dict:
 
     total_tokens = usage["input"] + usage["output"] + usage["cache_write"] + usage["cache_read"]
 
-    return {
+    result = {
         "cwd": cwd,
         "branch": branch,
         "started_at": started_at,
@@ -315,6 +362,11 @@ def _read_transcript(path: Path) -> dict:
         "agent_tool_use": agent_tool_use,
         "completed_tool_uses": completed_tool_uses,
     }
+
+    if current_mtime is not None:
+        _transcript_cache[path] = (current_mtime, result)
+
+    return result
 
 
 def _read_subagents(
@@ -340,47 +392,68 @@ def _read_subagents(
         agent_type = meta.get("agentType", "unknown")
         description = meta.get("description", "")
 
-        jsonl_file = subagents_dir / f"agent-{agent_id}.jsonl"
-        started_at = None
-        ended_at = None
-        tool_count = 0
-        size_kb = None
-        agent_cwd = None
+        jsonl_file  = subagents_dir / f"agent-{agent_id}.jsonl"
+        started_at  = None
+        ended_at    = None
+        tool_count  = 0
+        size_kb     = None
+        agent_cwd   = None
         jsonl_mtime = None
-        usage = _empty_usage()
+        usage       = _empty_usage()
 
         if jsonl_file.exists():
-            st = jsonl_file.stat()
-            size_kb = round(st.st_size / 1024, 1)
+            st          = jsonl_file.stat()
             jsonl_mtime = st.st_mtime
-            try:
-                with jsonl_file.open() as f:
-                    for line in f:
-                        line = line.strip()
-                        if not line:
-                            continue
-                        try:
-                            entry = json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
-                        ts = entry.get("timestamp")
-                        if ts:
-                            if started_at is None:
-                                started_at = ts
-                            ended_at = ts
-                        if agent_cwd is None and entry.get("type") == "user":
-                            agent_cwd = entry.get("cwd")
-                        if entry.get("type") == "assistant":
-                            content = entry.get("message", {}).get("content", [])
-                            if isinstance(content, list):
-                                tool_count += sum(
-                                    1
-                                    for b in content
-                                    if isinstance(b, dict) and b.get("type") == "tool_use"
-                                )
-                            _accumulate_usage(entry, usage)
-            except OSError:
-                pass
+
+            # Cache check — subagent JSONL files are append-only. If mtime is
+            # unchanged the previously parsed metrics are still valid.
+            cached_sub = _subagent_cache.get(jsonl_file)
+            if cached_sub is not None and cached_sub[0] == jsonl_mtime:
+                m          = cached_sub[1]
+                started_at = m["started_at"]
+                ended_at   = m["ended_at"]
+                tool_count = m["tool_count"]
+                size_kb    = m["size_kb"]
+                agent_cwd  = m["agent_cwd"]
+                usage      = m["usage"]
+            else:
+                size_kb = round(st.st_size / 1024, 1)
+                try:
+                    with jsonl_file.open() as f:
+                        for line in f:
+                            line = line.strip()
+                            if not line:
+                                continue
+                            try:
+                                entry = json.loads(line)
+                            except json.JSONDecodeError:
+                                continue
+                            ts = entry.get("timestamp")
+                            if ts:
+                                if started_at is None:
+                                    started_at = ts
+                                ended_at = ts
+                            if agent_cwd is None and entry.get("type") == "user":
+                                agent_cwd = entry.get("cwd")
+                            if entry.get("type") == "assistant":
+                                content = entry.get("message", {}).get("content", [])
+                                if isinstance(content, list):
+                                    tool_count += sum(
+                                        1
+                                        for b in content
+                                        if isinstance(b, dict) and b.get("type") == "tool_use"
+                                    )
+                                _accumulate_usage(entry, usage)
+                except OSError:
+                    pass
+                _subagent_cache[jsonl_file] = (jsonl_mtime, {
+                    "started_at": started_at,
+                    "ended_at":   ended_at,
+                    "tool_count": tool_count,
+                    "size_kb":    size_kb,
+                    "agent_cwd":  agent_cwd,
+                    "usage":      usage,
+                })
 
         tool_use_id = agent_tool_use.get(agent_id, "")
         tool_result_done = bool(tool_use_id and tool_use_id in completed_tool_uses)

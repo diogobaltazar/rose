@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
+from rich.console import Console
 
 load_dotenv()
 
@@ -22,6 +23,7 @@ _LOG_FILE = Path(os.environ.get("TOPGUN_INFERENCE_LOG", str(
 _CUSTOM_HEADER = "x-build-cli-tool"
 _CUSTOM_HEADER_VALUE = "claude"
 _MODEL = "claude-haiku-4-5-20251001"
+_console = Console()
 
 
 def _get_token() -> str:
@@ -45,14 +47,15 @@ def load_prompt(name: str) -> str:
     return path.read_text()
 
 
-def call(prompt: str, system: str, command: str) -> str:
+def call(prompt: str, system: str, command: str, status_message: str = "thinking…") -> str:
     """
     Make a single-turn inference call to Claude Haiku.
 
     Args:
-        prompt:  The user message (task list + query).
-        system:  The system prompt string (load via load_prompt()).
-        command: The topgun command making the call (e.g. "timer").
+        prompt:         The user message (task list + query).
+        system:         The system prompt string (load via load_prompt()).
+        command:        The topgun command making the call (e.g. "timer").
+        status_message: Label shown in the spinner while the call is in flight.
 
     Returns:
         The raw text content of the model's response.
@@ -74,25 +77,30 @@ def call(prompt: str, system: str, command: str) -> str:
     }
     url = f"{base_url}/v1/messages"
     t0 = time.monotonic()
-    try:
-        response = httpx.post(
-            url,
-            headers={
-                "authorization": f"Bearer {token}",
-                "content-type": "application/json",
-                "anthropic-version": "2023-06-01",
-                _CUSTOM_HEADER: _CUSTOM_HEADER_VALUE,
-            },
-            content=json.dumps(body).encode(),
-            timeout=60,
-        )
-    except httpx.ConnectError as e:
-        raise RuntimeError(
-            f"Could not connect to {url} — check ANTHROPIC_BASE_URL and network access.\n"
-            f"Underlying error: {e}"
-        ) from None
+    with _console.status(f"{status_message} [dim]{_MODEL}[/dim]"):
+        try:
+            response = httpx.post(
+                url,
+                headers={
+                    "authorization": f"Bearer {token}",
+                    "content-type": "application/json",
+                    "anthropic-version": "2023-06-01",
+                    _CUSTOM_HEADER: _CUSTOM_HEADER_VALUE,
+                },
+                content=json.dumps(body).encode(),
+                timeout=60,
+            )
+        except httpx.ConnectError as e:
+            raise RuntimeError(
+                f"Could not connect to {url} — check ANTHROPIC_BASE_URL and network access.\n"
+                f"Underlying error: {e}"
+            ) from None
     duration_ms = round((time.monotonic() - t0) * 1000)
-    response.raise_for_status()
+    if not response.is_success:
+        raise RuntimeError(
+            f"Inference API returned {response.status_code} for {url}\n"
+            f"Check your API key / proxy credentials (ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL)."
+        )
     data = response.json()
 
     usage = data.get("usage", {})

@@ -10,7 +10,7 @@ import os
 import re
 from datetime import datetime, timezone, date, timedelta
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import click
 import typer
@@ -627,34 +627,18 @@ def add():
     console.print(f"[green]created[/green]  [link={obs_url}]{title}[/link]")
 
 
-@app.command("close")
-def close(
-    task_ref: Optional[str] = typer.Argument(None, help="Task UID, issue number, source ID, or description"),
-):
-    """Close a task. Accepts a UID/issue number, or uses fuzzy search if omitted."""
-    if task_ref:
-        resolved = _resolve_task(task_ref)
-    else:
-        query = _editor_query()
-        if not query:
-            console.print("[yellow]no description entered — cancelled[/yellow]")
-            raise typer.Exit(1)
-        resolved = _resolve_task(query)
-
+def _close_one(resolved: dict) -> bool:
+    """Close a single resolved task. Returns True on success, False on failure."""
     source_id: str = resolved["id"]
 
     if source_id.startswith("obsidian:"):
-        # Derive the vault path and task directory from the source ID.
-        # Format: "obsidian:<vault_path>:<title>"
         parts = source_id.split(":", 2)
         if len(parts) < 3:
             console.print(f"[red]cannot parse obsidian source ID:[/red] {source_id}")
-            raise typer.Exit(1)
+            return False
         vault_path = parts[1]
         task_title = parts[2]
 
-        # Locate the task.md file by searching for a directory whose task.md
-        # contains an Acceptance Criteria checkbox with a matching title.
         vault = _resolve_vault_path(vault_path)
         task_file: Path | None = None
         for md_file in vault.rglob("task.md"):
@@ -674,29 +658,27 @@ def close(
 
         if task_file is None:
             console.print(f"[yellow]task file not found for:[/yellow] {task_title}")
-            raise typer.Exit(1)
+            return False
 
         text = task_file.read_text(encoding="utf-8")
-        # Update status in frontmatter.
         if "status: open" in text:
             text = text.replace("status: open", "status: closed", 1)
         elif "status:" in text:
             text = re.sub(r"(status:\s*)(\S+)", r"\1closed", text, count=1)
         else:
-            # Append status to frontmatter if missing.
             text = text.replace("---\n", "---\nstatus: closed\n", 1)
 
         today = date.today().isoformat()
         text = text.rstrip() + f"\n\n✅ {today}\n"
         task_file.write_text(text, encoding="utf-8")
         console.print(f"[green]closed[/green]  [cyan]{resolved['title']}[/cyan]")
+        return True
 
     elif source_id.startswith("github:"):
-        # Format: "github:<owner/repo>#<number>"
         m = re.match(r"github:([^#]+)#(\d+)", source_id)
         if not m:
             console.print(f"[red]cannot parse github source ID:[/red] {source_id}")
-            raise typer.Exit(1)
+            return False
         repo, number = m.group(1), m.group(2)
         import subprocess as _sp
         result = _sp.run(
@@ -706,11 +688,41 @@ def close(
         if result.returncode != 0:
             err = result.stderr.strip() or result.stdout.strip()
             console.print(f"[red]gh issue close failed:[/red] {err}")
-            raise typer.Exit(1)
+            return False
         console.print(f"[green]closed[/green]  [cyan]{resolved['title']}[/cyan]")
+        return True
 
     else:
         console.print(f"[yellow]unknown source type for:[/yellow] {source_id}")
+        return False
+
+
+@app.command("close")
+def close(
+    task_refs: Optional[List[str]] = typer.Argument(None, help="Task UIDs, issue numbers, source IDs, or descriptions"),
+):
+    """Close one or more tasks. Pass multiple IDs to close in batch."""
+    if not task_refs:
+        query = _editor_query()
+        if not query:
+            console.print("[yellow]no description entered — cancelled[/yellow]")
+            raise typer.Exit(1)
+        resolved = _resolve_task(query)
+        if not _close_one(resolved):
+            raise typer.Exit(1)
+        return
+
+    failed = False
+    for ref in task_refs:
+        try:
+            resolved = _resolve_task(ref)
+        except SystemExit:
+            failed = True
+            continue
+        if not _close_one(resolved):
+            failed = True
+
+    if failed:
         raise typer.Exit(1)
 
 
@@ -748,7 +760,17 @@ def track(
     elif type == "obsidian":
         from pathlib import Path as _Path
         raw = path or typer.prompt("Vault path").strip()
-        resolved_path = str(_Path(raw).expanduser().resolve())
+        if raw.startswith("~"):
+            resolved_path = raw
+        else:
+            _p = _Path(raw)
+            _parts = _p.parts
+            if ".topgun" in _parts:
+                _idx = _parts.index(".topgun")
+                _rest = _Path(*_parts[_idx + 1:]) if _idx + 1 < len(_parts) else _Path(".")
+                resolved_path = str(_Path("~") / ".topgun" / _rest)
+            else:
+                resolved_path = str(_p)
         if description is None:
             description = typer.prompt("Description", default="").strip()
         entry = {"type": "obsidian", "path": resolved_path, "description": description}

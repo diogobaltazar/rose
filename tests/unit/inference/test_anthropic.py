@@ -10,7 +10,7 @@ diagnose what went wrong without inspecting raw HTTP traffic.
 
 import sys
 from types import ModuleType
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -124,3 +124,21 @@ def test_call_raises_inference_error_on_500(monkeypatch):
 
     assert exc_info.value.status_code == 529
     assert "overloaded_error" in str(exc_info.value)
+
+
+def test_call_raises_inference_error_on_connect_error(monkeypatch):
+    """call() must raise InferenceError when the host is unreachable.
+
+    Unreachable hosts and misconfigured ANTHROPIC_BASE_URL are inference
+    failures just like a 401 — they should be catchable by the same handler.
+    """
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-1234567890")
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://unreachable.invalid")
+
+    sys.modules["httpx"].post.side_effect = sys.modules["httpx"].ConnectError("Connection refused")
+    try:
+        with pytest.raises(InferenceError) as exc_info:
+            call(prompt="hello", system="you are helpful", command="test")
+        assert exc_info.value.status_code == 0
+    finally:
+        sys.modules["httpx"].post.side_effect = None

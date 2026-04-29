@@ -27,7 +27,7 @@ _console = Console()
 
 
 class InferenceError(RuntimeError):
-    """Raised when the inference API returns a non-2xx response."""
+    """Raised when the inference API returns a non-2xx response or is unreachable."""
 
     def __init__(self, status_code: int, url: str, body: str, key_hint: str, base_url: str) -> None:
         self.status_code = status_code
@@ -106,10 +106,7 @@ def call(prompt: str, system: str, command: str, status_message: str = "thinking
                 timeout=60,
             )
         except httpx.ConnectError as e:
-            raise RuntimeError(
-                f"Could not connect to {url} — check ANTHROPIC_BASE_URL and network access.\n"
-                f"Underlying error: {e}"
-            ) from None
+            raise InferenceError(0, url, str(e), "(n/a)", base_url) from None
     duration_ms = round((time.monotonic() - t0) * 1000)
     if not response.is_success:
         key_hint = f"…{token[-4:]}" if len(token) >= 4 else "(too short)"

@@ -737,12 +737,21 @@ def _backlog_sources() -> list[dict]:
 
 
 def _resolve_vault_path(path_str: str) -> Path:
-    """Resolve a vault path, replacing ~ with the mounted user home."""
+    """Resolve a vault path, replacing ~ with the mounted user home.
+
+    Also remaps absolute host paths that contain .topgun — e.g.
+    /Users/someone/.topgun/backlog/... → USER_HOME/.topgun/backlog/...
+    """
     if path_str.startswith("~/"):
         return USER_HOME / path_str[2:]
     if path_str.startswith("~"):
         return USER_HOME / path_str[1:]
-    return Path(path_str)
+    p = Path(path_str)
+    if p.is_absolute() and ".topgun" in p.parts:
+        idx = p.parts.index(".topgun")
+        rest = Path(*p.parts[idx + 1:]) if idx + 1 < len(p.parts) else Path(".")
+        return USER_HOME / ".topgun" / rest
+    return p
 
 
 def _parse_body_section(body: str, section: str) -> str:

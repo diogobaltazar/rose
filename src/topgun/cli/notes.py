@@ -52,7 +52,17 @@ def track(
     sources = data.setdefault("notes", {}).setdefault("sources", [])
 
     raw = path or typer.prompt("Vault path").strip()
-    resolved = str(Path(raw).expanduser().resolve())
+    if raw.startswith("~"):
+        resolved = raw
+    else:
+        _p = Path(raw)
+        _parts = _p.parts
+        if ".topgun" in _parts:
+            _idx = _parts.index(".topgun")
+            _rest = Path(*_parts[_idx + 1:]) if _idx + 1 < len(_parts) else Path(".")
+            resolved = str(Path("~") / ".topgun" / _rest)
+        else:
+            resolved = str(_p)
 
     if any(s.get("path") == resolved for s in sources):
         typer.echo("already tracked")

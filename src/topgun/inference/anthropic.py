@@ -20,10 +20,24 @@ _PROMPTS_DIR = Path(__file__).parent / "prompts"
 _LOG_FILE = Path(os.environ.get("TOPGUN_INFERENCE_LOG", str(
     Path.home() / ".topgun" / "logs" / "inference" / "anthropic" / "calls.jsonl"
 )))
-_CUSTOM_HEADER = "x-build-cli-tool"
-_CUSTOM_HEADER_VALUE = "claude"
+_PROXY_TOOL_HEADER = os.environ.get("TOPGUN_PROXY_TOOL_HEADER", "")
+_PROXY_TOOL_VALUE  = os.environ.get("TOPGUN_PROXY_TOOL_VALUE", "")
 _MODEL = "claude-haiku-4-5-20251001"
 _console = Console()
+
+
+class InferenceError(RuntimeError):
+    """Raised when the inference API returns a non-2xx response."""
+
+    def __init__(self, status_code: int, url: str, body: str, key_hint: str, base_url: str) -> None:
+        self.status_code = status_code
+        self.response_body = body
+        preview = body[:500].strip() or "(empty)"
+        super().__init__(
+            f"Inference API returned {status_code} for {url}\n"
+            f"Response: {preview}\n"
+            f"Key (last 4): {key_hint}  Base URL: {base_url}"
+        )
 
 
 def _get_token() -> str:
@@ -65,10 +79,9 @@ def call(prompt: str, system: str, command: str, status_message: str = "thinking
     token = _get_token()
     base_url = (os.environ.get("ANTHROPIC_BASE_URL", "").strip() or "https://api.anthropic.com").rstrip("/")
 
-    # Use httpx directly rather than the Anthropic SDK. The build-cli proxy
-    # requires Authorization: Bearer (not x-api-key) and rejects the SDK's
-    # x-stainless-* diagnostic headers. A raw httpx call avoids both issues
-    # and works identically against api.anthropic.com.
+    # Use httpx directly rather than the Anthropic SDK. Some proxy configurations
+    # require Authorization: Bearer (not x-api-key) and reject x-stainless-*
+    # diagnostic headers injected by the SDK. A raw httpx call sidesteps both.
     body = {
         "model": _MODEL,
         "max_tokens": 1024,
@@ -79,14 +92,16 @@ def call(prompt: str, system: str, command: str, status_message: str = "thinking
     t0 = time.monotonic()
     with _console.status(f"{status_message} [dim]{_MODEL}[/dim]"):
         try:
+            headers = {
+                "authorization": f"Bearer {token}",
+                "content-type": "application/json",
+                "anthropic-version": "2023-06-01",
+            }
+            if _PROXY_TOOL_HEADER:
+                headers[_PROXY_TOOL_HEADER] = _PROXY_TOOL_VALUE
             response = httpx.post(
                 url,
-                headers={
-                    "authorization": f"Bearer {token}",
-                    "content-type": "application/json",
-                    "anthropic-version": "2023-06-01",
-                    _CUSTOM_HEADER: _CUSTOM_HEADER_VALUE,
-                },
+                headers=headers,
                 content=json.dumps(body).encode(),
                 timeout=60,
             )
@@ -97,10 +112,8 @@ def call(prompt: str, system: str, command: str, status_message: str = "thinking
             ) from None
     duration_ms = round((time.monotonic() - t0) * 1000)
     if not response.is_success:
-        raise RuntimeError(
-            f"Inference API returned {response.status_code} for {url}\n"
-            f"Check your API key / proxy credentials (ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL)."
-        )
+        key_hint = f"…{token[-4:]}" if len(token) >= 4 else "(too short)"
+        raise InferenceError(response.status_code, url, response.text or "", key_hint, base_url)
     data = response.json()
 
     usage = data.get("usage", {})

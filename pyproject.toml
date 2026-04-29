@@ -20,7 +20,7 @@ dependencies = [
 topgun = "topgun.cli:app"
 
 [project.optional-dependencies]
-test = ["pytest"]
+test = ["pytest", "httpx"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

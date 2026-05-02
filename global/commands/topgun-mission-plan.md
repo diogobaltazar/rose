@@ -167,7 +167,7 @@ For each Obsidian task:
 Compose the mission JSON and write it to Redis. The topgun Redis container must be running (`docker compose up redis`).
 
 ```bash
-docker exec topgun-redis redis-cli SET "MISSION:{uid}" '{
+docker exec topgun-api redis-cli SET "MISSION:{uid}" '{
   "uid": "{uid}",
   "created_at": "{ISO-8601 timestamp}",
   "state": "planned",
@@ -185,13 +185,13 @@ docker exec topgun-redis redis-cli SET "MISSION:{uid}" '{
 Verify the write succeeded:
 
 ```bash
-docker exec topgun-redis redis-cli GET "MISSION:{uid}"
+docker exec topgun-api redis-cli GET "MISSION:{uid}"
 ```
 
-If the Redis container is not running, instruct the user:
+If the API container is not running, instruct the user:
 ```
-The topgun stack is not running. Start it with:
-  docker compose up redis
+The topgun API is not running. Start it with:
+  docker compose up api
 Then re-run this command.
 ```
 

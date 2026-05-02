@@ -97,23 +97,23 @@ Mission state is stored in Redis. The topgun Redis container must be running.
 
 ```bash
 # Read mission
-docker exec topgun-redis redis-cli GET "MISSION:{uid}"
+docker exec topgun-api redis-cli GET "MISSION:{uid}"
 
 # Update a field (read → modify → write)
-MISSION=$(docker exec topgun-redis redis-cli GET "MISSION:{uid}")
+MISSION=$(docker exec topgun-api redis-cli GET "MISSION:{uid}")
 UPDATED=$(python3 -c "
 import json, sys
 m = json.loads(sys.argv[1])
 m['state'] = 'in_progress'
 print(json.dumps(m))
 " "$MISSION")
-docker exec topgun-redis redis-cli SET "MISSION:{uid}" "$UPDATED"
+docker exec topgun-api redis-cli SET "MISSION:{uid}" "$UPDATED"
 ```
 
-If the Redis container is not running, stop and tell the user:
+If the API container is not running, stop and tell the user:
 ```
-Redis is not available. Start the topgun stack with:
-  docker compose up redis
+Redis is not available. Start the topgun API with:
+  docker compose up api
 ```
 
 ---
@@ -123,7 +123,7 @@ Redis is not available. Start the topgun stack with:
 Parse the mission UID from the command arguments. Read the mission from Redis:
 
 ```bash
-docker exec topgun-redis redis-cli GET "MISSION:{uid}"
+docker exec topgun-api redis-cli GET "MISSION:{uid}"
 ```
 
 Parse the JSON. Extract the ordered `items` list. For each `github_issue` item, fetch the issue body via `get_issue` to retrieve its About and Acceptance Criteria. For each `obsidian_task` item, read the task file.

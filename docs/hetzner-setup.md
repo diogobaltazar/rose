@@ -39,12 +39,19 @@ Once created, copy the **IPv4 address** from the server detail page. You will ne
 
 ## 4. Install Docker on the Server
 
-SSH in and install Docker:
+SSH in and install Docker + Compose:
 
 ```bash
 ssh -i ~/.ssh/tgun_deploy root@<server-IP>
 
-apt update && apt install -y docker.io docker-compose-plugin git
+apt update && apt install -y docker.io git
+
+# Install standalone docker-compose and wire it as the docker compose plugin
+curl -SL https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-linux-x86_64 \
+  -o /usr/local/bin/docker-compose
+chmod +x /usr/local/bin/docker-compose
+mkdir -p /usr/local/lib/docker/cli-plugins
+ln -sf /usr/local/bin/docker-compose /usr/local/lib/docker/cli-plugins/docker-compose
 ```
 
 Verify:

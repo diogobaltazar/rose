@@ -332,8 +332,15 @@ def _rsync_logs(env_id: str, engagement_dir: Path) -> None:
 @app.command("plan")
 def plan():
     """Open an interactive mission planning session."""
+    import shutil
+    claude_bin = shutil.which("claude")
+    if not claude_bin:
+        console.print("[red]claude not found in PATH[/red]")
+        console.print("[dim]topgun mission plan must be run on the host machine, not inside a container[/dim]")
+        console.print("[dim]install Claude Code: https://claude.ai/code[/dim]")
+        raise typer.Exit(1)
     console.print("[dim]launching mission planning session…[/dim]")
-    os.execvp("claude", ["claude", "--dangerously-skip-permissions", "-p", "/topgun-mission-plan"])
+    os.execvp(claude_bin, [claude_bin, "--dangerously-skip-permissions", "-p", "/topgun-mission-plan"])
 
 
 @app.command("list")

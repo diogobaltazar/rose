@@ -15,18 +15,17 @@ jobs:
           AUTH0_DOMAIN: ${{ secrets.AUTH0_DOMAIN }}
           AUTH0_CLIENT_ID: ${{ secrets.AUTH0_CLIENT_ID }}
           AUTH0_AUDIENCE: ${{ secrets.AUTH0_AUDIENCE }}
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          envs: AUTH0_DOMAIN,AUTH0_CLIENT_ID,AUTH0_AUDIENCE,GH_TOKEN
+          envs: AUTH0_DOMAIN,AUTH0_CLIENT_ID,AUTH0_AUDIENCE
           script: |
             set -e
 
             # Clone on first deploy, pull on subsequent ones
             if [ ! -d ~/topgun ]; then
-              git clone https://x-access-token:${GH_TOKEN}@github.com/diogobaltazar/TopGun.git ~/topgun
+              git clone https://github.com/diogobaltazar/TopGun.git ~/topgun
             fi
 
             cd ~/topgun
@@ -35,11 +34,7 @@ jobs:
             git pull origin main
 
             # Write .env from secrets
-            cat > .env <<ENVEOF
-            AUTH0_DOMAIN=${AUTH0_DOMAIN}
-            AUTH0_CLIENT_ID=${AUTH0_CLIENT_ID}
-            AUTH0_AUDIENCE=${AUTH0_AUDIENCE}
-            GITHUB_TOKEN=${GH_TOKEN}
-            ENVEOF
+            printf "AUTH0_DOMAIN=%s\nAUTH0_CLIENT_ID=%s\nAUTH0_AUDIENCE=%s\n" \
+              "$AUTH0_DOMAIN" "$AUTH0_CLIENT_ID" "$AUTH0_AUDIENCE" > .env
 
             docker compose up --build -d

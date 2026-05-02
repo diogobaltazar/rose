@@ -31,6 +31,8 @@ In **Applications → APIs → Create API**:
 - **Identifier:** `https://tgun.dev/api` *(this becomes your `AUTH0_AUDIENCE`)*
 - **Signing Algorithm:** RS256
 
+Then enable it for the application: **Applications → Applications → topgun → APIs tab** → toggle `topgun-api` **on**.
+
 ---
 
 ## 4. Collect Your Credentials
@@ -72,7 +74,15 @@ The same Docker image is used — no rebuild needed when switching between local
 
 ---
 
-## 6. Dev Mode (no Auth0)
+## 6. Troubleshooting
+
+**`Service not found: https://tgun.dev/api`** — The `topgun-api` is not enabled for the application. Go to Applications → topgun → APIs tab and toggle it on.
+
+**`Invalid state`** — Stale Auth0 cookie. Open DevTools → Application → Storage → Clear site data for `localhost:5100`, then try again.
+
+---
+
+## 7. Dev Mode (no Auth0)
 
 If `AUTH0_DOMAIN` is not set, the API skips JWT validation and all endpoints are open.  
 Useful for local development without an internet connection.

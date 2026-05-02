@@ -335,10 +335,10 @@ def plan():
     import shutil
     claude_bin = shutil.which("claude")
     if not claude_bin:
-        console.print("[red]claude not found in PATH[/red]")
-        console.print("[dim]topgun mission plan must be run on the host machine, not inside a container[/dim]")
-        console.print("[dim]install Claude Code: https://claude.ai/code[/dim]")
-        raise typer.Exit(1)
+        console.print("[bold]Run this on your host machine:[/bold]\n")
+        console.print("  [cyan]claude --dangerously-skip-permissions -p \"/topgun-mission-plan\"[/cyan]\n")
+        console.print("[dim]Claude Code must be installed on the host — https://claude.ai/code[/dim]")
+        raise typer.Exit(0)
     console.print("[dim]launching mission planning session…[/dim]")
     os.execvp(claude_bin, [claude_bin, "--dangerously-skip-permissions", "-p", "/topgun-mission-plan"])
 

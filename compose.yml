@@ -36,7 +36,9 @@ services:
 
   api:
     container_name: topgun-api
-    build: src/topgun/api
+    build:
+      context: .
+      dockerfile: src/topgun/api/Dockerfile
     volumes:
       - "${HOME}/.claude/logs:/logs:ro"
       - "${HOME}/.claude/projects:/projects:ro"

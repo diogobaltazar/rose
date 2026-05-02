@@ -38,8 +38,7 @@ _FIXED_TASK = {
 @pytest.fixture(autouse=True)
 def isolated_log(tmp_path, monkeypatch):
     log = tmp_path / "timer.jsonl"
-    monkeypatch.setattr("topgun.cli.task.TIMER_LOG", log)
-    monkeypatch.setattr("topgun.cli.timer._resolve_task", lambda _: _FIXED_TASK)
+    monkeypatch.setattr("topgun.services.timer.TIMER_LOG", log)
     monkeypatch.setattr("topgun.cli.task._resolve_task", lambda _: _FIXED_TASK)
     return log
 

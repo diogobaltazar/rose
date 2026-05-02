@@ -30,6 +30,7 @@ from topgun.cli.backlog import (
     TYPE_COLOR,
 )
 from topgun.cli.timer_match import fetch_tasks, match, match_by_id, _uid
+from topgun.services import timer as timer_svc
 
 console = Console()
 app = typer.Typer(
@@ -40,6 +41,18 @@ app = typer.Typer(
 )
 
 TIMER_LOG = Path(os.environ.get("TOPGUN_TIMER_LOG", str(Path.home() / ".topgun" / "timer.jsonl")))
+
+
+def _get_sdk_client():
+    """Return an SDK client if the API is available, else None."""
+    try:
+        from topgun.sdk import TopgunClient
+        client = TopgunClient()
+        if client.is_available():
+            return client
+    except Exception:
+        pass
+    return None
 
 _EDITOR_TEMPLATE = """\
 # What are you working on?
@@ -102,95 +115,8 @@ def _fmt_dt(iso: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Event log helpers
+# Event log helpers (delegated to services.timer)
 # ---------------------------------------------------------------------------
-
-def _append_event(event: str, task_id: str, task_title: str) -> None:
-    TIMER_LOG.parent.mkdir(parents=True, exist_ok=True)
-    record = {
-        "event": event,
-        "task_id": task_id,
-        "task_title": task_title,
-        "ts": datetime.now(timezone.utc).isoformat(),
-    }
-    with TIMER_LOG.open("a") as f:
-        f.write(json.dumps(record) + "\n")
-
-
-def _read_events() -> list[dict]:
-    if not TIMER_LOG.exists():
-        return []
-    events = []
-    with TIMER_LOG.open() as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                events.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
-    return events
-
-
-def _active_period() -> dict | None:
-    """Return the most recent unmatched start event, or None."""
-    last_start = None
-    for e in _read_events():
-        if e["event"] == "start":
-            last_start = e
-        elif e["event"] == "stop":
-            last_start = None
-    return last_start
-
-
-def _elapsed_seconds(start_ts: str) -> float:
-    t0 = datetime.fromisoformat(start_ts)
-    return (datetime.now(timezone.utc) - t0).total_seconds()
-
-
-def _totals_by_task_id() -> dict[str, float]:
-    """Return accumulated seconds per task_id from the event log."""
-    totals: dict[str, float] = {}
-    open_start: dict | None = None
-    for e in _read_events():
-        if e["event"] == "start":
-            open_start = e
-        elif e["event"] == "stop" and open_start:
-            t0 = datetime.fromisoformat(open_start["ts"])
-            t1 = datetime.fromisoformat(e["ts"])
-            tid = open_start["task_id"]
-            totals[tid] = totals.get(tid, 0) + (t1 - t0).total_seconds()
-            open_start = None
-    if open_start:
-        tid = open_start["task_id"]
-        totals[tid] = totals.get(tid, 0) + _elapsed_seconds(open_start["ts"])
-    return totals
-
-
-def _intervals_by_task_id(task_id: str) -> list[dict]:
-    """Return list of {start, end, duration_s} for a given task_id."""
-    intervals = []
-    open_start: dict | None = None
-    for e in _read_events():
-        if e["event"] == "start" and e["task_id"] == task_id:
-            open_start = e
-        elif e["event"] == "stop" and open_start and open_start["task_id"] == task_id:
-            t0 = datetime.fromisoformat(open_start["ts"])
-            t1 = datetime.fromisoformat(e["ts"])
-            intervals.append({
-                "start": open_start["ts"],
-                "end": e["ts"],
-                "duration_s": (t1 - t0).total_seconds(),
-            })
-            open_start = None
-    if open_start:
-        intervals.append({
-            "start": open_start["ts"],
-            "end": None,
-            "duration_s": _elapsed_seconds(open_start["ts"]),
-        })
-    return intervals
 
 
 # ---------------------------------------------------------------------------
@@ -268,9 +194,9 @@ def start(
     task: Optional[str] = typer.Option(None, "--task", "-t", help="UID, issue number, or description"),
 ):
     """Start recording time. Opens $EDITOR if --task is not given."""
-    active = _active_period()
+    active = timer_svc.active_period()
     if active:
-        elapsed = _fmt_duration(_elapsed_seconds(active["ts"]))
+        elapsed = _fmt_duration(timer_svc.elapsed_seconds(active["ts"]))
         console.print(
             f"[yellow]timer already running[/yellow] — {active['task_title']} ({elapsed})\n"
             f"run [bold]topgun task stop[/bold] first"
@@ -284,33 +210,32 @@ def start(
             raise typer.Exit(1)
 
     resolved = _resolve_task(task)
-    _append_event("start", resolved["id"], resolved["title"])
+    timer_svc.start_timer(resolved["id"], resolved["title"])
     console.print(f"[green]started[/green]  [cyan]{resolved['title']}[/cyan]  [dim]{resolved['uid']}[/dim]")
 
 
 @app.command("stop")
 def stop():
     """Stop the current timer."""
-    active = _active_period()
-    if not active:
+    try:
+        result = timer_svc.stop_timer()
+    except ValueError:
         console.print("[yellow]no timer running[/yellow]")
         raise typer.Exit(1)
-
-    elapsed = _fmt_duration(_elapsed_seconds(active["ts"]))
-    _append_event("stop", active["task_id"], active["task_title"])
-    console.print(f"[green]stopped[/green]  [cyan]{active['task_title']}[/cyan]  [dim]{elapsed}[/dim]")
+    elapsed = _fmt_duration(result["elapsed_s"])
+    console.print(f"[green]stopped[/green]  [cyan]{result['task_title']}[/cyan]  [dim]{elapsed}[/dim]")
 
 
 @app.command("status")
 def status():
     """Show the currently running timer."""
-    active = _active_period()
-    if not active:
+    st = timer_svc.timer_status()
+    if not st:
         console.print("[dim]no timer running[/dim]")
         return
-    elapsed = _fmt_duration(_elapsed_seconds(active["ts"]))
-    uid = _uid(active["task_id"])
-    console.print(f"[green]●[/green]  [cyan]{active['task_title']}[/cyan]  [bold]{elapsed}[/bold]  [dim]{uid}[/dim]")
+    elapsed = _fmt_duration(st["elapsed_s"])
+    uid = _uid(st["task_id"])
+    console.print(f"[green]●[/green]  [cyan]{st['task_title']}[/cyan]  [bold]{elapsed}[/bold]  [dim]{uid}[/dim]")
 
 
 # ---------------------------------------------------------------------------
@@ -342,6 +267,9 @@ def _parse_filter(filter_str: str) -> list[str]:
 def list_cmd(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show source path column"),
     filter: Optional[str] = typer.Option(None, "--filter", "-f", help="Filter e.g. status=open,closed"),
+    search: Optional[str] = typer.Option(None, "--search", "-s", help="Keyword search across task titles"),
+    sort: Optional[str] = typer.Option(None, "--sort", help="Sort by: title, priority, due, source, state, created_at"),
+    order: Optional[str] = typer.Option(None, "--order", help="Sort order: asc or desc"),
 ):
     """List tasks with accumulated time where recorded. Defaults to open tasks only."""
     sources = _get_sources()
@@ -352,14 +280,46 @@ def list_cmd(
     statuses = _parse_filter(filter) if filter else ["open"]
     show_status = len(statuses) > 1
 
-    tasks = fetch_tasks(statuses=statuses)
+    sdk = _get_sdk_client()
+    if sdk and search:
+        sdk_items = sdk.list_tasks(
+            search=search,
+            sort=sort,
+            order=order or "asc",
+            status=",".join(statuses),
+        )
+        tasks = []
+        for item in sdk_items:
+            source_id = item.get("id", "")
+            tasks.append({
+                "uid": _uid(source_id) if not item.get("uid") else item["uid"],
+                "id": source_id,
+                "title": item.get("title", ""),
+                "source": item.get("source_type", item.get("source_repo", "unknown")),
+                "source_full": item.get("source_repo") or "",
+                "due": item.get("must_before") or item.get("best_before") or "",
+                "url": item.get("url", ""),
+                "state": item.get("state", "open"),
+            })
+    else:
+        tasks = fetch_tasks(statuses=statuses)
+        if search:
+            kw = search.lower()
+            tasks = [t for t in tasks if kw in t["title"].lower()]
+
+    if sort and not sdk:
+        from topgun.services.tasks import _sort_items
+        tasks = _sort_items(tasks, sort, order or "asc")
+    elif not sort:
+        tasks = sorted(tasks, key=_list_sort_key)
+
     if not tasks:
         label = "/".join(statuses)
         console.print(f"[dim]no {label} tasks found[/dim]")
         return
 
-    totals = _totals_by_task_id()
-    active = _active_period()
+    totals = timer_svc.totals_by_task_id()
+    active = timer_svc.active_period()
     active_id = active["task_id"] if active else None
 
     table = Table(box=box.SIMPLE, show_header=True, header_style="bold", pad_edge=False)
@@ -376,7 +336,7 @@ def list_cmd(
     _STATUS_COLOR = {"open": "green", "closed": "dim", "inprogress": "yellow"}
 
     has_links = False
-    for t in sorted(tasks, key=_list_sort_key):
+    for t in tasks:
         seconds = totals.get(t["id"])
         time_str = _fmt_duration(seconds) if seconds else "—"
         marker = " [green]●[/green]" if t["id"] == active_id else ""
@@ -392,7 +352,7 @@ def list_cmd(
         else:
             title_cell = t["title"]
 
-        row = [t["uid"], _type_tag(t["source"]), title_cell, due_cell]
+        row = [t.get("uid", ""), _type_tag(t.get("source", "")), title_cell, due_cell]
         if show_status:
             st = t.get("state", "open")
             sc = _STATUS_COLOR.get(st, "dim")
@@ -417,7 +377,7 @@ def show(
         console.print(f"[yellow]task not found:[/yellow] {task}")
         raise typer.Exit(1)
 
-    intervals = _intervals_by_task_id(resolved["id"])
+    intervals = timer_svc.intervals_by_task_id(resolved["id"])
     uid = resolved["uid"]
     total_s = sum(i["duration_s"] for i in intervals)
 

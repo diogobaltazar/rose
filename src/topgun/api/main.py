@@ -852,14 +852,39 @@ def _parse_obsidian_file(file_path: Path, vault_root: Path, source: dict) -> lis
     return items
 
 
-async def _fetch_github_source(source: dict) -> list[dict]:
-    """Fetch all issues (open + closed) from a GitHub repo via the REST API."""
+async def _fetch_github_source(source: dict, *, search: str | None = None) -> list[dict]:
+    """Fetch issues from a GitHub repo via the REST API.
+
+    When search is provided, uses the GitHub Search API to filter by keyword.
+    Otherwise lists all issues.
+    """
     repo = source["repo"]
     headers: dict[str, str] = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
     if GITHUB_TOKEN:
         headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
 
     items: list[dict] = []
+
+    if search:
+        async with httpx.AsyncClient(timeout=15) as client:
+            try:
+                r = await client.get(
+                    "https://api.github.com/search/issues",
+                    headers=headers,
+                    params={
+                        "q": f"{search} repo:{repo} is:issue",
+                        "per_page": 50,
+                    },
+                )
+                r.raise_for_status()
+            except Exception:
+                return items
+            data = r.json()
+            for issue in data.get("items", []):
+                if "pull_request" not in issue:
+                    items.append(_parse_github_issue(issue, source))
+        return items
+
     page = 1
     async with httpx.AsyncClient(timeout=15) as client:
         while True:
@@ -876,7 +901,6 @@ async def _fetch_github_source(source: dict) -> list[dict]:
             if not batch:
                 break
             for issue in batch:
-                # Skip pull requests (GitHub includes them in /issues)
                 if "pull_request" not in issue:
                     items.append(_parse_github_issue(issue, source))
             if len(batch) < 100:
@@ -896,12 +920,43 @@ def _fetch_obsidian_source(source: dict) -> list[dict]:
     return items
 
 
-async def _build_backlog() -> list[dict]:
+_PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}
+_SORT_FIELDS = {"title", "priority", "due", "scheduled", "source", "state", "created_at"}
+
+
+def _sort_backlog(items: list[dict], sort: str, order: str) -> list[dict]:
+    reverse = order == "desc"
+    if sort == "priority":
+        key = lambda x: (_PRIORITY_ORDER.get(x.get("priority") or "", 3), x.get("must_before") or "9999")
+    elif sort == "due":
+        key = lambda x: x.get("must_before") or "9999"
+    elif sort == "scheduled":
+        key = lambda x: x.get("best_before") or "9999"
+    elif sort == "title":
+        key = lambda x: (x.get("title") or "").lower()
+    elif sort == "source":
+        key = lambda x: x.get("source_repo") or ""
+    elif sort == "state":
+        key = lambda x: x.get("state") or ""
+    elif sort == "created_at":
+        key = lambda x: x.get("created_at") or ""
+    else:
+        key = lambda x: x.get("created_at") or ""
+    return sorted(items, key=key, reverse=reverse)
+
+
+async def _build_backlog(
+    *,
+    search: str | None = None,
+    sort: str | None = None,
+    order: str = "asc",
+    status: str | None = None,
+) -> list[dict]:
     """Fetch from all configured sources and return a unified item list."""
     sources = _backlog_sources()
     all_items: list[dict] = []
 
-    github_tasks = [_fetch_github_source(s) for s in sources if s.get("type") == "github"]
+    github_tasks = [_fetch_github_source(s, search=search) for s in sources if s.get("type") == "github"]
     github_results = await asyncio.gather(*github_tasks, return_exceptions=True)
     for result in github_results:
         if isinstance(result, list):
@@ -909,9 +964,21 @@ async def _build_backlog() -> list[dict]:
 
     for s in sources:
         if s.get("type") == "obsidian":
-            all_items.extend(_fetch_obsidian_source(s))
+            items = _fetch_obsidian_source(s)
+            if search:
+                kw = search.lower()
+                items = [i for i in items if kw in (i.get("title") or "").lower() or kw in (i.get("about") or "").lower()]
+            all_items.extend(items)
 
-    all_items.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+    if status:
+        statuses = {s.strip() for s in status.split(",")}
+        all_items = [i for i in all_items if i.get("state") in statuses]
+
+    if sort and sort in _SORT_FIELDS:
+        all_items = _sort_backlog(all_items, sort, order)
+    else:
+        all_items.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+
     return all_items
 
 
@@ -950,8 +1017,22 @@ async def _startup_backlog() -> None:
 
 
 @app.get("/backlog")
-async def get_backlog() -> list[dict[str, Any]]:
-    """Return the cached backlog item list, refreshing if the cache is empty."""
+async def get_backlog(
+    search: str | None = None,
+    sort: str | None = None,
+    order: str = "asc",
+    status: str | None = None,
+) -> list[dict[str, Any]]:
+    """Return backlog items with optional filtering and sorting.
+
+    Query params:
+      search — keyword filter (GitHub search API + Obsidian substring)
+      sort   — field name: title, priority, due, scheduled, source, state, created_at
+      order  — asc or desc (default asc)
+      status — comma-separated: open, closed (default: all)
+    """
+    if search or sort or status:
+        return await _build_backlog(search=search, sort=sort, order=order, status=status)
     if not _backlog_cache:
         await _refresh_and_broadcast()
     return _backlog_cache
@@ -972,13 +1053,61 @@ async def backlog_websocket(websocket: WebSocket) -> None:
     try:
         await websocket.send_json(_backlog_cache)
         while True:
-            # Keep alive — the refresh loop pushes data proactively
             await asyncio.sleep(30)
             await websocket.send_json({"type": "ping"})
     except Exception:
         pass
     finally:
         _backlog_ws_clients.discard(websocket)
+
+
+# ── Timer endpoints ─────────────────────────────────────────────────────────
+
+from topgun.services.timer import (
+    timer_status as _svc_timer_status,
+    start_timer as _svc_start_timer,
+    stop_timer as _svc_stop_timer,
+)
+
+
+@app.get("/timer/status")
+def api_timer_status() -> dict[str, Any]:
+    result = _svc_timer_status()
+    return result or {"running": False}
+
+
+@app.post("/timer/start")
+def api_timer_start(body: dict) -> dict[str, Any]:
+    task_id = body.get("task_id", "")
+    task_title = body.get("task_title", "")
+    if not task_id:
+        return {"error": "task_id required"}
+    try:
+        record = _svc_start_timer(task_id, task_title)
+        return {"status": "started", **record}
+    except ValueError as e:
+        return {"error": str(e)}
+
+
+@app.post("/timer/stop")
+def api_timer_stop() -> dict[str, Any]:
+    try:
+        return _svc_stop_timer()
+    except ValueError as e:
+        return {"error": str(e)}
+
+
+# ── Task mutation endpoints ─────────────────────────────────────────────────
+
+from topgun.services.tasks import close_task as _svc_close_task
+
+
+@app.post("/tasks/{task_id:path}/close")
+def api_close_task(task_id: str) -> dict[str, Any]:
+    success = _svc_close_task(task_id)
+    if success:
+        return {"status": "closed", "task_id": task_id}
+    return {"error": f"Failed to close task: {task_id}"}
 
 
 # Mount static files last so API routes take priority

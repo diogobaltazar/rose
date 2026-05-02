@@ -1170,6 +1170,60 @@ def api_calendar_slots(
     return [{"start": s.start.isoformat(), "end": s.end.isoformat()} for s in slots]
 
 
+# ── Plan endpoints ──────────────────────────────────────────────────────────
+
+from topgun.services.plans import (
+    dict_to_plan,
+    plan_to_dict,
+    create_plan_github,
+    create_plan_obsidian,
+    flatten_plan,
+)
+
+
+def _created_to_dict(created) -> dict:
+    return {
+        "id": created.id,
+        "title": created.title,
+        "source_type": created.source_type,
+        "url": created.url,
+        "children": [_created_to_dict(c) for c in created.children],
+    }
+
+
+@app.post("/plans")
+def api_create_plan(body: dict) -> dict[str, Any]:
+    """Create a recursive plan (parent + children with dependencies).
+
+    Body: { "plan": { title, about, children: [...], ... }, "target": "github" | "obsidian", "repo": "owner/repo" | null, "vault_path": "..." | null }
+    """
+    plan_data = body.get("plan", {})
+    target = body.get("target", "obsidian")
+    plan = dict_to_plan(plan_data)
+
+    if target == "github":
+        repo = body.get("repo", "")
+        if not repo:
+            return {"error": "repo required for github plans"}
+        created = create_plan_github(plan, repo)
+    else:
+        vault_path = body.get("vault_path", "")
+        if not vault_path:
+            sources = _backlog_sources()
+            obsidian = [s for s in sources if s.get("type") == "obsidian"]
+            if not obsidian:
+                return {"error": "no obsidian vault configured"}
+            vault_path = obsidian[0]["path"]
+        created = create_plan_obsidian(plan, vault_path)
+
+    flat = flatten_plan(plan)
+    return {
+        "status": "created",
+        "total_tasks": len(flat),
+        "plan": _created_to_dict(created),
+    }
+
+
 # Mount static files last so API routes take priority
 if WEB_DIR.exists():
     app.mount("/", StaticFiles(directory=str(WEB_DIR), html=True), name="static")

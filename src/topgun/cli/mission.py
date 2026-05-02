@@ -336,11 +336,12 @@ def plan():
     claude_bin = shutil.which("claude")
     if not claude_bin:
         console.print("[bold]Run this on your host machine:[/bold]\n")
-        console.print("  [cyan]claude --dangerously-skip-permissions -p \"/topgun-mission-plan\"[/cyan]\n")
+        console.print("  [cyan]claude[/cyan]\n")
+        console.print("[dim]Then type [bold]/topgun-mission-plan[/bold] to start the planning session.[/dim]")
         console.print("[dim]Claude Code must be installed on the host — https://claude.ai/code[/dim]")
         raise typer.Exit(0)
-    console.print("[dim]launching mission planning session…[/dim]")
-    os.execvp(claude_bin, [claude_bin, "--dangerously-skip-permissions", "-p", "/topgun-mission-plan"])
+    console.print("[dim]launching mission planning session — type [bold]/topgun-mission-plan[/bold] to begin…[/dim]")
+    os.execvp(claude_bin, [claude_bin])
 
 
 @app.command("list")

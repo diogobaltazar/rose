@@ -34,11 +34,18 @@ services:
       - TOPGUN_TIMER_LOG=/topgun-data/timer.jsonl
       - TOPGUN_INFERENCE_LOG=/topgun-data/logs/inference/anthropic/calls.jsonl
 
+  redis:
+    container_name: topgun-redis
+    image: redis:7-alpine
+    restart: unless-stopped
+
   api:
     container_name: topgun-api
     build:
       context: .
       dockerfile: src/topgun/api/Dockerfile
+    depends_on:
+      - redis
     volumes:
       - "${HOME}/.claude/logs:/logs:ro"
       - "${HOME}/.claude/projects:/projects:ro"
@@ -55,6 +62,7 @@ services:
       - WATCHFILES_FORCE_POLLING=true
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
       - USER_HOME=/user-home
+      - REDIS_URL=redis://redis:6379
     ports:
       - "5101:8000"
 

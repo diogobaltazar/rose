@@ -48,7 +48,7 @@ In the repo → **Settings → Secrets and variables → Actions → New reposit
 |---|---|
 | `DEPLOY_HOST` | Your server's IP address |
 | `DEPLOY_USER` | SSH username (e.g. `root` or `ubuntu`) |
-| `DEPLOY_SSH_KEY` | Contents of `~/.ssh/id_ed25519` (private key) |
+| `DEPLOY_SSH_KEY` | Contents of `~/.ssh/tgun_deploy` (private key) |
 | `AUTH0_DOMAIN` | `dev-s25echrb6d3ibr8b.uk.auth0.com` |
 | `AUTH0_CLIENT_ID` | Your Auth0 client ID |
 | `AUTH0_AUDIENCE` | Leave empty or `https://tgun.dev/api` |

@@ -20,7 +20,7 @@ In [console.hetzner.cloud](https://console.hetzner.cloud) → **Create Resource 
 |---|---|
 | Location | Falkenstein |
 | Image | Ubuntu 24.04 |
-| Type | Shared CPU → **CX22** (2 vCPU, 4 GB RAM, €4/mo) |
+| Type | Shared CPU → Cost-Optimised → **CX22** (2 vCPU, 4 GB RAM, €4.79/mo) |
 | Networking | IPv4 + IPv6 |
 | SSH Key | Paste contents of `~/.ssh/tgun_deploy.pub`, name it `tgun-deploy` |
 | Name | `tgun` |

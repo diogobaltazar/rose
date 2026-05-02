@@ -1110,6 +1110,66 @@ def api_close_task(task_id: str) -> dict[str, Any]:
     return {"error": f"Failed to close task: {task_id}"}
 
 
+# ── Calendar endpoints ──────────────────────────────────────────────────────
+
+from topgun.services.calendar import CalendarService
+
+
+def _get_calendar_service() -> CalendarService:
+    svc = CalendarService()
+    svc.connect()
+    svc.get_or_create_calendar()
+    return svc
+
+
+@app.get("/calendar/status")
+def api_calendar_status() -> dict[str, Any]:
+    svc = CalendarService()
+    connected = svc.connect()
+    if connected:
+        svc.get_or_create_calendar()
+    return {**svc.get_status(), "connected": connected}
+
+
+@app.post("/calendar/sync")
+def api_calendar_sync() -> dict[str, Any]:
+    svc = _get_calendar_service()
+    result = svc.sync()
+    return {
+        "new_token": result.new_token,
+        "user_modified": result.user_modified,
+        "deleted": result.deleted,
+        "unchanged": result.unchanged,
+    }
+
+
+@app.post("/calendar/schedule")
+async def api_calendar_schedule() -> dict[str, Any]:
+    svc = _get_calendar_service()
+    items = await _build_backlog(status="open")
+    result = svc.schedule_and_push(items)
+    return {
+        "scheduled": [
+            {"task_id": s.task_id, "title": s.task_title,
+             "start": s.start.isoformat(), "end": s.end.isoformat()}
+            for s in result.scheduled
+        ],
+        "unschedulable": result.unschedulable,
+    }
+
+
+@app.get("/calendar/slots")
+def api_calendar_slots(
+    duration: int = 60,
+    after: str | None = None,
+) -> list[dict[str, str]]:
+    import datetime as dt
+    svc = _get_calendar_service()
+    after_dt = dt.datetime.fromisoformat(after) if after else None
+    slots = svc.find_available_slots(duration, after=after_dt)
+    return [{"start": s.start.isoformat(), "end": s.end.isoformat()} for s in slots]
+
+
 # Mount static files last so API routes take priority
 if WEB_DIR.exists():
     app.mount("/", StaticFiles(directory=str(WEB_DIR), html=True), name="static")

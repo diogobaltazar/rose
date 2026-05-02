@@ -80,6 +80,32 @@ export class TopgunClient {
     };
     return ws;
   }
+
+  async calendarStatus(): Promise<Record<string, unknown>> {
+    const r = await fetch(`${BASE}/calendar/status`);
+    if (!r.ok) throw new Error(`calendarStatus: ${r.status}`);
+    return r.json();
+  }
+
+  async calendarSync(): Promise<Record<string, unknown>> {
+    const r = await fetch(`${BASE}/calendar/sync`, { method: 'POST' });
+    if (!r.ok) throw new Error(`calendarSync: ${r.status}`);
+    return r.json();
+  }
+
+  async calendarSchedule(): Promise<Record<string, unknown>> {
+    const r = await fetch(`${BASE}/calendar/schedule`, { method: 'POST' });
+    if (!r.ok) throw new Error(`calendarSchedule: ${r.status}`);
+    return r.json();
+  }
+
+  async calendarSlots(duration: number = 60, after?: string): Promise<Array<{start: string; end: string}>> {
+    const params = new URLSearchParams({ duration: String(duration) });
+    if (after) params.set('after', after);
+    const r = await fetch(`${BASE}/calendar/slots?${params}`);
+    if (!r.ok) throw new Error(`calendarSlots: ${r.status}`);
+    return r.json();
+  }
 }
 
 export const client = new TopgunClient();

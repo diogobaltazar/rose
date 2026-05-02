@@ -90,3 +90,26 @@ class TopgunClient:
         if "error" in data:
             raise ValueError(data["error"])
         return data
+
+    def calendar_status(self) -> dict:
+        r = self._get("/calendar/status")
+        r.raise_for_status()
+        return r.json()
+
+    def calendar_sync(self) -> dict:
+        r = self._post("/calendar/sync")
+        r.raise_for_status()
+        return r.json()
+
+    def calendar_schedule(self) -> dict:
+        r = self._post("/calendar/schedule")
+        r.raise_for_status()
+        return r.json()
+
+    def calendar_slots(self, duration: int = 60, after: str | None = None) -> list[dict]:
+        params: dict[str, str] = {"duration": str(duration)}
+        if after:
+            params["after"] = after
+        r = self._get("/calendar/slots", params=params)
+        r.raise_for_status()
+        return r.json()

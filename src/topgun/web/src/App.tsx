@@ -4,6 +4,7 @@ import { useWebSocket } from './hooks/useWebSocket';
 import { Sidebar } from './components/Sidebar';
 import { SessionDetail } from './components/SessionDetail';
 import { BacklogView } from './components/BacklogView';
+import { CalendarView } from './components/CalendarView';
 
 export function App() {
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -25,6 +26,14 @@ export function App() {
     [sessions, selectedId]
   );
 
+  function renderMain() {
+    switch (activeView) {
+      case 'backlog': return <BacklogView />;
+      case 'calendar': return <CalendarView />;
+      default: return <SessionDetail session={selectedSession} />;
+    }
+  }
+
   return (
     <div id="layout">
       <Sidebar
@@ -35,7 +44,7 @@ export function App() {
         onViewChange={setActiveView}
       />
       <div id="main">
-        {activeView === 'backlog' ? <BacklogView /> : <SessionDetail session={selectedSession} />}
+        {renderMain()}
       </div>
     </div>
   );

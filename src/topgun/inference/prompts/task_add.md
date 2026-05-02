@@ -11,6 +11,7 @@ Rules:
 - tags: extract any topical tags from the text (e.g. "health", "work", "finance"). Keep them lowercase, no # prefix.
 - If a field cannot be inferred, set it to null (not an empty string).
 - acceptance_criteria: a list of 1–3 concise, verifiable steps derived from the task description.
+- estimated_minutes: estimate how long this task would take to complete in a focused session. Consider complexity, research needed, and execution. Round to the nearest 15 minutes. Minimum 15, maximum 480.
 
 Output schema:
 {
@@ -21,5 +22,6 @@ Output schema:
   "best_before": "<YYYY-MM-DD or null>",
   "must_before": "<YYYY-MM-DD or null>",
   "priority": "<high|medium|low|null>",
-  "tags": ["<tag>", ...]
+  "tags": ["<tag>", ...],
+  "estimated_minutes": <integer>
 }

@@ -34,6 +34,12 @@ export function Sidebar({ sessions, selectedId, onSelect, activeView, onViewChan
         <span className="snav-icon">▦</span> backlog
       </div>
       <div
+        className={`sidebar-nav-item${activeView === 'calendar' ? ' active' : ''}`}
+        onClick={() => onViewChange('calendar')}
+      >
+        <span className="snav-icon">◇</span> calendar
+      </div>
+      <div
         className={`sidebar-nav-item${activeView === 'observe' ? ' active' : ''}`}
         onClick={() => onViewChange('observe')}
       >

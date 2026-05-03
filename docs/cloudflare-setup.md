@@ -13,30 +13,19 @@ In the Cloudflare dashboard for `tgun.dev` → **DNS → Records → Add record*
 
 ## 2. SSL/TLS
 
-**SSL/TLS → Overview** → set mode to **Full (strict)**.
+**SSL/TLS → Overview** → set mode to **Flexible**.
 
-Install a certificate on the server (Let's Encrypt via certbot, or use Cloudflare Origin Certificate).
+With **Flexible** mode, Cloudflare handles HTTPS termination at the edge and connects to the origin over HTTP (port 80). This is the correct setting for this setup — the origin server only serves HTTP.
+
+> **Do not use Full or Full (strict)** — those modes require the origin to serve HTTPS on port 443, which is not configured. Setting Full will result in a 521 "Web Server Is Down" error even though the server is running correctly.
 
 ---
 
 ## 3. Server Setup
 
-The server needs Docker and Docker Compose installed. On a fresh Ubuntu/Debian VPS:
+The server needs Docker and Docker Compose installed. Run the provisioning script (see `docs/hetzner-setup.md`) which handles this automatically.
 
-```bash
-apt update && apt install -y docker.io docker-compose-plugin git
-```
-
-Ensure port **80** and **443** are open in the firewall, and that Docker's compose maps them:
-
-```yaml
-# in compose.yml, update the web service ports:
-ports:
-  - "80:80"
-  - "443:443"
-```
-
-For now (HTTP only during setup), port 80 is sufficient — Cloudflare handles HTTPS termination at the edge when SSL mode is set to **Flexible**. Switch to **Full (strict)** once a certificate is installed on the server.
+Ensure the web container maps to port **80** on the host. The deploy workflow writes a `compose.override.yml` on the server that handles this automatically.
 
 ---
 
@@ -51,8 +40,7 @@ In the repo → **Settings → Secrets and variables → Actions → New reposit
 | `DEPLOY_SSH_KEY` | Contents of `~/.ssh/tgun_deploy` (private key) |
 | `AUTH0_DOMAIN` | `dev-s25echrb6d3ibr8b.uk.auth0.com` |
 | `AUTH0_CLIENT_ID` | Your Auth0 client ID |
-| `AUTH0_AUDIENCE` | Leave empty or `https://tgun.dev/api` |
-| `GH_TOKEN` | A GitHub personal access token with `repo` read scope |
+| `AUTH0_AUDIENCE` | Leave empty (repo is public, no API audience needed) |
 
 ---
 

@@ -36,7 +36,9 @@ services:
 
   api:
     container_name: topgun-api
-    build: src/topgun/api
+    build:
+      context: .
+      dockerfile: src/topgun/api/Dockerfile
     volumes:
       - "${HOME}/.claude/logs:/logs:ro"
       - "${HOME}/.claude/projects:/projects:ro"
@@ -53,6 +55,7 @@ services:
       - WATCHFILES_FORCE_POLLING=true
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
       - USER_HOME=/user-home
+      - REDIS_URL=redis://localhost:6379
       - AUTH0_DOMAIN=${AUTH0_DOMAIN:-}
       - AUTH0_CLIENT_ID=${AUTH0_CLIENT_ID:-}
       - AUTH0_AUDIENCE=${AUTH0_AUDIENCE:-}

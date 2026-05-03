@@ -11,25 +11,26 @@ from pathlib import Path
 
 import pytest
 
+from topgun.services.timer import (
+    append_event as _append_event,
+    active_period as _active_period,
+    read_events as _read_events,
+    totals_by_task_id as _totals_by_task_id,
+    intervals_by_task_id as _intervals_by_task_id,
+)
 from topgun.cli.task import (
-    _append_event,
-    _active_period,
     _fmt_duration,
-    _read_events,
-    _totals_by_task_id,
-    _intervals_by_task_id,
     _parse_filter,
     _slugify,
-    _write_obsidian_task,
-    TIMER_LOG,
 )
+from topgun.services.tasks import create_task as _write_obsidian_task
 from topgun.cli.timer_match import _uid
 
 
 @pytest.fixture(autouse=True)
 def isolated_timer_log(tmp_path, monkeypatch):
     log = tmp_path / "timer.jsonl"
-    monkeypatch.setattr("topgun.cli.task.TIMER_LOG", log)
+    monkeypatch.setattr("topgun.services.timer.TIMER_LOG", log)
     return log
 
 
@@ -231,7 +232,7 @@ def test_write_obsidian_task_creates_file(tmp_path):
         "priority": "medium",
         "tags": ["personal"],
     }
-    task_dir = _write_obsidian_task(str(tmp_path), structured)
+    task_dir = _write_obsidian_task(structured, str(tmp_path))
     task_file = task_dir / "task.md"
     assert task_file.exists()
     content = task_file.read_text()
@@ -253,5 +254,5 @@ def test_write_obsidian_task_slug_from_title(tmp_path):
         "priority": None,
         "tags": [],
     }
-    task_dir = _write_obsidian_task(str(tmp_path), structured)
+    task_dir = _write_obsidian_task(structured, str(tmp_path))
     assert "call-the-bank" in task_dir.name

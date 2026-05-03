@@ -38,6 +38,33 @@ const FEATURES = [
   },
 ];
 
+const PRODUCTS = [
+  {
+    code: "AMC-01",
+    name: "TOPGUN",
+    tagline: "Elite Autonomous Development",
+    available: true,
+    desc: "The school where Claude Code pilots are forged. A team lead agent and a wingman fleet receive their briefing, are dispatched into the codebase, and return with a merged PR. Every engagement sharpens the squadron — a debrief logged, a lesson learned, a sharper pilot on the next sortie.",
+    cta: "Launch Dashboard →",
+  },
+  {
+    code: "AMC-02",
+    name: "VICTORIA",
+    tagline: "Repository Fleet Command",
+    available: false,
+    desc: "Embedded in your codebase — or an entire fleet of them. Victoria reads every open issue, reviews every PR, and systematically improves the repository. She opens each campaign with a mission brief and clarifying questions, then dispatches the fleet to engage autonomously until mission success.",
+    cta: "Coming Soon",
+  },
+  {
+    code: "AMC-03",
+    name: "VICTORIA ENTERPRISE",
+    tagline: "Standing Fleet Protection",
+    available: false,
+    desc: "A permanent fleet assigned to your production application. Victoria Enterprise monitors health, analyses every code change for downstream impact, and intervenes before there is downtime. You are not paged — the fleet handles it.",
+    cta: "Coming Soon",
+  },
+];
+
 const fade = {
   hidden: { opacity: 0, y: 16 },
   show: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.12, duration: 0.5 } }),
@@ -57,7 +84,7 @@ export default function Landing() {
 
       {/* Nav */}
       <nav className="relative z-20 flex items-center justify-between px-6 sm:px-12 py-6">
-        <span className="font-mono text-base font-bold tracking-[0.4em] text-amber-tac">TOPGUN</span>
+        <span className="font-mono text-base font-bold tracking-[0.4em] text-amber-tac">AMC</span>
         <button
           onClick={() => loginWithRedirect()}
           className="btn-amber text-xs"
@@ -180,6 +207,50 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* Products */}
+      <section className="relative z-10 py-20 px-6 sm:px-12 max-w-5xl mx-auto">
+        <div className="font-mono text-xs text-amber-tac tracking-[0.4em] uppercase mb-2">
+          — Fleet
+        </div>
+        <h2 className="font-mono text-xl font-semibold mb-12 text-text-primary">
+          Autonomous mission systems.
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-0 border border-border-dim">
+          {PRODUCTS.map((p, i) => (
+            <motion.div
+              key={p.code}
+              initial="hidden"
+              whileInView="show"
+              viewport={{ once: true }}
+              variants={fade}
+              custom={i}
+              className={`p-6 border-border-dim transition-colors group flex flex-col
+                ${i < PRODUCTS.length - 1 ? "border-r" : ""}
+                ${p.available ? "hover:bg-card-hover" : "opacity-60"}`}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="font-mono text-xs text-amber-tac tracking-widest">{p.code}</div>
+                {p.available ? (
+                  <span className="font-mono text-[10px] text-green-400 border border-green-400/30 px-2 py-0.5 tracking-widest">ACTIVE</span>
+                ) : (
+                  <span className="font-mono text-[10px] text-text-muted border border-border-dim px-2 py-0.5 tracking-widest">CLASSIFIED</span>
+                )}
+              </div>
+              <h3 className={`font-mono text-sm font-bold mb-1 tracking-wider transition-colors
+                ${p.available ? "text-text-primary group-hover:text-amber-tac" : "text-text-secondary"}`}>
+                {p.name}
+              </h3>
+              <div className="font-mono text-[10px] text-text-muted tracking-widest mb-3 uppercase">{p.tagline}</div>
+              <p className="text-xs text-text-secondary leading-relaxed flex-1">{p.desc}</p>
+              <div className={`mt-4 font-mono text-xs tracking-widest
+                ${p.available ? "text-amber-tac cursor-pointer" : "text-text-muted"}`}>
+                {p.cta}
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      </section>
+
       {/* CTA */}
       <section className="relative z-10 py-24 px-6 text-center border-t border-border-dim">
         <motion.div
@@ -206,7 +277,7 @@ export default function Landing() {
 
       {/* Footer */}
       <footer className="relative z-10 border-t border-border-dim px-6 sm:px-12 py-6 flex items-center justify-between">
-        <span className="font-mono text-xs text-text-muted tracking-widest">TOPGUN SYSTEMS</span>
+        <span className="font-mono text-xs text-text-muted tracking-widest">AUTONOMOUS MISSION CONTROL</span>
         <a
           href="https://github.com/diogobaltazar/TopGun"
           target="_blank"

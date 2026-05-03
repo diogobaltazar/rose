@@ -1,5 +1,20 @@
 # Hetzner Server Setup for tgun.dev
 
+## Industry Standard Approach
+
+The standard stack for Hetzner is:
+
+| Tool | Purpose |
+|---|---|
+| **Terraform** + Hetzner provider | Provision servers, firewalls, floating IPs as code |
+| **cloud-init** | Configure the server on first boot (runs automatically) |
+| **Ansible** | Ongoing configuration management (optional, for teams) |
+| **GitHub Actions** | Deploy the application on every push to `main` |
+
+For this project we use a provisioning script for the initial setup and GitHub Actions for deploys. Terraform is the recommended next step to make the infrastructure reproducible.
+
+---
+
 ## 1. Generate SSH Key (local machine)
 
 ```bash
@@ -23,57 +38,40 @@ In [console.hetzner.cloud](https://console.hetzner.cloud) → **Create Resource 
 | Type | Shared CPU → Cost-Optimised → **CX22** (2 vCPU, 4 GB RAM, €4.79/mo) |
 | Networking | IPv4 + IPv6 |
 | SSH Key | Paste contents of `~/.ssh/tgun_deploy.pub`, name it `tgun-deploy` |
-| Name | `tgun` |
+| Name | `topgun` |
 
-Click **Create & Buy Now**.
-
----
-
-## 3. Note the Server IP
-
-Once created, copy the **IPv4 address** from the server detail page. You will need it for:
-- Cloudflare DNS (see `cloudflare-setup.md`)
-- GitHub Secret `DEPLOY_HOST`
+Click **Create & Buy Now**. Note the IPv4 address once created.
 
 ---
 
-## 4. Install Docker on the Server
+## 3. Provision the Server
 
-SSH in and install Docker + Compose:
+Run the provisioning script from your local machine. This installs Docker, configures the firewall, and enables Docker on boot:
 
 ```bash
-ssh -i ~/.ssh/tgun_deploy root@<server-IP>
-
-apt update && apt install -y docker.io git
-
-# Install standalone docker-compose and wire it as the docker compose plugin
-curl -SL https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-linux-x86_64 \
-  -o /usr/local/bin/docker-compose
-chmod +x /usr/local/bin/docker-compose
-mkdir -p /usr/local/lib/docker/cli-plugins
-ln -sf /usr/local/bin/docker-compose /usr/local/lib/docker/cli-plugins/docker-compose
+SERVER_IP=<your-server-ip> ./scripts/provision.sh
 ```
 
-Verify:
-
-```bash
-docker --version
-docker compose version
-```
+The script:
+- Installs `docker.io`, `git`, `ufw`, `curl`
+- Installs `docker-compose` v2.27.0 and wires it as the `docker compose` plugin
+- Configures `ufw` firewall: allows SSH (22), HTTP (80), HTTPS (443), denies everything else
+- Enables and starts the Docker daemon
 
 ---
 
-## 5. Add the Private Key to GitHub Secrets
-
-The deploy workflow SSHes into the server using the private key. Add it to GitHub:
+## 4. Add GitHub Secrets
 
 **Repo → Settings → Secrets and variables → Actions → New repository secret**
 
 | Secret | Value |
 |---|---|
-| `DEPLOY_SSH_KEY` | Contents of `~/.ssh/tgun_deploy` (the private key) |
 | `DEPLOY_HOST` | Server IPv4 address |
 | `DEPLOY_USER` | `root` |
+| `DEPLOY_SSH_KEY` | Contents of `~/.ssh/tgun_deploy` (private key) |
+| `AUTH0_DOMAIN` | Your Auth0 domain |
+| `AUTH0_CLIENT_ID` | Your Auth0 client ID |
+| `AUTH0_AUDIENCE` | Leave empty (or `https://tgun.dev/api` if using custom API) |
 
 Get the private key with:
 

@@ -102,12 +102,12 @@ export default function Landing() {
           transition={{ duration: 0.8 }}
         >
           <div className="font-mono text-xs text-text-muted tracking-[0.5em] uppercase mb-8">
-            VICTORIA
+            AUTONOMOUS MISSION CONTROL
           </div>
 
           <div className="relative inline-block bracket-corners px-6 py-2">
             <h1 className="font-mono font-bold text-[4.5rem] sm:text-[8rem] tracking-[0.6em] text-white leading-none">
-              TOP<span className="text-amber-tac">GUN</span>
+              <span className="text-amber-tac">VICTORIA</span>
             </h1>
           </div>
 

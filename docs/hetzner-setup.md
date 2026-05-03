@@ -49,7 +49,7 @@ Click **Create & Buy Now**. Note the IPv4 address once created.
 Run the provisioning script from your local machine. This installs Docker, configures the firewall, and enables Docker on boot:
 
 ```bash
-SERVER_IP=<your-server-ip> ./scripts/provision.sh
+TGUNDEV_BACKEND_IP=<your-server-ip> ./scripts/provision.sh
 ```
 
 The script:

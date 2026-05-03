@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # One-time server provisioning script for tgun.dev
 # Run from your local machine: ./scripts/provision.sh <server-ip>
-# Or: SERVER_IP=178.105.28.85 ./scripts/provision.sh
+# Or: TGUNDEV_BACKEND_IP=<ip> ./scripts/provision.sh
 set -euo pipefail
 
-SERVER_IP="${1:-${SERVER_IP:?Usage: $0 <server-ip>}}"
-SSH="ssh -i ~/.ssh/tgun_deploy -o StrictHostKeyChecking=no root@${SERVER_IP}"
+TGUNDEV_BACKEND_IP="${1:-${TGUNDEV_BACKEND_IP:?Usage: $0 <server-ip>}}"
+SSH="ssh -i ~/.ssh/tgun_deploy -o StrictHostKeyChecking=no root@${TGUNDEV_BACKEND_IP}"
 
-echo "==> Provisioning ${SERVER_IP}..."
+echo "==> Provisioning ${TGUNDEV_BACKEND_IP}..."
 
 $SSH bash <<'REMOTE'
 set -euo pipefail
@@ -50,4 +50,4 @@ ufw status
 echo "==> Provisioning complete."
 REMOTE
 
-echo "==> Done. Server ${SERVER_IP} is ready."
+echo "==> Done. Server ${TGUNDEV_BACKEND_IP} is ready."

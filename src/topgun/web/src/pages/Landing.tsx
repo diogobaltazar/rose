@@ -52,7 +52,7 @@ const PRODUCTS = [
     name: "VICTORIA",
     tagline: "Repository Fleet Command",
     available: false,
-    desc: "Embedded in your codebase — or an entire fleet of them. Victoria reads every open issue, reviews every PR, and systematically improves the repository. She opens each campaign with a mission brief and clarifying questions, then dispatches the fleet to engage autonomously until mission success.",
+    desc: "Given a codebase(s), The AMC Victoria fleet reads every open issue, reviews every PR, and meticulously plans the missions campaign with you. Once clarified, it then dispatches the fleet to engage autonomously until all the missions have succeeded, effectively closing all the issues in your project, leaving pending those which require further human input.",
     cta: "Coming Soon",
   },
   {

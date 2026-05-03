@@ -1177,6 +1177,120 @@ def api_close_task(task_id: str) -> dict[str, Any]:
     return {"error": f"Failed to close task: {task_id}"}
 
 
+# ── Calendar endpoints ──────────────────────────────────────────────────────
+
+from topgun.services.calendar import CalendarService
+
+
+def _get_calendar_service() -> CalendarService:
+    svc = CalendarService()
+    svc.connect()
+    svc.get_or_create_calendar()
+    return svc
+
+
+@app.get("/calendar/status")
+def api_calendar_status() -> dict[str, Any]:
+    svc = CalendarService()
+    connected = svc.connect()
+    if connected:
+        svc.get_or_create_calendar()
+    return {**svc.get_status(), "connected": connected}
+
+
+@app.post("/calendar/sync")
+def api_calendar_sync() -> dict[str, Any]:
+    svc = _get_calendar_service()
+    result = svc.sync()
+    return {
+        "new_token": result.new_token,
+        "user_modified": result.user_modified,
+        "deleted": result.deleted,
+        "unchanged": result.unchanged,
+    }
+
+
+@app.post("/calendar/schedule")
+async def api_calendar_schedule() -> dict[str, Any]:
+    svc = _get_calendar_service()
+    items = await _build_backlog(status="open")
+    result = svc.schedule_and_push(items)
+    return {
+        "scheduled": [
+            {"task_id": s.task_id, "title": s.task_title,
+             "start": s.start.isoformat(), "end": s.end.isoformat()}
+            for s in result.scheduled
+        ],
+        "unschedulable": result.unschedulable,
+    }
+
+
+@app.get("/calendar/slots")
+def api_calendar_slots(
+    duration: int = 60,
+    after: str | None = None,
+) -> list[dict[str, str]]:
+    import datetime as dt
+    svc = _get_calendar_service()
+    after_dt = dt.datetime.fromisoformat(after) if after else None
+    slots = svc.find_available_slots(duration, after=after_dt)
+    return [{"start": s.start.isoformat(), "end": s.end.isoformat()} for s in slots]
+
+
+# ── Plan endpoints ──────────────────────────────────────────────────────────
+
+from topgun.services.plans import (
+    dict_to_plan,
+    plan_to_dict,
+    create_plan_github,
+    create_plan_obsidian,
+    flatten_plan,
+)
+
+
+def _created_to_dict(created) -> dict:
+    return {
+        "id": created.id,
+        "title": created.title,
+        "source_type": created.source_type,
+        "url": created.url,
+        "children": [_created_to_dict(c) for c in created.children],
+    }
+
+
+@app.post("/plans")
+def api_create_plan(body: dict) -> dict[str, Any]:
+    """Create a recursive plan (parent + children with dependencies).
+
+    Body: { "plan": { title, about, children: [...], ... }, "target": "github" | "obsidian", "repo": "owner/repo" | null, "vault_path": "..." | null }
+    """
+    plan_data = body.get("plan", {})
+    target = body.get("target", "obsidian")
+    plan = dict_to_plan(plan_data)
+
+    if target == "github":
+        repo = body.get("repo", "")
+        if not repo:
+            return {"error": "repo required for github plans"}
+        created = create_plan_github(plan, repo)
+    else:
+        vault_path = body.get("vault_path", "")
+        if not vault_path:
+            sources = _backlog_sources()
+            obsidian = [s for s in sources if s.get("type") == "obsidian"]
+            if not obsidian:
+                return {"error": "no obsidian vault configured"}
+            vault_path = obsidian[0]["path"]
+        created = create_plan_obsidian(plan, vault_path)
+
+    flat = flatten_plan(plan)
+    return {
+        "status": "created",
+        "total_tasks": len(flat),
+        "plan": _created_to_dict(created),
+    }
+
+
 # ── Missions ─────────────────────────────────────────────────────────────────
 
 

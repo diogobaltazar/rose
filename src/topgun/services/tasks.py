@@ -279,12 +279,15 @@ def create_task(structured: dict, vault_path: str) -> Path:
     criteria = structured.get("acceptance_criteria") or []
     criteria_str = "\n".join(f"- [ ] {c}" for c in criteria) or "- [ ] Done"
 
+    estimated = structured.get("estimated_minutes") or 60
+
     template = """\
 ---
 date: {date}
 tags: [{tags}]
 status: open
 priority: {priority}
+estimated_minutes: {estimated_minutes}
 ---
 
 # {title}
@@ -317,6 +320,7 @@ _none_
         date=today,
         tags=tags_str,
         priority=structured.get("priority") or "",
+        estimated_minutes=estimated,
         title=structured.get("title", "Untitled"),
         about=structured.get("about") or "_none_",
         motivation=structured.get("motivation") or "_none_",

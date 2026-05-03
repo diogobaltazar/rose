@@ -9,6 +9,7 @@ from topgun.cli.observe import app as observe_app
 from topgun.cli.pilot import app as pilot_app
 from topgun.cli.session import app as session_app
 from topgun.cli.task import app as task_app
+from topgun.cli.calendar import app as calendar_app
 
 app = typer.Typer(
     name="topgun",
@@ -34,6 +35,7 @@ app.add_typer(observe_app)
 app.add_typer(pilot_app)
 app.add_typer(session_app)
 app.add_typer(task_app)
+app.add_typer(calendar_app)
 
 
 if __name__ == "__main__":

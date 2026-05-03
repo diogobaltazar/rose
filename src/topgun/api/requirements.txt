@@ -2,4 +2,6 @@ fastapi
 uvicorn[standard]
 watchfiles
 httpx
+caldav>=1.4
+icalendar>=5.0
 python-jose[cryptography]

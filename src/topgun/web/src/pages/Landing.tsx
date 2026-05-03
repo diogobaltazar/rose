@@ -6,12 +6,14 @@ import HUDGrid from "../components/HUDGrid";
 import Terminal from "../components/Terminal";
 
 const INSTALL_LINES = [
-  "$ pip install topgun",
-  "  Downloading topgun-1.0.0...",
-  "  Successfully installed topgun",
+  "$ # Add to ~/.zshrc — requires Docker + Claude Code",
+  "$ alias topgun='docker run --rm -it \\",
+  "    -v \"$HOME/.claude:/claude\" \\",
+  "    ghcr.io/diogobaltazar/topgun:latest'",
+  "$ source ~/.zshrc",
+  "  ✓ topgun command registered.",
   "$ topgun install",
   "  Merging settings.json...",
-  "  Installing commands...",
   "  Installing agents...",
   "  ✓ Claude Code armed.",
   "$ topgun upgrade",
@@ -45,7 +47,7 @@ const PRODUCTS = [
     tagline: "Elite Autonomous Development",
     available: true,
     desc: "The weapons school where Claude Code pilots are forged. A team lead agent and a wingman fleet receive their briefing, are dispatched into the codebase, and return with a ready to merge PR. Every engagement sharpens the squadron — a debrief logged, a lesson learned, a sharper pilot on the next sortie.",
-    cta: "Launch Dashboard →",
+    cta: "Launch Mission Control →",
   },
   {
     code: "AMC-02",
@@ -124,7 +126,7 @@ export default function Landing() {
               onClick={() => loginWithRedirect()}
               className="btn-amber-fill"
             >
-              Launch Dashboard →
+              Launch Mission Control →
             </motion.button>
             <a
               href="#install"
@@ -172,7 +174,7 @@ export default function Landing() {
           </h2>
           <Terminal lines={INSTALL_LINES} typingSpeed={32} />
           <p className="mt-4 font-mono text-xs text-text-muted">
-            Requires Python 3.11+, Docker, and a Claude Code subscription.
+            Requires Docker and a Claude Code subscription.
           </p>
         </motion.div>
       </section>
@@ -191,10 +193,11 @@ export default function Landing() {
               key={f.tag}
               initial="hidden"
               whileInView="show"
+              whileHover={{ scale: 1.03, zIndex: 1 }}
               viewport={{ once: true }}
               variants={fade}
               custom={i}
-              className={`p-6 border-border-dim hover:bg-card-hover transition-colors group
+              className={`p-6 border-border-dim hover:bg-card-hover transition-colors group relative
                 ${i < FEATURES.length - 1 ? "border-r" : ""}`}
             >
               <div className="font-mono text-xs text-amber-tac tracking-widest mb-3">{f.tag}</div>
@@ -221,10 +224,11 @@ export default function Landing() {
               key={p.code}
               initial="hidden"
               whileInView="show"
+              whileHover={{ scale: 1.03, zIndex: 1 }}
               viewport={{ once: true }}
               variants={fade}
               custom={i}
-              className={`p-6 border-border-dim transition-colors group flex flex-col
+              className={`p-6 border-border-dim transition-colors group flex flex-col relative
                 ${i < PRODUCTS.length - 1 ? "border-r" : ""}
                 ${p.available ? "hover:bg-card-hover" : "opacity-60"}`}
             >

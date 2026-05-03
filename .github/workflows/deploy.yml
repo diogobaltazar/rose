@@ -1,0 +1,49 @@
+name: Deploy to tgun.dev
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        env:
+          AUTH0_DOMAIN: ${{ secrets.AUTH0_DOMAIN }}
+          AUTH0_CLIENT_ID: ${{ secrets.AUTH0_CLIENT_ID }}
+          AUTH0_AUDIENCE: ${{ secrets.AUTH0_AUDIENCE }}
+        with:
+          host: ${{ vars.DEPLOY_HOST }}
+          username: ${{ vars.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: AUTH0_DOMAIN,AUTH0_CLIENT_ID,AUTH0_AUDIENCE
+          script: |
+            set -e
+
+            # Clone on first deploy, pull on subsequent ones
+            if [ ! -d ~/topgun ]; then
+              git clone https://github.com/diogobaltazar/TopGun.git ~/topgun
+            fi
+
+            cd ~/topgun
+            git fetch origin main
+            git checkout main
+            git pull origin main
+
+            # Write .env from secrets
+            printf "AUTH0_DOMAIN=%s\nAUTH0_CLIENT_ID=%s\nAUTH0_AUDIENCE=%s\n" \
+              "$AUTH0_DOMAIN" "$AUTH0_CLIENT_ID" "$AUTH0_AUDIENCE" > .env
+
+            # Override web port to 80 for production (locally it runs on 5100)
+            cat > compose.override.yml <<'EOF'
+            services:
+              web:
+                ports:
+                  - "80:80"
+            EOF
+
+            # Only start api and web — topgun CLI service requires local ~/.claude mounts
+            docker compose up --build -d api web

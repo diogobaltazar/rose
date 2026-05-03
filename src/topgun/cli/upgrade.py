@@ -1,6 +1,7 @@
 import json
 import os
 import shutil
+import subprocess
 from pathlib import Path
 
 import typer
@@ -167,6 +168,14 @@ def upgrade(
             "{{must_before}}\n"
         )
         results.add_row("[green]✓[/green]", str(default_task_template.relative_to(Path.home())), "created")
+
+    # Set up ONA SSH config for rsync-based log retrieval
+    if shutil.which("ona"):
+        r = subprocess.run(["ona", "environment", "ssh-config"], capture_output=True, text=True)
+        if r.returncode == 0:
+            results.add_row("[green]✓[/green]", "ona ssh-config", "updated")
+        else:
+            results.add_row("[yellow]~[/yellow]", "ona ssh-config", "skipped (not authenticated)")
 
     # 1. Copy command files individually — never delete existing commands
     src_commands = global_src / "commands"

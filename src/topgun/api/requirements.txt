@@ -2,3 +2,4 @@ fastapi
 uvicorn[standard]
 watchfiles
 httpx
+python-jose[cryptography]

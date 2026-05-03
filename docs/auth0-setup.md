@@ -74,7 +74,19 @@ The same Docker image is used — no rebuild needed when switching between local
 
 ---
 
-## 6. Dev Mode (no Auth0)
+## 6. Customise the Login Screen
+
+The login page shows the tenant ID by default (e.g. "Log in to dev-abc123 to continue to topgun"). To show a friendly name instead:
+
+**Auth0 Dashboard → Settings (gear icon, top right) → General → Friendly Name**
+
+Set it to e.g. `Topgun`. The login screen will then read "Log in to **Topgun** to continue to topgun".
+
+> The tenant subdomain (`dev-abc123.uk.auth0.com`) is permanent and cannot be changed on the free plan. A custom login domain (e.g. `auth.tgun.dev`) requires the Pro plan.
+
+---
+
+## 7. Dev Mode (no Auth0)
 
 If `AUTH0_DOMAIN` is not set, the API skips JWT validation and all endpoints are open.  
 Useful for local development without an internet connection.

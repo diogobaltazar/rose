@@ -6,18 +6,13 @@ import HUDGrid from "../components/HUDGrid";
 import Terminal from "../components/Terminal";
 
 const INSTALL_LINES = [
-  "$ # Add to ~/.zshrc — requires Docker + Claude Code",
-  "$ alias topgun='docker run --rm -it \\",
-  "    -v \"$HOME/.claude:/claude\" \\",
-  "    ghcr.io/diogobaltazar/topgun:latest'",
-  "$ source ~/.zshrc",
-  "  ✓ topgun command registered.",
+  "# alias topgun='docker run ... ghcr.io/diogobaltazar/topgun:latest'",
   "$ topgun install",
   "  Merging settings.json...",
   "  Installing agents...",
   "  ✓ Claude Code armed.",
   "$ topgun upgrade",
-  "  Syncing from source...",
+  "  Syncing...",
   "  ✓ Configuration up to date.",
   "// Ready to launch missions.",
 ];

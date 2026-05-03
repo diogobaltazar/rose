@@ -23,13 +23,13 @@ const INSTALL_LINES = [
 const FEATURES = [
   {
     tag: "01 — MISSIONS",
-    title: "GitHub Issues as Mission Briefs",
-    desc: "Label any issue topgun-mission and it appears in your dashboard — complete with acceptance criteria, priority, and full briefing.",
+    title: "GitHub Issues or Obsidian Tasks as Mission Briefs",
+    desc: "Label any issue/task topgun-mission and it appears in your dashboard — complete with acceptance criteria, priority, and full briefing.",
   },
   {
     tag: "02 — ENGAGEMENTS",
     title: "Autonomous End-to-End Execution",
-    desc: "Each engagement runs the full cycle: reconnaissance, planning, implementation, testing, deployment, and merge. Zero human-in-the-loop.",
+    desc: "After mission planning, each engagement runs the full cycle: reconnaissance, implementation, testing, deployment, and merge. Zero human-in-the-loop.",
   },
   {
     tag: "03 — INTELLIGENCE",
@@ -44,7 +44,7 @@ const PRODUCTS = [
     name: "TOPGUN",
     tagline: "Elite Autonomous Development",
     available: true,
-    desc: "The school where Claude Code pilots are forged. A team lead agent and a wingman fleet receive their briefing, are dispatched into the codebase, and return with a merged PR. Every engagement sharpens the squadron — a debrief logged, a lesson learned, a sharper pilot on the next sortie.",
+    desc: "The weapons school where Claude Code pilots are forged. A team lead agent and a wingman fleet receive their briefing, are dispatched into the codebase, and return with a ready to merge PR. Every engagement sharpens the squadron — a debrief logged, a lesson learned, a sharper pilot on the next sortie.",
     cta: "Launch Dashboard →",
   },
   {
@@ -57,7 +57,7 @@ const PRODUCTS = [
   },
   {
     code: "AMC-03",
-    name: "VICTORIA ENTERPRISE",
+    name: "AMC VICTORIA ENTERPRISE",
     tagline: "Standing Fleet Protection",
     available: false,
     desc: "A permanent fleet assigned to your production application. Victoria Enterprise monitors health, analyses every code change for downstream impact, and intervenes before there is downtime. You are not paged — the fleet handles it.",
@@ -102,7 +102,7 @@ export default function Landing() {
           transition={{ duration: 0.8 }}
         >
           <div className="font-mono text-xs text-text-muted tracking-[0.5em] uppercase mb-8">
-            Autonomous Mission Control
+            VICTORIA
           </div>
 
           <div className="relative inline-block bracket-corners px-6 py-2">
@@ -277,7 +277,7 @@ export default function Landing() {
 
       {/* Footer */}
       <footer className="relative z-10 border-t border-border-dim px-6 sm:px-12 py-6 flex items-center justify-between">
-        <span className="font-mono text-xs text-text-muted tracking-widest">AUTONOMOUS MISSION CONTROL</span>
+        <span className="font-mono text-xs text-text-muted tracking-widest">AUTONOMOUS MISSION CONTROL VICTORIA</span>
         <a
           href="https://github.com/diogobaltazar/TopGun"
           target="_blank"

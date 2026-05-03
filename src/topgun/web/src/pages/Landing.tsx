@@ -107,7 +107,7 @@ export default function Landing() {
 
           <div className="relative inline-block bracket-corners px-6 py-2">
             <h1 className="font-mono font-bold text-[4.5rem] sm:text-[8rem] tracking-[0.6em] text-white leading-none">
-              <span className="text-amber-tac">VICTORIA</span>
+              VI<span className="text-amber-tac">CTOR</span>IA
             </h1>
           </div>
 

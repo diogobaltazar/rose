@@ -37,5 +37,13 @@ jobs:
             printf "AUTH0_DOMAIN=%s\nAUTH0_CLIENT_ID=%s\nAUTH0_AUDIENCE=%s\n" \
               "$AUTH0_DOMAIN" "$AUTH0_CLIENT_ID" "$AUTH0_AUDIENCE" > .env
 
+            # Override web port to 80 for production (locally it runs on 5100)
+            cat > compose.override.yml <<'EOF'
+            services:
+              web:
+                ports:
+                  - "80:80"
+            EOF
+
             # Only start api and web — topgun CLI service requires local ~/.claude mounts
             docker compose up --build -d api web

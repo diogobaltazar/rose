@@ -17,11 +17,64 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from jose import jwt as jose_jwt, JWTError
 
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, WebSocket, Depends, HTTPException, Security
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from watchfiles import awatch
+
+# ── Auth0 ─────────────────────────────────────────────────────────────────────
+
+AUTH0_DOMAIN = os.environ.get("AUTH0_DOMAIN", "")
+AUTH0_CLIENT_ID = os.environ.get("AUTH0_CLIENT_ID", "")
+AUTH0_AUDIENCE = os.environ.get("AUTH0_AUDIENCE", "")
+
+_jwks_cache: dict | None = None
+_jwks_cache_time: float = 0.0
+JWKS_TTL = 3600
+
+_security = HTTPBearer(auto_error=False)
+
+
+async def _get_jwks() -> dict:
+    global _jwks_cache, _jwks_cache_time
+    now = time.time()
+    if _jwks_cache and (now - _jwks_cache_time) < JWKS_TTL:
+        return _jwks_cache
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"https://{AUTH0_DOMAIN}/.well-known/jwks.json")
+        r.raise_for_status()
+        _jwks_cache = r.json()
+        _jwks_cache_time = now
+        return _jwks_cache
+
+
+async def require_auth(
+    credentials: HTTPAuthorizationCredentials | None = Security(_security),
+) -> dict | None:
+    if not AUTH0_DOMAIN:
+        return None
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Authorization required")
+    token = credentials.credentials
+    try:
+        header = jose_jwt.get_unverified_header(token)
+        jwks = await _get_jwks()
+        key = next((k for k in jwks.get("keys", []) if k.get("kid") == header.get("kid")), None)
+        if not key:
+            raise HTTPException(status_code=401, detail="Unknown signing key")
+        payload = jose_jwt.decode(
+            token,
+            key,
+            algorithms=["RS256"],
+            audience=AUTH0_AUDIENCE or None,
+            issuer=f"https://{AUTH0_DOMAIN}/",
+        )
+        return payload
+    except JWTError as exc:
+        raise HTTPException(status_code=401, detail=f"Invalid token: {exc}") from exc
 
 LOG_DIR = Path(os.environ.get("LOG_DIR", Path.home() / ".claude" / "logs"))
 PROJECTS_DIR = Path(os.environ.get("PROJECTS_DIR", Path.home() / ".claude" / "projects"))
@@ -665,6 +718,15 @@ app.add_middleware(
 )
 
 
+@app.get("/config")
+def get_config() -> dict:
+    return {
+        "auth0_domain": AUTH0_DOMAIN,
+        "auth0_client_id": AUTH0_CLIENT_ID,
+        "auth0_audience": AUTH0_AUDIENCE,
+    }
+
+
 @app.get("/sessions")
 def get_sessions() -> list[dict]:
     return _scan_sessions()
@@ -784,6 +846,7 @@ def _parse_github_issue(issue: dict, source: dict) -> dict:
         "created_at": issue.get("created_at"),
         "closed_at": issue.get("closed_at"),
         "priority": priority,
+        "labels": sorted(labels),
         "best_before": _parse_body_section(body, "Best Before") or None,
         "must_before": _parse_body_section(body, "Must Before") or None,
         "about": _parse_body_section(body, "About") or None,
@@ -827,6 +890,9 @@ def _parse_obsidian_file(file_path: Path, vault_root: Path, source: dict) -> lis
             title = title.replace(emoji, "")
         title = title.strip()
 
+        # Extract #tag-style labels from the task text
+        obsidian_labels = re.findall(r"#([\w-]+)", rest)
+
         items.append({
             "id": f"obsidian:{rel_path}#L{lineno}",
             "source_type": "obsidian",
@@ -838,6 +904,7 @@ def _parse_obsidian_file(file_path: Path, vault_root: Path, source: dict) -> lis
             "created_at": None,
             "closed_at": closed_at.group(1) if closed_at else None,
             "priority": priority,
+            "labels": obsidian_labels,
             "best_before": best_before.group(1) if best_before else None,
             "must_before": must_before.group(1) if must_before else None,
             "about": None,
@@ -1222,6 +1289,38 @@ def api_create_plan(body: dict) -> dict[str, Any]:
         "total_tasks": len(flat),
         "plan": _created_to_dict(created),
     }
+
+
+# ── Missions ─────────────────────────────────────────────────────────────────
+
+
+@app.get("/missions")
+async def get_missions(auth: dict | None = Depends(require_auth)) -> list[dict]:
+    """Backlog items labelled topgun-mission."""
+    if not _backlog_cache:
+        await _refresh_and_broadcast()
+    return [item for item in _backlog_cache if "topgun-mission" in item.get("labels", [])]
+
+
+@app.get("/missions/{mission_id:path}/engagements")
+async def get_mission_engagements(
+    mission_id: str,
+    auth: dict | None = Depends(require_auth),
+) -> list[dict]:
+    """Sessions associated with a mission, matched via branch naming convention.
+
+    GitHub missions create branches like feat/{issue_number}-{slug}.
+    """
+    issue_number: str | None = None
+    if mission_id.startswith("gh:") and "#" in mission_id:
+        issue_number = mission_id.split("#")[-1]
+
+    sessions = _scan_sessions()
+    if not issue_number:
+        return []
+
+    pattern = re.compile(rf"^feat(?:ure)?/{re.escape(issue_number)}[-/]")
+    return [s for s in sessions if s.get("branch") and pattern.match(s["branch"])]
 
 
 # Mount static files last so API routes take priority

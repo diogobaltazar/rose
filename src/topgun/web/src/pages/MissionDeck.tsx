@@ -108,12 +108,13 @@ export function IntelGrid({ docs }: { docs: IntelDocument[] }) {
 
 function makeTermLines(uid: string, title: string): string[] {
   return [
-    `$ /topgun-mission-plan intel document ${uid}`,
-    "",
     "◆  Spawning ONA environment...",
     "◆  Loading Claude Code agent...",
     "◆  Loading mission planner skill...",
     "",
+    `$ /topgun-mission-plan intel document ${uid}`,
+    "",
+    "◆  Thinking...",
     `◆  Reading intel: "${title}"`,
     "◆  Fetching repository context...",
     "◆  Scanning codebase structure...",

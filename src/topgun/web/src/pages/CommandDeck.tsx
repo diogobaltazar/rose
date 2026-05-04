@@ -171,9 +171,9 @@ export default function CommandDeck() {
                 <p className="font-mono text-xs text-text-muted">NO MATCHES</p>
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                 {searchResults.map((r) => (
-                  <IntelCard key={r.uid} uid={r.uid} source={r.source} sourceUrl={r.source_url} title={r.title} />
+                  <IntelCard key={r.uid} doc={{ uid: r.uid, source: r.source, source_url: r.source_url, title: r.title }} />
                 ))}
               </div>
             )}
@@ -247,42 +247,69 @@ function CardsPanel({ docs, tab }: { docs: IntelDocument[]; tab: Tab }) {
   }
 
   return (
-    <div className="space-y-2">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
       {docs.map((doc) => (
-        <IntelCard key={doc.uid} uid={doc.uid} source={doc.source} sourceUrl={doc.source_url} />
+        <IntelCard key={doc.uid} doc={doc} />
       ))}
     </div>
   );
 }
 
 
-function IntelCard({ uid, source, sourceUrl, title }: { uid: string; source: string; sourceUrl: string; title?: string }) {
-  const handleClick = () => {
-    if (source === "github" && sourceUrl) {
-      window.open(sourceUrl, "_blank");
-    } else if (source === "obsidian" && sourceUrl) {
+function IntelCard({ doc }: { doc: IntelDocument & { title?: string; tags?: string[]; auto_discovered?: boolean } }) {
+  const { uid, source, source_url: sourceUrl } = doc;
+  const title = (doc as { title?: string }).title || sourceUrl?.split("/").pop()?.replace(".md", "") || uid;
+
+  // Derive mission status from tags (fetched lazily — currently placeholder)
+  const tags: string[] = (doc as { tags?: string[] }).tags ?? [];
+  const isMission = tags.includes("topgun-mission");
+  const isReady = tags.includes("topgun-mission-ready");
+
+  const openSource = () => {
+    if (source === "github" && sourceUrl) window.open(sourceUrl, "_blank");
+    else if (source === "obsidian" && sourceUrl)
       window.open(`obsidian://open?path=${encodeURIComponent(sourceUrl)}`, "_blank");
-    }
   };
 
   return (
-    <button
-      onClick={handleClick}
-      className="w-full text-left tac-border p-4 hover:bg-card-hover transition-colors flex items-center gap-4"
-    >
-      <div className={`font-mono text-xs px-2 py-0.5 border tracking-widest uppercase ${
-        source === "github" ? "border-green-live text-green-live" : "border-cyan-hud text-cyan-hud"
-      }`}>
-        {source === "github" ? "GH" : "OBS"}
+    <div className="tac-border flex flex-col aspect-square p-4 hover:bg-card transition-colors">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
+        <span className={`font-mono text-xs px-1.5 py-0.5 border tracking-widest ${
+          source === "github" ? "border-green-live text-green-live" : "border-cyan-hud text-cyan-hud"
+        }`}>
+          {source === "github" ? "GH" : "OBS"}
+        </span>
+        <span className="font-mono text-xs text-text-muted/40">{uid.slice(0, 6)}</span>
       </div>
-      <div className="flex-1 min-w-0">
-        <div className="font-mono text-xs text-text-primary truncate">
-          {title || sourceUrl || uid}
-        </div>
-        <div className="font-mono text-xs text-text-muted truncate mt-0.5">
-          {uid}
-        </div>
+
+      {/* Title */}
+      <button
+        onClick={openSource}
+        className="flex-1 text-left font-mono text-xs text-text-primary leading-relaxed hover:text-amber-tac transition-colors line-clamp-4"
+      >
+        {title}
+      </button>
+
+      {/* Action button */}
+      <div className="mt-3">
+        {isMission ? (
+          <button className={`w-full font-mono text-xs py-1.5 tracking-widest border transition-colors ${
+            isReady
+              ? "border-green-live text-green-live hover:bg-green-live/10"
+              : "border-amber-tac text-amber-tac hover:bg-amber-tac/10"
+          }`}>
+            {isReady ? "→ ENGAGE" : "→ PLAN"}
+          </button>
+        ) : (
+          <button
+            onClick={openSource}
+            className="w-full font-mono text-xs py-1.5 tracking-widest border border-border-dim text-text-muted hover:text-text-secondary hover:border-text-muted transition-colors"
+          >
+            → OPEN
+          </button>
+        )}
       </div>
-    </button>
+    </div>
   );
 }

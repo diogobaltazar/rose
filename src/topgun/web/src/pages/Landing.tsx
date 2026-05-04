@@ -81,7 +81,7 @@ export default function Landing() {
 
       {/* Nav */}
       <nav className="relative z-20 flex items-center justify-between px-6 sm:px-12 py-6">
-        <span className="font-mono text-base font-bold tracking-[0.4em] text-amber-tac">AMC</span>
+        <span className="font-mono text-sm font-bold tracking-[0.35em] text-white">AMC <span className="text-amber-tac">VICTORIA</span></span>
         <button
           onClick={() => loginWithRedirect()}
           className="btn-amber text-xs"
@@ -103,7 +103,7 @@ export default function Landing() {
           </div>
 
           <div className="relative inline-block bracket-corners px-6 py-2">
-            <h1 className="font-mono font-bold text-[4.5rem] sm:text-[8rem] tracking-[0.6em] text-white leading-none">
+            <h1 className="font-mono font-bold text-[2.8rem] sm:text-[5rem] tracking-[0.6em] text-white leading-none">
               AMC <span className="text-amber-tac">VICTORIA</span>
             </h1>
           </div>

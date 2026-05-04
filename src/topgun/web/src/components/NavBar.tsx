@@ -7,8 +7,8 @@ export default function NavBar() {
 
   return (
     <nav className="relative z-20 flex items-center justify-between px-6 py-4 border-b border-border-dim bg-base/80 backdrop-blur-sm">
-      <Link to="/deck" className="font-mono text-sm font-bold tracking-[0.35em] text-amber-tac hover:text-amber-dim transition-colors">
-        TOPGUN
+      <Link to="/deck" className="font-mono text-sm font-bold tracking-[0.35em] text-white hover:text-amber-tac transition-colors">
+        AMC <span className="text-amber-tac">VICTORIA</span>
       </Link>
 
       <div className="flex items-center gap-2 text-xs">
@@ -29,7 +29,7 @@ export default function NavBar() {
         </Link>
         {user && (
           <>
-            <span className="font-mono text-text-muted tracking-wide">{user.email}</span>
+            <span className="font-mono text-amber-tac tracking-wide">{user.email}</span>
             <span className="text-border-bright mx-2">|</span>
           </>
         )}

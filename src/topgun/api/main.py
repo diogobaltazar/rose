@@ -17,64 +17,18 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from jose import jwt as jose_jwt, JWTError
 
-from fastapi import FastAPI, WebSocket, Depends, HTTPException, Security
+from fastapi import FastAPI, WebSocket, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from watchfiles import awatch
 
-# ── Auth0 ─────────────────────────────────────────────────────────────────────
-
-AUTH0_DOMAIN = os.environ.get("AUTH0_DOMAIN", "")
-AUTH0_CLIENT_ID = os.environ.get("AUTH0_CLIENT_ID", "")
-AUTH0_AUDIENCE = os.environ.get("AUTH0_AUDIENCE", "")
-
-_jwks_cache: dict | None = None
-_jwks_cache_time: float = 0.0
-JWKS_TTL = 3600
-
-_security = HTTPBearer(auto_error=False)
-
-
-async def _get_jwks() -> dict:
-    global _jwks_cache, _jwks_cache_time
-    now = time.time()
-    if _jwks_cache and (now - _jwks_cache_time) < JWKS_TTL:
-        return _jwks_cache
-    async with httpx.AsyncClient(timeout=10) as client:
-        r = await client.get(f"https://{AUTH0_DOMAIN}/.well-known/jwks.json")
-        r.raise_for_status()
-        _jwks_cache = r.json()
-        _jwks_cache_time = now
-        return _jwks_cache
-
-
-async def require_auth(
-    credentials: HTTPAuthorizationCredentials | None = Security(_security),
-) -> dict | None:
-    if not AUTH0_DOMAIN:
-        return None
-    if not credentials:
-        raise HTTPException(status_code=401, detail="Authorization required")
-    token = credentials.credentials
-    try:
-        header = jose_jwt.get_unverified_header(token)
-        jwks = await _get_jwks()
-        key = next((k for k in jwks.get("keys", []) if k.get("kid") == header.get("kid")), None)
-        if not key:
-            raise HTTPException(status_code=401, detail="Unknown signing key")
-        payload = jose_jwt.decode(
-            token,
-            key,
-            algorithms=["RS256"],
-            audience=AUTH0_AUDIENCE or None,
-            issuer=f"https://{AUTH0_DOMAIN}/",
-        )
-        return payload
-    except JWTError as exc:
-        raise HTTPException(status_code=401, detail=f"Invalid token: {exc}") from exc
+from deps import require_auth, AUTH0_DOMAIN, AUTH0_CLIENT_ID, AUTH0_AUDIENCE
+import os as _os
+AUTH0_CLI_CLIENT_ID = _os.environ.get("AUTH0_CLI_CLIENT_ID", "")
+from intel import router as intel_router
+from timer import router as timer_router
+from connect import router as connect_router
 
 LOG_DIR = Path(os.environ.get("LOG_DIR", Path.home() / ".claude" / "logs"))
 PROJECTS_DIR = Path(os.environ.get("PROJECTS_DIR", Path.home() / ".claude" / "projects"))
@@ -717,12 +671,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(intel_router)
+app.include_router(timer_router)
+app.include_router(connect_router)
+
 
 @app.get("/config")
 def get_config() -> dict:
     return {
         "auth0_domain": AUTH0_DOMAIN,
         "auth0_client_id": AUTH0_CLIENT_ID,
+        "auth0_cli_client_id": AUTH0_CLI_CLIENT_ID or AUTH0_CLIENT_ID,
         "auth0_audience": AUTH0_AUDIENCE,
     }
 

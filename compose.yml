@@ -1,39 +1,4 @@
 services:
-  topgun:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: topgun:latest
-    volumes:
-      - type: bind
-        source: ${TARGET_PROJECT:-.}
-        target: /project
-      - type: bind
-        source: ${HOME}/.claude
-        target: /claude
-      - type: bind
-        source: ${HOME}/.ssh
-        target: /root/.ssh
-        read_only: true
-      - type: bind
-        source: ${HOME}/.config/topgun
-        target: /topgun-config
-      - type: bind
-        source: ${HOME}/.topgun
-        target: /topgun-data
-    environment:
-      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
-      - ANTHROPIC_API_KEY=${TOPGUN_ANTHROPIC_API_KEY:-}
-      - ANTHROPIC_BASE_URL=${TOPGUN_ANTHROPIC_BASE_URL:-}
-      - TOPGUN_PROXY_TOOL_HEADER=${TOPGUN_PROXY_TOOL_HEADER:-}
-      - TOPGUN_PROXY_TOOL_VALUE=${TOPGUN_PROXY_TOOL_VALUE:-}
-      - CLAUDE_DIR=/claude
-      - TOPGUN_CONFIG=/topgun-config/config.json
-      - TOPGUN_VAULT=/topgun-data/archive
-      - OBSIDIAN_DIR=/topgun-data
-      - TOPGUN_TIMER_LOG=/topgun-data/timer.jsonl
-      - TOPGUN_INFERENCE_LOG=/topgun-data/logs/inference/anthropic/calls.jsonl
-
   api:
     container_name: topgun-api
     build:
@@ -58,7 +23,14 @@ services:
       - REDIS_URL=redis://localhost:6379
       - AUTH0_DOMAIN=${AUTH0_DOMAIN:-}
       - AUTH0_CLIENT_ID=${AUTH0_CLIENT_ID:-}
+      - AUTH0_CLI_CLIENT_ID=${AUTH0_CLI_CLIENT_ID:-}
       - AUTH0_AUDIENCE=${AUTH0_AUDIENCE:-}
+      - GDRIVE_REDIRECT_URI=${GDRIVE_REDIRECT_URI:-http://localhost:5101/connect/backend/callback}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID:-}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
+      - GITHUB_REDIRECT_URI=${GITHUB_REDIRECT_URI:-http://localhost:5101/connect/github/callback}
+      - BACKEND_SECRET=${BACKEND_SECRET:-dev-secret-change-in-prod}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5100}
     ports:
       - "5101:8000"
 

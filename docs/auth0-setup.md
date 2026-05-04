@@ -56,7 +56,6 @@ Create a `.env` file at the repo root (already in `.gitignore`):
 ```bash
 AUTH0_DOMAIN=your-tenant.eu.auth0.com
 AUTH0_CLIENT_ID=your-client-id
-AUTH0_AUDIENCE=https://tgun.dev/api
 ```
 
 Then:
@@ -69,7 +68,7 @@ The webapp is at `http://localhost:5100`.
 
 ### Remote (tgun.dev)
 
-Set the same three variables in your hosting environment's secret store.  
+Set the same two variables in your hosting environment's secret store.  
 The same Docker image is used — no rebuild needed when switching between local and remote.
 
 ---

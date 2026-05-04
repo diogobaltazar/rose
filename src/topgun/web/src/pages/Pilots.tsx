@@ -11,6 +11,7 @@ interface Pilot {
   callsign: string; accomplished: number; failed: number;
   tokens: number; tools: number; usd: number;
   missions: PilotMission[];
+  isUser?: boolean;
 }
 
 const PILOTS: Pilot[] = [
@@ -66,29 +67,158 @@ function fmt(n: number): string {
   return String(n);
 }
 
+function Mugshot({ callsign, size = "sm" }: { callsign: string; size?: "sm" | "lg" }) {
+  const dim = size === "sm" ? "w-10 h-10" : "w-20 h-20";
+  const textSize = size === "sm" ? "text-base" : "text-3xl";
+  return (
+    <div className={`${dim} relative border border-amber-tac/25 bg-card flex items-center justify-center shrink-0 overflow-hidden`}>
+      <div className="absolute inset-0">
+        <div className="absolute top-1/2 left-0 right-0 h-px bg-amber-tac/10" />
+        <div className="absolute left-1/2 top-0 bottom-0 w-px bg-amber-tac/10" />
+      </div>
+      <div className="absolute top-0 left-0 w-2 h-2 border-t border-l border-amber-tac/35" />
+      <div className="absolute top-0 right-0 w-2 h-2 border-t border-r border-amber-tac/35" />
+      <div className="absolute bottom-0 left-0 w-2 h-2 border-b border-l border-amber-tac/35" />
+      <div className="absolute bottom-0 right-0 w-2 h-2 border-b border-r border-amber-tac/35" />
+      <span className={`font-mono ${textSize} font-bold text-amber-tac/50 relative z-10`}>{callsign[0]}</span>
+    </div>
+  );
+}
+
+function PilotCardCompact({ pilot, onClick, index }: { pilot: Pilot; onClick: () => void; index: number }) {
+  return (
+    <button
+      onClick={onClick}
+      className="tac-border flex items-center gap-4 px-4 py-3 hover:bg-card transition-colors text-left w-full animate-fadeIn"
+      style={{ animationDelay: `${index * 0.06}s` }}
+    >
+      <Mugshot callsign={pilot.callsign} size="sm" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-sm font-bold text-amber-tac tracking-widest">{pilot.callsign}</span>
+          {pilot.isUser && (
+            <span className="font-mono text-xs border border-amber-tac text-amber-tac px-1.5 py-0.5 tracking-widest leading-none">YOU</span>
+          )}
+        </div>
+        <div className="font-mono text-xs text-text-muted mt-0.5">
+          <span className="text-green-live">{pilot.accomplished}W</span>
+          {" · "}
+          <span className={pilot.failed > 0 ? "text-red-alert" : "text-text-muted"}>{pilot.failed}L</span>
+          {pilot.isUser && pilot.accomplished === 0 && (
+            <span className="ml-2 text-text-muted/40">via daemon</span>
+          )}
+        </div>
+      </div>
+      <span className="font-mono text-xs text-text-muted/40">▶</span>
+    </button>
+  );
+}
+
+function PilotCardExpanded({ pilot, onClose }: { pilot: Pilot; onClose: () => void }) {
+  const [missionsOpen, setMissionsOpen] = useState(false);
+
+  return (
+    <div className={`tac-border animate-fadeIn ${pilot.isUser ? "border-amber-tac" : ""}`}>
+      {/* header */}
+      <div className="flex items-start gap-6 px-6 py-5 border-b border-border-dim">
+        <Mugshot callsign={pilot.callsign} size="lg" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-3 mb-3">
+            <span className="font-mono text-lg font-bold text-amber-tac tracking-widest">{pilot.callsign}</span>
+            {pilot.isUser && (
+              <span className="font-mono text-xs border border-amber-tac text-amber-tac px-1.5 py-0.5 tracking-widest">YOU</span>
+            )}
+            <span className="font-mono text-xs text-text-muted ml-auto">
+              <span className="text-green-live">{pilot.accomplished}W</span>
+              {" · "}
+              <span className={pilot.failed > 0 ? "text-red-alert" : "text-text-muted"}>{pilot.failed}L</span>
+            </span>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            {[
+              { label: "TOKENS", value: fmt(pilot.tokens) },
+              { label: "TOOLS", value: fmt(pilot.tools) },
+              { label: "COST", value: `$${pilot.usd.toFixed(1)}` },
+            ].map((s) => (
+              <div key={s.label}>
+                <div className="font-mono text-base font-bold text-text-primary">{s.value}</div>
+                <div className="font-mono text-xs text-text-muted tracking-widest mt-0.5">{s.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <button
+          onClick={onClose}
+          className="font-mono text-xs text-text-muted hover:text-amber-tac transition-colors tracking-widest shrink-0"
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* missions */}
+      <div className="px-6 py-4">
+        {pilot.missions.length === 0 ? (
+          <p className="font-mono text-xs text-text-muted/50 tracking-widest">NO MISSIONS LOGGED</p>
+        ) : (
+          <>
+            <button
+              onClick={() => setMissionsOpen(v => !v)}
+              className="font-mono text-xs text-text-muted hover:text-amber-tac tracking-widest uppercase transition-colors"
+            >
+              MISSIONS ({pilot.missions.length}) {missionsOpen ? "▲" : "▼"}
+            </button>
+            {missionsOpen && (
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                {pilot.missions.map((m, i) => (
+                  <div
+                    key={m.uid}
+                    className="border border-border-dim p-3 animate-fadeIn"
+                    style={{ animationDelay: `${i * 0.05}s` }}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <span className="font-mono text-xs text-text-primary leading-snug">{m.title}</span>
+                      <span className="font-mono text-xs text-text-muted border border-border-dim px-1.5 py-0.5 shrink-0 tracking-widest uppercase whitespace-nowrap">
+                        {m.role}
+                      </span>
+                    </div>
+                    <div className="flex gap-3">
+                      <span className="font-mono text-xs text-text-muted">{fmt(m.tokens)} tok</span>
+                      <span className="font-mono text-xs text-text-muted">{m.tools} tools</span>
+                      <span className="font-mono text-xs text-text-muted">${m.usd.toFixed(2)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Pilots() {
   const { isAuthenticated, isLoading, loginWithRedirect, user } = useAuth0();
+  const [selected, setSelected] = useState<string | null>(null);
 
   if (!isLoading && !isAuthenticated) { loginWithRedirect(); return null; }
 
   const userPilot: Pilot | null = useMemo(() => {
     if (!user) return null;
     const callsign = (user.nickname ?? user.email?.split("@")[0] ?? "you").toUpperCase();
-    return {
-      callsign,
-      accomplished: 0,
-      failed: 0,
-      tokens: 0,
-      tools: 0,
-      usd: 0,
-      missions: [],
-      isUser: true,
-    } as Pilot & { isUser?: boolean };
+    return { callsign, accomplished: 0, failed: 0, tokens: 0, tools: 0, usd: 0, missions: [], isUser: true };
   }, [user]);
 
   const allPilots = useMemo(() =>
     userPilot ? [userPilot, ...PILOTS] : PILOTS,
   [userPilot]);
+
+  const selectedIdx = selected ? allPilots.findIndex(p => p.callsign === selected) : -1;
+  const selectedPilot = selectedIdx >= 0 ? allPilots[selectedIdx] : null;
+  const before = selectedIdx >= 0 ? allPilots.slice(0, selectedIdx) : allPilots;
+  const after = selectedIdx >= 0 ? allPilots.slice(selectedIdx + 1) : [];
+
+  const toggle = (callsign: string) => setSelected(v => v === callsign ? null : callsign);
 
   return (
     <div className="min-h-screen bg-base text-text-primary">
@@ -100,91 +230,27 @@ export default function Pilots() {
           <h1 className="font-mono text-xl font-semibold">Pilots</h1>
           <p className="font-mono text-xs text-text-muted mt-1">Pilot roster — mission telemetry and performance</p>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {allPilots.map((p) => <PilotCard key={p.callsign} pilot={p} />)}
-        </div>
-      </main>
-    </div>
-  );
-}
 
-function PilotCard({ pilot }: { pilot: Pilot & { isUser?: boolean } }) {
-  const [open, setOpen] = useState(false);
-  const [missionsOpen, setMissionsOpen] = useState(false);
-  const isUser = pilot.isUser ?? false;
-
-  return (
-    <div className={`flex flex-col ${isUser ? "border border-amber-tac" : "tac-border"}`}>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center justify-between px-5 py-4 hover:bg-card transition-colors text-left"
-      >
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="font-mono text-sm font-bold text-amber-tac tracking-widest">{pilot.callsign}</div>
-            {isUser && (
-              <span className="font-mono text-xs border border-amber-tac text-amber-tac px-1.5 py-0.5 tracking-widest">YOU</span>
-            )}
-          </div>
-          <div className="font-mono text-xs text-text-muted mt-0.5">
-            <span className="text-green-live">{pilot.accomplished}W</span>
-            {" · "}
-            <span className={pilot.failed > 0 ? "text-red-alert" : "text-text-muted"}>{pilot.failed}L</span>
-            {isUser && pilot.accomplished === 0 && (
-              <span className="ml-2 text-text-muted/50">— stats populate via daemon</span>
-            )}
-          </div>
-        </div>
-        <span className="font-mono text-xs text-text-muted">{open ? "▲" : "▼"}</span>
-      </button>
-
-      {open && (
-        <div className="border-t border-border-dim px-5 py-4 space-y-4">
-          <div className="grid grid-cols-3 gap-2 text-center">
-            {[
-              { label: "TOKENS", value: fmt(pilot.tokens) },
-              { label: "TOOLS", value: fmt(pilot.tools) },
-              { label: "COST", value: `$${pilot.usd.toFixed(1)}` },
-            ].map((s) => (
-              <div key={s.label}>
-                <div className="font-mono text-sm font-bold text-text-primary">{s.value}</div>
-                <div className="font-mono text-xs text-text-muted tracking-widest">{s.label}</div>
-              </div>
-            ))}
-          </div>
-
-          {pilot.missions.length > 0 && (
-            <div>
-              <button
-                onClick={() => setMissionsOpen((v) => !v)}
-                className="font-mono text-xs text-text-muted hover:text-amber-tac tracking-widest uppercase transition-colors"
-              >
-                MISSIONS ({pilot.missions.length}) {missionsOpen ? "▲" : "▼"}
-              </button>
-
-              {missionsOpen && (
-                <div className="mt-3 space-y-2">
-                  {pilot.missions.map((m) => (
-                    <div key={m.uid} className="border border-border-dim p-3">
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <span className="font-mono text-xs text-text-primary leading-snug">{m.title}</span>
-                        <span className="font-mono text-xs text-text-muted border border-border-dim px-1.5 py-0.5 shrink-0 tracking-widest uppercase whitespace-nowrap">
-                          {m.role}
-                        </span>
-                      </div>
-                      <div className="flex gap-4">
-                        <span className="font-mono text-xs text-text-muted">{fmt(m.tokens)} tok</span>
-                        <span className="font-mono text-xs text-text-muted">{m.tools} tools</span>
-                        <span className="font-mono text-xs text-text-muted">${m.usd.toFixed(2)}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+        <div className="space-y-4">
+          {before.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {before.map((p, i) => (
+                <PilotCardCompact key={p.callsign} pilot={p} onClick={() => toggle(p.callsign)} index={i} />
+              ))}
+            </div>
+          )}
+          {selectedPilot && (
+            <PilotCardExpanded pilot={selectedPilot} onClose={() => setSelected(null)} />
+          )}
+          {after.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {after.map((p, i) => (
+                <PilotCardCompact key={p.callsign} pilot={p} onClick={() => toggle(p.callsign)} index={i} />
+              ))}
             </div>
           )}
         </div>
-      )}
+      </main>
     </div>
   );
 }

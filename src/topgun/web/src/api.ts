@@ -15,6 +15,12 @@ export function invalidateCache(...keys: string[]) {
   else keys.forEach(k => _cache.delete(k));
 }
 
+export function peekCache<T>(key: string): T | null {
+  const hit = _cache.get(key);
+  if (hit && Date.now() - hit.ts < TTL) return hit.data as T;
+  return null;
+}
+
 export async function getConfig(): Promise<AppConfig> {
   const r = await fetch(`${BASE}/config`);
   if (!r.ok) throw new Error("config fetch failed");

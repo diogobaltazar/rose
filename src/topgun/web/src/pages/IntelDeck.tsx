@@ -3,7 +3,8 @@ import { useAuth0 } from "@auth0/auth0-react";
 import { useToken } from "../hooks/useToken";
 import NavBar from "../components/NavBar";
 import HUDGrid from "../components/HUDGrid";
-import { getIntelStats, getIntelList, searchIntel } from "../api";
+import { getIntelStats, getIntelList, searchIntel, peekCache } from "../api";
+import { Spinner } from "./MissionDeck";
 import type { IntelStats, IntelDocument, IntelSearchResult } from "../types";
 import { StatCard, IntelGrid } from "./MissionDeck";
 
@@ -13,11 +14,11 @@ export default function IntelDeck() {
   const { isAuthenticated, isLoading, loginWithRedirect } = useAuth0();
   const { getToken } = useToken();
   const [view, setView] = useState<View>("stats");
-  const [stats, setStats] = useState<IntelStats | null>(null);
-  const [docs, setDocs] = useState<IntelDocument[]>([]);
+  const [stats, setStats] = useState<IntelStats | null>(() => peekCache<IntelStats>("intel-stats"));
+  const [docs, setDocs] = useState<IntelDocument[]>(() => peekCache<IntelDocument[]>("intel-list") ?? []);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<IntelSearchResult[] | null>(null);
-  const [_loading, setLoading] = useState(true);
+  const [_loading, setLoading] = useState<boolean>(() => peekCache("intel-stats") === null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -105,16 +106,16 @@ export default function IntelDeck() {
           </div>
         )}
 
-        {searchResults === null && view === "stats" && stats && (
+        {searchResults === null && view === "stats" && (_loading ? <Spinner /> : stats && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {[
               { label: "TOTAL", value: stats.total },
               { label: "GITHUB", value: stats.by_source.github },
               { label: "OBSIDIAN", value: stats.by_source.obsidian },
               { label: "MISSIONS", value: stats.missions },
-            ].map((s) => <StatCard key={s.label} label={s.label} value={s.value} />)}
+            ].map((s, i) => <StatCard key={s.label} label={s.label} value={s.value} index={i} />)}
           </div>
-        )}
+        ))}
 
         {searchResults === null && view === "cards" && <IntelGrid docs={docs} />}
       </main>

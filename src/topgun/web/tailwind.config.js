@@ -64,7 +64,7 @@ export default {
           "50%": { opacity: "0.4" },
         },
         fadeIn: {
-          from: { opacity: "0", transform: "translateY(8px)" },
+          from: { opacity: "0", transform: "translateY(10px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
       },
@@ -72,7 +72,7 @@ export default {
         scanline: "scanline 8s linear infinite",
         blink: "blink 1s step-end infinite",
         pulse_amber: "pulse_amber 2s ease-in-out infinite",
-        fadeIn: "fadeIn 0.4s ease-out forwards",
+        fadeIn: "fadeIn 0.35s ease-out both",
       },
     },
   },

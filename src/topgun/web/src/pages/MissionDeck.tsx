@@ -3,7 +3,7 @@ import { useAuth0 } from "@auth0/auth0-react";
 import { useToken } from "../hooks/useToken";
 import NavBar from "../components/NavBar";
 import HUDGrid from "../components/HUDGrid";
-import { getIntelStats, getIntelList } from "../api";
+import { getIntelStats, getIntelList, peekCache } from "../api";
 import type { IntelStats, IntelDocument } from "../types";
 
 type View = "stats" | "cards";
@@ -12,9 +12,9 @@ export default function MissionDeck() {
   const { isAuthenticated, isLoading, loginWithRedirect } = useAuth0();
   const { getToken } = useToken();
   const [view, setView] = useState<View>("stats");
-  const [stats, setStats] = useState<IntelStats | null>(null);
-  const [docs, setDocs] = useState<IntelDocument[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<IntelStats | null>(() => peekCache<IntelStats>("intel-stats"));
+  const [docs, setDocs] = useState<IntelDocument[]>(() => peekCache<IntelDocument[]>("intel-list") ?? []);
+  const [loading, setLoading] = useState<boolean>(() => peekCache("intel-stats") === null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -70,16 +70,15 @@ export default function MissionDeck() {
 function MissionStats({ stats, loading }: { stats: { total: number; drafts: number; ready: number; engaged: number } | null; loading: boolean }) {
   if (loading) return <Spinner />;
   if (!stats) return null;
+  const items = [
+    { label: "TOTAL", value: stats.total },
+    { label: "DRAFTS", value: stats.drafts },
+    { label: "READY", value: stats.ready },
+    { label: "ENGAGED", value: stats.engaged },
+  ];
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-      {[
-        { label: "TOTAL", value: stats.total },
-        { label: "DRAFTS", value: stats.drafts },
-        { label: "READY", value: stats.ready },
-        { label: "ENGAGED", value: stats.engaged },
-      ].map((s) => (
-        <StatCard key={s.label} label={s.label} value={s.value} />
-      ))}
+      {items.map((s, i) => <StatCard key={s.label} label={s.label} value={s.value} index={i} />)}
     </div>
   );
 }
@@ -108,9 +107,12 @@ export function SectionHeader({ title, subtitle, view, onView }: {
   );
 }
 
-export function StatCard({ label, value }: { label: string; value: number }) {
+export function StatCard({ label, value, index = 0 }: { label: string; value: number; index?: number }) {
   return (
-    <div className="tac-border p-6 text-center bracket-corners">
+    <div
+      className="tac-border p-6 text-center bracket-corners animate-fadeIn"
+      style={{ animationDelay: `${index * 0.07}s` }}
+    >
       <div className="font-mono text-2xl font-bold text-amber-tac">{value}</div>
       <div className="font-mono text-xs text-text-muted tracking-widest mt-2">{label}</div>
     </div>
@@ -125,12 +127,12 @@ export function IntelGrid({ docs }: { docs: IntelDocument[] }) {
   );
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-      {docs.map((doc) => <IntelCard key={doc.uid} doc={doc} />)}
+      {docs.map((doc, i) => <IntelCard key={doc.uid} doc={doc} index={i} />)}
     </div>
   );
 }
 
-function IntelCard({ doc }: { doc: IntelDocument & { title?: string; tags?: string[] } }) {
+function IntelCard({ doc, index = 0 }: { doc: IntelDocument & { title?: string; tags?: string[] }; index?: number }) {
   const { uid, source, source_url: sourceUrl } = doc;
   const title = (doc as { title?: string }).title || sourceUrl?.split("/").pop()?.replace(".md", "") || uid;
   const tags: string[] = (doc as { tags?: string[] }).tags ?? [];
@@ -144,7 +146,10 @@ function IntelCard({ doc }: { doc: IntelDocument & { title?: string; tags?: stri
   };
 
   return (
-    <div className="tac-border flex flex-col aspect-square p-4 hover:bg-card transition-colors">
+    <div
+      className="tac-border flex flex-col aspect-square p-4 hover:bg-card transition-colors animate-fadeIn"
+      style={{ animationDelay: `${index * 0.04}s` }}
+    >
       <div className="flex items-center justify-between mb-3">
         <span className={`font-mono text-xs px-1.5 py-0.5 border tracking-widest ${
           source === "github" ? "border-green-live text-green-live" : "border-cyan-hud text-cyan-hud"
@@ -172,10 +177,18 @@ function IntelCard({ doc }: { doc: IntelDocument & { title?: string; tags?: stri
   );
 }
 
-function Spinner() {
-  return <div className="flex items-center justify-center py-20">
-    <span className="font-mono text-xs text-amber-tac animate-pulse_amber tracking-widest">COMPUTING...</span>
-  </div>;
+export function Spinner() {
+  return (
+    <div className="flex items-center justify-center gap-2 py-20">
+      {[0, 1, 2].map(i => (
+        <div
+          key={i}
+          className="w-1.5 h-1.5 rounded-full bg-amber-tac animate-pulse_amber"
+          style={{ animationDelay: `${i * 0.25}s` }}
+        />
+      ))}
+    </div>
+  );
 }
 
 function ErrorBox({ msg }: { msg: string }) {

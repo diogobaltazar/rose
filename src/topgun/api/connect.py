@@ -15,7 +15,7 @@ import os
 import secrets
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
@@ -68,15 +68,14 @@ def _get_token(sub: str, name: str) -> str | None:
 
 @router.get("/backend/init")
 async def connect_backend_init(
-    request: Request,
     client_id: str = Query(..., description="GCP OAuth2 client ID"),
     client_secret: str = Query(..., description="GCP OAuth2 client secret"),
     auth: dict | None = Depends(require_auth),
 ) -> dict[str, str]:
-    """Return Google OAuth2 URL. Redirect URI derived from the incoming request."""
+    """Return Google OAuth2 URL. Redirect URI derived from FRONTEND_URL."""
     if not auth:
         raise HTTPException(status_code=401, detail="Authentication required")
-    redirect_uri = str(request.base_url).rstrip("/") + "/connect/backend/callback"
+    redirect_uri = FRONTEND_URL.rstrip("/") + "/api/connect/backend/callback"
     state = secrets.token_urlsafe(32)
     auth_url, code_verifier = get_auth_url(state, client_id=client_id, client_secret=client_secret, redirect_uri=redirect_uri)
     r = get_redis()

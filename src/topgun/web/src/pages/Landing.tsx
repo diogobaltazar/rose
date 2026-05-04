@@ -81,7 +81,7 @@ export default function Landing() {
 
       {/* Nav */}
       <nav className="relative z-20 flex items-center justify-between px-6 sm:px-12 py-6">
-        <span className="font-mono text-sm font-bold tracking-[0.35em]"><span className="text-white/80">AMC VICTORIA</span> <span className="text-amber-tac">TOPGUN</span></span>
+        <span className="font-mono text-sm font-bold tracking-[0.35em] text-white/80">AMC VICTORIA</span>
         <button
           onClick={() => loginWithRedirect()}
           className="btn-amber text-xs"

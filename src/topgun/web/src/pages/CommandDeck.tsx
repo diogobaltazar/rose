@@ -268,11 +268,11 @@ function IntelCard({ doc }: { doc: IntelDocument & { title?: string; tags?: stri
 
   const openSource = () => {
     if (source === "github" && sourceUrl) window.open(sourceUrl, "_blank");
-    else if (source === "obsidian" && sourceUrl)
+    else if (source === "obsidian" && sourceUrl) {
       const parts = sourceUrl.replace(/^vault\//, "").split("/");
-      const vault = "vault";
       const file = parts.join("/").replace(/\.md$/, "");
-      window.open(`obsidian://open?vault=${encodeURIComponent(vault)}&file=${encodeURIComponent(file)}`, "_blank");
+      window.open(`obsidian://open?vault=vault&file=${encodeURIComponent(file)}`, "_blank");
+    }
   };
 
   return (

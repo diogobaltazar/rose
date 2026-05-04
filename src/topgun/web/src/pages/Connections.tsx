@@ -4,18 +4,19 @@ import { useNavigate } from "react-router-dom";
 import { useToken } from "../hooks/useToken";
 import NavBar from "../components/NavBar";
 import HUDGrid from "../components/HUDGrid";
+import { addGithubRepo, removeGithubRepo } from "../api";
 
 const BASE = "/api";
 
+interface GithubRepo { name: string; repo: string; authenticated: boolean; }
 interface ConnectionStatus {
   backend: { provider: string; connected: boolean };
   services: { name: string; provider: string; account: string }[];
+  github_repos: GithubRepo[];
 }
 
 async function fetchConnections(token: string): Promise<ConnectionStatus> {
-  const r = await fetch(`${BASE}/connect`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const r = await fetch(`${BASE}/connect`, { headers: { Authorization: `Bearer ${token}` } });
   if (!r.ok) throw new Error("fetch failed");
   return r.json();
 }
@@ -26,8 +27,7 @@ async function initBackendAuth(token: string, clientId: string, clientSecret: st
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!r.ok) throw new Error(`init failed: ${await r.text()}`);
-  const data = await r.json();
-  return data.auth_url;
+  return (await r.json()).auth_url;
 }
 
 async function removeConnection(token: string, name: string): Promise<void> {
@@ -46,9 +46,17 @@ export default function Connections() {
   const [fetching, setFetching] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // GDrive form
   const [showGdriveForm, setShowGdriveForm] = useState(false);
   const [gdriveClientId, setGdriveClientId] = useState("");
   const [gdriveClientSecret, setGdriveClientSecret] = useState("");
+
+  // GitHub repo form
+  const [showGhForm, setShowGhForm] = useState(false);
+  const [ghName, setGhName] = useState("");
+  const [ghRepo, setGhRepo] = useState("");
+  const [ghPat, setGhPat] = useState("");
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) loginWithRedirect();
@@ -66,11 +74,8 @@ export default function Connections() {
     }
   }, [getToken]);
 
-  useEffect(() => {
-    if (isAuthenticated) load();
-  }, [isAuthenticated, load]);
+  useEffect(() => { if (isAuthenticated) load(); }, [isAuthenticated, load]);
 
-  // Re-load if we returned from OAuth callback
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("connected")) {
@@ -80,36 +85,41 @@ export default function Connections() {
   }, [load]);
 
   const handleConnectBackend = async () => {
-    if (!gdriveClientId || !gdriveClientSecret) {
-      setShowGdriveForm(true);
-      return;
-    }
-    setBusy(true);
-    setError(null);
+    if (!gdriveClientId || !gdriveClientSecret) { setShowGdriveForm(true); return; }
+    setBusy(true); setError(null);
     try {
       const token = await getToken();
-      const url = await initBackendAuth(token, gdriveClientId, gdriveClientSecret);
-      window.open(url, "_blank");
+      window.open(await initBackendAuth(token, gdriveClientId, gdriveClientSecret), "_blank");
       setShowGdriveForm(false);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setBusy(false);
-    }
+    } catch (e) { setError(String(e)); }
+    finally { setBusy(false); }
   };
 
   const handleRemove = async (name: string) => {
     setBusy(true);
+    try { await removeConnection(await getToken(), name); await load(); }
+    catch (e) { setError(String(e)); }
+    finally { setBusy(false); }
+  };
+
+  const handleAddGhRepo = async () => {
+    if (!ghName || !ghRepo || !ghPat) return;
+    const repo = ghRepo.replace(/^https?:\/\/github\.com\//, "").replace(/\/$/, "");
+    setBusy(true); setError(null);
     try {
-      let token = "";
-      token = await getToken();
-      await removeConnection(token, name);
+      await addGithubRepo(await getToken(), ghName, repo, ghPat);
+      setGhName(""); setGhRepo(""); setGhPat("");
+      setShowGhForm(false);
       await load();
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setBusy(false);
-    }
+    } catch (e) { setError(String(e)); }
+    finally { setBusy(false); }
+  };
+
+  const handleRemoveGhRepo = async (name: string) => {
+    setBusy(true);
+    try { await removeGithubRepo(await getToken(), name); await load(); }
+    catch (e) { setError(String(e)); }
+    finally { setBusy(false); }
   };
 
   if (isLoading || (!isAuthenticated && !error)) {
@@ -124,20 +134,16 @@ export default function Connections() {
     <div className="min-h-screen bg-base text-text-primary">
       <HUDGrid />
       <NavBar />
-
       <main className="relative z-10 max-w-3xl mx-auto px-6 py-10">
+
         <div className="mb-8">
           <div className="font-mono text-xs text-amber-tac tracking-[0.4em] uppercase mb-1">Command Deck</div>
-          <h1 className="font-mono text-xl font-semibold">Connections</h1>
-          <p className="font-mono text-xs text-text-muted mt-2">
-            Connect external services to topgun. All credentials are encrypted.
-          </p>
+          <h1 className="font-mono text-xl font-semibold">Settings</h1>
+          <p className="font-mono text-xs text-text-muted mt-2">Connect external services. All credentials are encrypted.</p>
         </div>
 
-        <button
-          onClick={() => navigate("/deck/missions")}
-          className="font-mono text-xs text-text-muted hover:text-amber-tac mb-8 block tracking-widest"
-        >
+        <button onClick={() => navigate("/deck/missions")}
+          className="font-mono text-xs text-text-muted hover:text-amber-tac mb-8 block tracking-widest">
           ← BACK TO DECK
         </button>
 
@@ -147,129 +153,150 @@ export default function Connections() {
           </div>
         )}
 
-        {/* Storage Backend */}
+        {/* ── Storage Backend ───────────────────────────── */}
         <section className="mb-8">
-          <div className="font-mono text-xs text-text-muted tracking-widest uppercase mb-4">
-            Storage Backend
-          </div>
-
+          <div className="font-mono text-xs text-text-muted tracking-widest uppercase mb-4">Storage Backend</div>
           <div className="tac-border p-5 flex items-center justify-between">
             <div>
               <div className="font-mono text-xs text-text-primary">
                 {status?.backend.connected ? "GOOGLE DRIVE" : "NOT CONFIGURED"}
               </div>
               <div className="font-mono text-xs text-text-muted mt-1">
-                {status?.backend.connected
-                  ? "Connected — all user data stored here"
-                  : "No storage backend connected"}
+                {status?.backend.connected ? "Connected — all user data stored here" : "No storage backend connected"}
               </div>
             </div>
-
             {!fetching && (status?.backend.connected ? (
-              <button
-                onClick={() => handleRemove("backend")}
-                disabled={busy}
-                className="font-mono text-xs px-4 py-1.5 border border-red-alert text-red-alert hover:bg-red-alert/10 tracking-widest"
-              >
+              <button onClick={() => handleRemove("backend")} disabled={busy}
+                className="font-mono text-xs px-4 py-1.5 border border-red-alert text-red-alert hover:bg-red-alert/10 tracking-widest">
                 DISCONNECT
               </button>
             ) : (
-              <button
-                onClick={handleConnectBackend}
-                disabled={busy}
-                className="font-mono text-xs px-4 py-1.5 border border-amber-tac text-amber-tac hover:bg-amber-tac/10 tracking-widest"
-              >
+              <button onClick={handleConnectBackend} disabled={busy}
+                className="font-mono text-xs px-4 py-1.5 border border-amber-tac text-amber-tac hover:bg-amber-tac/10 tracking-widest">
                 CONNECT
               </button>
             ))}
           </div>
-
           {showGdriveForm && !status?.backend.connected && (
             <div className="mt-4 space-y-3">
               <p className="font-mono text-xs text-text-muted">
                 Enter your Google Cloud OAuth credentials (APIs &amp; Services → Credentials):
               </p>
-              <input
-                type="text"
-                placeholder="Client ID  (.apps.googleusercontent.com)"
-                value={gdriveClientId}
-                onChange={e => setGdriveClientId(e.target.value)}
-                className="w-full bg-card border border-border-dim px-3 py-1.5 font-mono text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-amber-tac"
-              />
-              <input
-                type="password"
-                placeholder="Client Secret"
-                value={gdriveClientSecret}
-                onChange={e => setGdriveClientSecret(e.target.value)}
-                className="w-full bg-card border border-border-dim px-3 py-1.5 font-mono text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-amber-tac"
-              />
+              <input type="text" placeholder="Client ID (.apps.googleusercontent.com)"
+                value={gdriveClientId} onChange={e => setGdriveClientId(e.target.value)}
+                className="w-full bg-card border border-border-dim px-3 py-1.5 font-mono text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-amber-tac" />
+              <input type="password" placeholder="Client Secret"
+                value={gdriveClientSecret} onChange={e => setGdriveClientSecret(e.target.value)}
+                className="w-full bg-card border border-border-dim px-3 py-1.5 font-mono text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-amber-tac" />
               <div className="flex gap-2">
-                <button
-                  onClick={handleConnectBackend}
-                  disabled={busy || !gdriveClientId || !gdriveClientSecret}
-                  className="font-mono text-xs px-4 py-1.5 border border-amber-tac text-amber-tac hover:bg-amber-tac/10 tracking-widest disabled:opacity-40"
-                >
+                <button onClick={handleConnectBackend} disabled={busy || !gdriveClientId || !gdriveClientSecret}
+                  className="font-mono text-xs px-4 py-1.5 border border-amber-tac text-amber-tac hover:bg-amber-tac/10 tracking-widest disabled:opacity-40">
                   AUTHORIZE
                 </button>
-                <button
-                  onClick={() => setShowGdriveForm(false)}
-                  className="font-mono text-xs px-4 py-1.5 border border-border-dim text-text-muted hover:text-text-secondary tracking-widest"
-                >
+                <button onClick={() => setShowGdriveForm(false)}
+                  className="font-mono text-xs px-4 py-1.5 border border-border-dim text-text-muted hover:text-text-secondary tracking-widest">
                   CANCEL
                 </button>
               </div>
             </div>
           )}
-
         </section>
 
-        {/* Service Connections */}
-        <section>
-          <div className="font-mono text-xs text-text-muted tracking-widest uppercase mb-4">
-            Service Connections
+        {/* ── GitHub Repositories ───────────────────────── */}
+        <section className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <div className="font-mono text-xs text-text-muted tracking-widest uppercase">GitHub Repositories</div>
+            {status?.backend.connected && !showGhForm && (
+              <button onClick={() => setShowGhForm(true)}
+                className="font-mono text-xs px-3 py-1 border border-amber-tac/40 text-amber-tac/60 hover:border-amber-tac hover:text-amber-tac tracking-widest">
+                + ADD
+              </button>
+            )}
           </div>
 
           {!status?.backend.connected ? (
             <div className="tac-border p-6 text-center">
-              <p className="font-mono text-xs text-text-muted">
-                Connect a storage backend first to manage service connections.
-              </p>
-            </div>
-          ) : status.services.length === 0 ? (
-            <div className="tac-border p-6 text-center bracket-corners">
-              <p className="font-mono text-xs text-text-muted tracking-widest">NO SERVICES CONNECTED</p>
-              <p className="font-mono text-xs text-text-muted/60 mt-2">
-                Use <span className="text-amber-tac">topgun config set github --name &lt;name&gt;</span> then{" "}
-                <span className="text-amber-tac">topgun auth login --name &lt;name&gt;</span>
-              </p>
+              <p className="font-mono text-xs text-text-muted">Connect a storage backend first.</p>
             </div>
           ) : (
+            <>
+              {showGhForm && (
+                <div className="tac-border p-4 mb-3 space-y-3">
+                  <p className="font-mono text-xs text-text-muted">
+                    Issues from this repo will appear in Intel automatically.
+                  </p>
+                  <input type="text" placeholder="Connection name (e.g. my-project)"
+                    value={ghName} onChange={e => setGhName(e.target.value)}
+                    className="w-full bg-card border border-border-dim px-3 py-1.5 font-mono text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-amber-tac" />
+                  <input type="text" placeholder="Repository (owner/repo or full GitHub URL)"
+                    value={ghRepo} onChange={e => setGhRepo(e.target.value)}
+                    className="w-full bg-card border border-border-dim px-3 py-1.5 font-mono text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-amber-tac" />
+                  <input type="password" placeholder="Personal Access Token (repo scope)"
+                    value={ghPat} onChange={e => setGhPat(e.target.value)}
+                    className="w-full bg-card border border-border-dim px-3 py-1.5 font-mono text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-amber-tac" />
+                  <div className="flex gap-2">
+                    <button onClick={handleAddGhRepo} disabled={busy || !ghName || !ghRepo || !ghPat}
+                      className="font-mono text-xs px-4 py-1.5 border border-amber-tac text-amber-tac hover:bg-amber-tac/10 tracking-widest disabled:opacity-40">
+                      CONNECT
+                    </button>
+                    <button onClick={() => { setShowGhForm(false); setGhName(""); setGhRepo(""); setGhPat(""); }}
+                      className="font-mono text-xs px-4 py-1.5 border border-border-dim text-text-muted hover:text-text-secondary tracking-widest">
+                      CANCEL
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {(status?.github_repos ?? []).length === 0 && !showGhForm ? (
+                <div className="tac-border p-6 text-center">
+                  <p className="font-mono text-xs text-text-muted tracking-widest">NO REPOSITORIES CONNECTED</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {(status?.github_repos ?? []).map(r => (
+                    <div key={r.name} className="tac-border p-4 flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-3">
+                          <span className="font-mono text-xs px-2 py-0.5 border border-border-dim text-text-muted tracking-widest uppercase">GH</span>
+                          <span className="font-mono text-xs text-text-primary">{r.repo}</span>
+                        </div>
+                        <div className="font-mono text-xs text-text-muted mt-1">{r.name}</div>
+                      </div>
+                      <button onClick={() => handleRemoveGhRepo(r.name)} disabled={busy}
+                        className="font-mono text-xs px-3 py-1 border border-red-alert/40 text-red-alert/60 hover:border-red-alert hover:text-red-alert tracking-widest">
+                        DISCONNECT
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </section>
+
+        {/* ── Service Connections (legacy) ──────────────── */}
+        {(status?.services ?? []).length > 0 && (
+          <section>
+            <div className="font-mono text-xs text-text-muted tracking-widest uppercase mb-4">Service Connections</div>
             <div className="space-y-2">
-              {status.services.map((svc) => (
+              {(status?.services ?? []).map(svc => (
                 <div key={svc.name} className="tac-border p-4 flex items-center justify-between">
                   <div>
                     <div className="flex items-center gap-3">
-                      <span className="font-mono text-xs px-2 py-0.5 border border-border-dim text-text-muted tracking-widest uppercase">
-                        {svc.provider}
-                      </span>
+                      <span className="font-mono text-xs px-2 py-0.5 border border-border-dim text-text-muted tracking-widest uppercase">{svc.provider}</span>
                       <span className="font-mono text-xs text-text-primary">{svc.name}</span>
                     </div>
-                    {svc.account && (
-                      <div className="font-mono text-xs text-text-muted mt-1">{svc.account}</div>
-                    )}
+                    {svc.account && <div className="font-mono text-xs text-text-muted mt-1">{svc.account}</div>}
                   </div>
-                  <button
-                    onClick={() => handleRemove(svc.name)}
-                    disabled={busy}
-                    className="font-mono text-xs px-3 py-1 border border-red-alert/40 text-red-alert/60 hover:border-red-alert hover:text-red-alert tracking-widest"
-                  >
+                  <button onClick={() => handleRemove(svc.name)} disabled={busy}
+                    className="font-mono text-xs px-3 py-1 border border-red-alert/40 text-red-alert/60 hover:border-red-alert hover:text-red-alert tracking-widest">
                     REMOVE
                   </button>
                 </div>
               ))}
             </div>
-          )}
-        </section>
+          </section>
+        )}
       </main>
     </div>
   );

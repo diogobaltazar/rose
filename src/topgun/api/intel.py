@@ -17,7 +17,8 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from deps import require_auth, get_storage
+from deps import require_auth, get_storage, get_redis
+from gdrive import decrypt_token
 
 router = APIRouter(prefix="/intel", tags=["intel"])
 
@@ -77,6 +78,57 @@ def _vault_docs(client) -> list[dict[str, Any]]:
         return []
 
 
+def _get_github_repo_issues(
+    auth: dict | None,
+    client,
+    existing_urls: set[str],
+) -> list[dict[str, Any]]:
+    """Fetch open issues from all GitHub repos the user has connected."""
+    if not auth:
+        return []
+    sub = auth["sub"]
+    try:
+        config = client.read_json("config.json")
+    except Exception:
+        return []
+    repos = config.get("github_repos", {})
+    if not repos:
+        return []
+    r = get_redis()
+    issues: list[dict[str, Any]] = []
+    for name, repo_config in repos.items():
+        repo = repo_config.get("repo", "")
+        encrypted_pat = r.get(f"creds:{sub}:github_repo:{name}")
+        if not repo or not encrypted_pat:
+            continue
+        try:
+            pat = decrypt_token(encrypted_pat, sub)
+            resp = httpx.get(
+                f"https://api.github.com/repos/{repo}/issues",
+                params={"state": "open", "per_page": 100},
+                headers={"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github+json"},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            for issue in resp.json():
+                if issue.get("pull_request"):
+                    continue
+                url = issue["html_url"]
+                if url in existing_urls:
+                    continue
+                uid = hashlib.sha1(f"github:{url}".encode()).hexdigest()[:12]
+                issues.append({
+                    "uid": uid,
+                    "source": "github",
+                    "source_url": url,
+                    "title": issue["title"],
+                    "auto_discovered": True,
+                })
+        except Exception:
+            continue
+    return issues
+
+
 def _extract_title(content: str) -> str:
     m = re.search(r"^#\s+(.+)$", content, re.MULTILINE)
     return m.group(1).strip() if m else ""
@@ -101,7 +153,8 @@ def list_intel(auth: dict | None = Depends(require_auth)) -> list[dict[str, Any]
     registered = client.read_jsonl(INTEL_FILE)
     registered_urls = {d.get("source_url") for d in registered}
     discovered = [d for d in _vault_docs(client) if d["source_url"] not in registered_urls]
-    return registered + discovered
+    repo_issues = _get_github_repo_issues(auth, client, registered_urls)
+    return registered + discovered + repo_issues
 
 
 @router.get("/stats")

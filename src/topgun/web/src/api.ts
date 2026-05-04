@@ -92,3 +92,21 @@ export async function deleteIntel(token: string, uid: string): Promise<void> {
   if (!r.ok) throw new Error("intel delete failed");
   invalidateCache("intel-list", "intel-stats");
 }
+
+export async function addGithubRepo(token: string, name: string, repo: string, pat: string): Promise<void> {
+  const r = await authFetch(`${BASE}/connect/github/repo`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, repo, pat }),
+  });
+  if (!r.ok) throw new Error(`github repo connect failed: ${await r.text()}`);
+  invalidateCache("intel-list", "intel-stats");
+}
+
+export async function removeGithubRepo(token: string, name: string): Promise<void> {
+  const r = await authFetch(`${BASE}/connect/github/repo/${encodeURIComponent(name)}`, token, {
+    method: "DELETE",
+  });
+  if (!r.ok) throw new Error("github repo remove failed");
+  invalidateCache("intel-list", "intel-stats");
+}

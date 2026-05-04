@@ -119,6 +119,12 @@ class ServiceTokenBody(BaseModel):
     token: str
 
 
+class GithubRepoBody(BaseModel):
+    name: str
+    repo: str   # "owner/repo"
+    pat: str
+
+
 @router.post("/service")
 async def store_service_token(
     body: ServiceTokenBody,
@@ -187,6 +193,50 @@ async def github_oauth_callback(
     return RedirectResponse(url=f"{FRONTEND_URL}/deck/connections?connected={name}")
 
 
+# ── GitHub repo connections ───────────────────────────────────────────────────
+
+def _github_repo_key(sub: str, name: str) -> str:
+    return f"creds:{sub}:github_repo:{name}"
+
+
+@router.post("/github/repo", status_code=201)
+async def add_github_repo(
+    body: GithubRepoBody,
+    auth: dict | None = Depends(require_auth),
+) -> dict[str, str]:
+    """Store an encrypted GitHub PAT and register the repo in config.json."""
+    if not auth:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    sub = auth["sub"]
+    r = get_redis()
+    r.set(_github_repo_key(sub, body.name), encrypt_token(body.pat, sub))
+    storage = get_storage(auth)
+    config = storage.read_json("config.json")
+    config.setdefault("github_repos", {})[body.name] = {"repo": body.repo}
+    storage.write_json("config.json", config)
+    return {"status": "connected", "name": body.name, "repo": body.repo}
+
+
+@router.delete("/github/repo/{name}", status_code=204)
+async def remove_github_repo(
+    name: str,
+    auth: dict | None = Depends(require_auth),
+) -> None:
+    """Remove a GitHub repo connection."""
+    if not auth:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    sub = auth["sub"]
+    r = get_redis()
+    r.delete(_github_repo_key(sub, name))
+    try:
+        storage = get_storage(auth)
+        config = storage.read_json("config.json")
+        config.get("github_repos", {}).pop(name, None)
+        storage.write_json("config.json", config)
+    except Exception:
+        pass
+
+
 # ── List / remove ─────────────────────────────────────────────────────────────
 
 @router.get("")
@@ -201,6 +251,7 @@ async def list_connections(
     backend_connected = bool(r.get(_gdrive_key(sub)))
 
     services = []
+    github_repos = []
     if backend_connected:
         try:
             config = get_storage(auth).read_json("config.json")
@@ -211,12 +262,19 @@ async def list_connections(
                     "account": conn.get("account", ""),
                     "authenticated": bool(_get_token(sub, name)),
                 })
+            for name, repo_config in config.get("github_repos", {}).items():
+                github_repos.append({
+                    "name": name,
+                    "repo": repo_config.get("repo", ""),
+                    "authenticated": bool(r.get(_github_repo_key(sub, name))),
+                })
         except Exception:
             pass
 
     return {
         "backend": {"provider": "gdrive", "connected": backend_connected},
         "services": services,
+        "github_repos": github_repos,
     }
 
 

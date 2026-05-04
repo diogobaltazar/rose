@@ -1,12 +1,17 @@
 import type { AppConfig, Mission, Engagement, IntelDocument, IntelStats, IntelSearchResult } from "./types";
 
 const BASE = "/api";
-const TTL = 30_000;
+const TTL = 5 * 60_000; // 5 minutes before a background refresh is triggered
 const _cache = new Map<string, { ts: number; data: unknown }>();
 
 function cached<T>(key: string, fn: () => Promise<T>): Promise<T> {
   const hit = _cache.get(key);
-  if (hit && Date.now() - hit.ts < TTL) return Promise.resolve(hit.data as T);
+  if (hit) {
+    if (Date.now() - hit.ts < TTL) return Promise.resolve(hit.data as T);
+    // Stale — serve immediately, refresh silently in the background
+    fn().then(data => _cache.set(key, { ts: Date.now(), data })).catch(() => {});
+    return Promise.resolve(hit.data as T);
+  }
   return fn().then(data => { _cache.set(key, { ts: Date.now(), data }); return data; });
 }
 
@@ -15,10 +20,11 @@ export function invalidateCache(...keys: string[]) {
   else keys.forEach(k => _cache.delete(k));
 }
 
+// Returns whatever is cached — stale or fresh. Used to initialise state
+// synchronously so components never start with an empty screen.
 export function peekCache<T>(key: string): T | null {
   const hit = _cache.get(key);
-  if (hit && Date.now() - hit.ts < TTL) return hit.data as T;
-  return null;
+  return hit ? (hit.data as T) : null;
 }
 
 export async function getConfig(): Promise<AppConfig> {

@@ -39,3 +39,23 @@ class TimerStopResult(TypedDict):
     started_at: str
     stopped_at: str
     elapsed_s: float
+
+
+class IntelDocument(TypedDict, total=False):
+    uid: str
+    source: str
+    source_url: str
+
+
+class IntelTimerEntry(TypedDict):
+    start: str
+    end: str
+    elapsed_s: float
+
+
+class IntelTimerStatus(TypedDict, total=False):
+    uid: str
+    status: str
+    current_start: str | None
+    entries: list[IntelTimerEntry]
+    total_s: float

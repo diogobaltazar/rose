@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth0 } from "@auth0/auth0-react";
+import { useToken } from "../hooks/useToken";
 import { getMissions } from "../api";
 import type { Mission } from "../types";
 import NavBar from "../components/NavBar";
@@ -9,7 +10,8 @@ import HUDGrid from "../components/HUDGrid";
 type Filter = "all" | "open" | "closed";
 
 export default function Dashboard() {
-  const { isAuthenticated, isLoading, getAccessTokenSilently, loginWithRedirect } = useAuth0();
+  const { isAuthenticated, isLoading, loginWithRedirect } = useAuth0();
+  const { getToken } = useToken();
   const [missions, setMissions] = useState<Mission[]>([]);
   const [filter, setFilter] = useState<Filter>("open");
   const [fetching, setFetching] = useState(true);
@@ -26,7 +28,7 @@ export default function Dashboard() {
     (async () => {
       try {
         let token = "";
-        try { token = await getAccessTokenSilently(); } catch { /* dev mode */ }
+        token = await getToken();
         const data = await getMissions(token);
         setMissions(data);
       } catch (e) {
@@ -35,7 +37,7 @@ export default function Dashboard() {
         setFetching(false);
       }
     })();
-  }, [isAuthenticated, getAccessTokenSilently]);
+  }, [isAuthenticated, getToken]);
 
   const filtered = missions.filter((m) => filter === "all" || m.state === filter);
 

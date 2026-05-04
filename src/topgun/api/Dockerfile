@@ -9,6 +9,12 @@ COPY src/ /topgun/src/
 RUN pip install --no-cache-dir /topgun
 
 COPY src/topgun/api/main.py .
+COPY src/topgun/api/deps.py .
+COPY src/topgun/api/storage.py .
+COPY src/topgun/api/gdrive.py .
+COPY src/topgun/api/intel.py .
+COPY src/topgun/api/timer.py .
+COPY src/topgun/api/connect.py .
 COPY src/topgun/api/entrypoint.sh .
 RUN chmod +x entrypoint.sh
 CMD ["./entrypoint.sh"]

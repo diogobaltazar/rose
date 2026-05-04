@@ -3,7 +3,9 @@ import { Auth0Provider } from "@auth0/auth0-react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Landing from "./pages/Landing";
 import Callback from "./pages/Callback";
-import CommandDeck from "./pages/CommandDeck";
+import MissionDeck from "./pages/MissionDeck";
+import IntelDeck from "./pages/IntelDeck";
+import Pilots from "./pages/Pilots";
 import Connections from "./pages/Connections";
 import Mission from "./pages/Mission";
 import { getConfig } from "./api";
@@ -61,9 +63,13 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/callback" element={<Callback />} />
-          <Route path="/deck" element={<CommandDeck />} />
+          <Route path="/deck" element={<Navigate to="/deck/missions" replace />} />
+          <Route path="/deck/missions" element={<MissionDeck />} />
+          <Route path="/deck/intel" element={<IntelDeck />} />
+          <Route path="/deck/pilots" element={<Pilots />} />
           <Route path="/deck/connections" element={<Connections />} />
-          <Route path="/dashboard" element={<Navigate to="/deck" replace />} />
+          <Route path="/deck/settings" element={<Navigate to="/deck/missions" replace />} />
+          <Route path="/dashboard" element={<Navigate to="/deck/missions" replace />} />
           <Route path="/missions/:missionId" element={<Mission />} />
         </Routes>
       </BrowserRouter>

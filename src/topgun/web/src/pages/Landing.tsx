@@ -72,7 +72,7 @@ export default function Landing() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!isLoading && isAuthenticated) navigate("/deck");
+    if (!isLoading && isAuthenticated) navigate("/deck/missions");
   }, [isAuthenticated, isLoading, navigate]);
 
   return (

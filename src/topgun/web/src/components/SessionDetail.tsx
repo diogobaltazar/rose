@@ -1,5 +1,5 @@
 import type { Session } from '../sdk/types';
-import { COLORS, fmtDt } from './constants';
+import { fmtDt } from './constants';
 import { AgentMatrix } from './AgentMatrix';
 
 interface Props {

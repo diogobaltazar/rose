@@ -72,7 +72,7 @@ export default function Landing() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!isLoading && isAuthenticated) navigate("/dashboard");
+    if (!isLoading && isAuthenticated) navigate("/deck");
   }, [isAuthenticated, isLoading, navigate]);
 
   return (

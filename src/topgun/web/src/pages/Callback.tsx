@@ -8,7 +8,7 @@ export default function Callback() {
 
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
-      navigate("/dashboard", { replace: true });
+      navigate("/deck", { replace: true });
     }
   }, [isLoading, isAuthenticated, navigate]);
 

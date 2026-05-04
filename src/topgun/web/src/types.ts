@@ -38,6 +38,35 @@ export interface Agent {
   cwd: string | null;
 }
 
+export interface IntelDocument {
+  uid: string;
+  source: "github" | "obsidian";
+  source_url: string;
+}
+
+export interface IntelStats {
+  total: number;
+  by_source: { github: number; obsidian: number };
+  missions: number;
+  drafts: number;
+  ready: number;
+}
+
+export interface IntelSearchResult {
+  uid: string;
+  source: "github" | "obsidian";
+  source_url: string;
+  title: string;
+}
+
+export interface IntelTimerStatus {
+  uid: string;
+  status: "running" | "stopped";
+  current_start: string | null;
+  entries: { start: string; end: string; elapsed_s: number }[];
+  total_s: number;
+}
+
 export interface Engagement {
   session_id: string;
   status: "live" | "done";

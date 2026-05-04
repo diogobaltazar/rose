@@ -1,7 +1,6 @@
 import type { Task } from '../sdk/types';
 import { COLORS } from './constants';
 
-const PRIORITY_RANK: Record<string, number> = { high: 0, medium: 1, low: 2 };
 
 function priorityLabel(p: string | null): string {
   if (p === 'high') return '⏫ high';

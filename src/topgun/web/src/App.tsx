@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { Auth0Provider } from "@auth0/auth0-react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Landing from "./pages/Landing";
 import Callback from "./pages/Callback";
-import Dashboard from "./pages/Dashboard";
+import CommandDeck from "./pages/CommandDeck";
+import Connections from "./pages/Connections";
 import Mission from "./pages/Mission";
 import { getConfig } from "./api";
 import type { AppConfig } from "./types";
@@ -60,7 +61,9 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/callback" element={<Callback />} />
-          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/deck" element={<CommandDeck />} />
+          <Route path="/deck/connections" element={<Connections />} />
+          <Route path="/dashboard" element={<Navigate to="/deck" replace />} />
           <Route path="/missions/:missionId" element={<Mission />} />
         </Routes>
       </BrowserRouter>

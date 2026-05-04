@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Task } from '../sdk/types';
-import { COLORS } from './constants';
 import { client } from '../sdk/client';
 import { GamificationPanel } from './GamificationPanel';
 import { BacklogTable } from './BacklogTable';

@@ -122,6 +122,7 @@ def _get_github_repo_issues(
                     "source": "github",
                     "source_url": url,
                     "title": issue["title"],
+                    "labels": [lb["name"] for lb in issue.get("labels", [])],
                     "auto_discovered": True,
                 })
         except Exception:
@@ -171,7 +172,7 @@ async def intel_stats(auth: dict | None = Depends(require_auth)) -> dict[str, An
             cache.pop("_cached_at", None)
             return cache
 
-    stats = await _compute_stats(client)
+    stats = await _compute_stats(client, auth)
     cache_entry = {**stats, "_cached_at": datetime.now(timezone.utc).timestamp()}
     client.write_json(STATS_FILE, cache_entry)
     return stats
@@ -181,7 +182,7 @@ async def intel_stats(auth: dict | None = Depends(require_auth)) -> dict[str, An
 async def refresh_stats(auth: dict | None = Depends(require_auth)) -> dict[str, Any]:
     from datetime import datetime, timezone
     client = get_storage(auth)
-    stats = await _compute_stats(client)
+    stats = await _compute_stats(client, auth)
     cache_entry = {**stats, "_cached_at": datetime.now(timezone.utc).timestamp()}
     client.write_json(STATS_FILE, cache_entry)
     return stats
@@ -259,29 +260,95 @@ def delete_intel(uid: str, auth: dict | None = Depends(require_auth)) -> None:
     client.write_json(STATS_FILE, {})
 
 
+# ── Mission tagging ───────────────────────────────────────────────────────────
+
+class MissionTagBody(BaseModel):
+    source_url: str
+
+
+@router.post("/{uid}/mission")
+def tag_as_mission(
+    uid: str,
+    body: MissionTagBody,
+    auth: dict | None = Depends(require_auth),
+) -> dict[str, Any]:
+    """Add topgun-mission label to a GitHub issue; create the label if absent."""
+    if not auth:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    m = re.match(r"https://github\.com/([^/]+/[^/]+)/issues/(\d+)", body.source_url)
+    if not m:
+        raise HTTPException(status_code=400, detail="Only GitHub issues can be tagged as missions")
+    repo, number = m.group(1), m.group(2)
+
+    sub = auth["sub"]
+    r = get_redis()
+    pat: str = GITHUB_TOKEN
+    try:
+        client = get_storage(auth)
+        config = client.read_json("config.json")
+        for name, repo_config in config.get("github_repos", {}).items():
+            if repo_config.get("repo") == repo:
+                encrypted = r.get(f"creds:{sub}:github_repo:{name}")
+                if encrypted:
+                    pat = decrypt_token(encrypted, sub)
+                    break
+    except Exception:
+        pass
+
+    if not pat:
+        raise HTTPException(status_code=400, detail="No GitHub credentials available for this repository")
+
+    headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github+json"}
+
+    label_resp = httpx.get(f"https://api.github.com/repos/{repo}/labels/topgun-mission", headers=headers, timeout=10)
+    if label_resp.status_code == 404:
+        httpx.post(
+            f"https://api.github.com/repos/{repo}/labels",
+            json={"name": "topgun-mission", "color": "FFB800", "description": "TopGun autonomous mission"},
+            headers=headers, timeout=10,
+        ).raise_for_status()
+
+    httpx.post(
+        f"https://api.github.com/repos/{repo}/issues/{number}/labels",
+        json={"labels": ["topgun-mission"]},
+        headers=headers, timeout=10,
+    ).raise_for_status()
+
+    return {"status": "tagged", "uid": uid, "label": "topgun-mission"}
+
+
 # ── Stats + Search helpers ────────────────────────────────────────────────────
 
-async def _compute_stats(client) -> dict[str, Any]:
-    docs = client.read_jsonl(INTEL_FILE)
-    total = len(docs)
-    by_source = {"github": 0, "obsidian": 0}
-    for doc in docs:
+async def _compute_stats(client, auth: dict | None = None) -> dict[str, Any]:
+    registered = client.read_jsonl(INTEL_FILE)
+    registered_urls = {d.get("source_url") for d in registered}
+    vault_list = _vault_docs(client)
+    discovered = [d for d in vault_list if d["source_url"] not in registered_urls]
+    all_existing = registered_urls | {d["source_url"] for d in discovered}
+    repo_issues = _get_github_repo_issues(auth, client, all_existing) if auth else []
+    all_docs = registered + discovered + repo_issues
+
+    total = len(all_docs)
+    by_source: dict[str, int] = {"github": 0, "obsidian": 0}
+    for doc in all_docs:
         src = doc.get("source", "")
         if src in by_source:
             by_source[src] += 1
 
-    tags = await _fetch_all_tags(docs)
-    missions = sum(1 for t in tags.values() if "topgun-mission" in t)
-    drafts = sum(1 for t in tags.values() if "topgun-mission-draft" in t)
-    ready = sum(1 for t in tags.values() if "topgun-mission-ready" in t)
+    missions = drafts = ready = 0
+    for doc in all_docs:
+        labels = doc.get("labels")
+        if labels is None:
+            if doc.get("source") == "github":
+                labels = await _github_issue_tags(doc.get("source_url", ""))
+            else:
+                labels = _obsidian_file_tags(doc.get("source_url", ""))
+        if "topgun-mission" in labels: missions += 1
+        if "topgun-mission-draft" in labels: drafts += 1
+        if "topgun-mission-ready" in labels: ready += 1
 
-    return {
-        "total": total,
-        "by_source": by_source,
-        "missions": missions,
-        "drafts": drafts,
-        "ready": ready,
-    }
+    return {"total": total, "by_source": by_source, "missions": missions, "drafts": drafts, "ready": ready}
 
 
 async def _fetch_all_tags(docs: list[dict]) -> dict[str, list[str]]:

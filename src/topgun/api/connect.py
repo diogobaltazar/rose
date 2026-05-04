@@ -15,7 +15,7 @@ import os
 import secrets
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
@@ -68,20 +68,23 @@ def _get_token(sub: str, name: str) -> str | None:
 
 @router.get("/backend/init")
 async def connect_backend_init(
+    request: Request,
     client_id: str = Query(..., description="GCP OAuth2 client ID"),
     client_secret: str = Query(..., description="GCP OAuth2 client secret"),
     auth: dict | None = Depends(require_auth),
 ) -> dict[str, str]:
-    """Return Google OAuth2 URL. Client credentials provided by the user via CLI."""
+    """Return Google OAuth2 URL. Redirect URI derived from the incoming request."""
     if not auth:
         raise HTTPException(status_code=401, detail="Authentication required")
+    redirect_uri = str(request.base_url).rstrip("/") + "/connect/backend/callback"
     state = secrets.token_urlsafe(32)
-    auth_url, code_verifier = get_auth_url(state, client_id=client_id, client_secret=client_secret)
+    auth_url, code_verifier = get_auth_url(state, client_id=client_id, client_secret=client_secret, redirect_uri=redirect_uri)
     r = get_redis()
     r.setex(_state_key(state), 600, json.dumps({
         "sub": auth["sub"],
         "client_id": client_id,
         "client_secret": client_secret,
+        "redirect_uri": redirect_uri,
         "code_verifier": code_verifier,
     }))
     return {"auth_url": auth_url}
@@ -102,8 +105,9 @@ async def connect_backend_callback(
     sub = payload["sub"]
     client_id = payload["client_id"]
     client_secret = payload["client_secret"]
+    redirect_uri = payload["redirect_uri"]
     code_verifier = payload.get("code_verifier")
-    token_data = exchange_code(code, client_id=client_id, client_secret=client_secret, code_verifier=code_verifier)
+    token_data = exchange_code(code, client_id=client_id, client_secret=client_secret, redirect_uri=redirect_uri, code_verifier=code_verifier)
     r.set(_gdrive_key(sub), encrypt_token(json.dumps(token_data), sub))
     return RedirectResponse(url=f"{FRONTEND_URL}/deck/connections?connected=gdrive")
 

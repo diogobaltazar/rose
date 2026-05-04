@@ -25,9 +25,6 @@ GDRIVE_SCOPES = [
     "https://www.googleapis.com/auth/drive.file",      # write files created by app
     "https://www.googleapis.com/auth/drive.readonly",  # read any file in Drive
 ]
-GDRIVE_REDIRECT_URI = os.environ.get(
-    "GDRIVE_REDIRECT_URI", "http://localhost:5101/connect/backend/callback"
-)
 BACKEND_SECRET = os.environ.get("BACKEND_SECRET", "dev-secret-change-in-prod")
 TOPGUN_FOLDER = "topgun"
 
@@ -58,7 +55,7 @@ def decrypt_token(encrypted_hex: str, auth0_sub: str) -> str:
 
 # ── OAuth helpers ─────────────────────────────────────────────────────────────
 
-def _flow(client_id: str, client_secret: str):
+def _flow(client_id: str, client_secret: str, redirect_uri: str):
     from google_auth_oauthlib.flow import Flow
     return Flow.from_client_config(
         {"web": {
@@ -66,25 +63,24 @@ def _flow(client_id: str, client_secret: str):
             "client_secret": client_secret,
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "https://oauth2.googleapis.com/token",
-            "redirect_uris": [GDRIVE_REDIRECT_URI],
+            "redirect_uris": [redirect_uri],
         }},
         scopes=GDRIVE_SCOPES,
-        redirect_uri=GDRIVE_REDIRECT_URI,
+        redirect_uri=redirect_uri,
     )
 
 
 def _pkce_pair() -> tuple[str, str]:
-    """Generate a PKCE code_verifier and code_challenge (S256)."""
     code_verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).rstrip(b"=").decode()
     digest = hashlib.sha256(code_verifier.encode()).digest()
     code_challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
     return code_verifier, code_challenge
 
 
-def get_auth_url(state: str, *, client_id: str, client_secret: str) -> tuple[str, str]:
+def get_auth_url(state: str, *, client_id: str, client_secret: str, redirect_uri: str) -> tuple[str, str]:
     """Returns (auth_url, code_verifier)."""
     code_verifier, code_challenge = _pkce_pair()
-    flow = _flow(client_id, client_secret)
+    flow = _flow(client_id, client_secret, redirect_uri)
     auth_url, _ = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
@@ -96,8 +92,8 @@ def get_auth_url(state: str, *, client_id: str, client_secret: str) -> tuple[str
     return auth_url, code_verifier
 
 
-def exchange_code(code: str, *, client_id: str, client_secret: str, code_verifier: str) -> dict:
-    flow = _flow(client_id, client_secret)
+def exchange_code(code: str, *, client_id: str, client_secret: str, redirect_uri: str, code_verifier: str) -> dict:
+    flow = _flow(client_id, client_secret, redirect_uri)
     flow.fetch_token(code=code, code_verifier=code_verifier)
     creds = flow.credentials
     return {

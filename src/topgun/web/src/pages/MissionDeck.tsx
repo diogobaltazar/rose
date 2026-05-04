@@ -37,11 +37,13 @@ export default function MissionDeck() {
     </div>;
   }
 
+  const { missions: engaged } = useEngagement();
+  const missionDocs = docs.filter(d => d.labels?.includes("topgun-mission"));
   const missionStats = stats ? {
     total: stats.missions,
     drafts: stats.drafts,
     ready: stats.ready,
-    engaged: 0,
+    engaged: engaged.length,
   } : null;
 
   return (
@@ -56,7 +58,18 @@ export default function MissionDeck() {
         </div>
         {error && <ErrorBox msg={error} />}
         <MissionStats stats={missionStats} loading={loading} />
-        {!loading && <div className="mt-8"><IntelGrid docs={docs} /></div>}
+        {!loading && (
+          <div className="mt-8">
+            {missionDocs.length === 0 ? (
+              <div className="tac-border p-12 text-center bracket-corners">
+                <p className="font-mono text-xs text-text-muted tracking-widest">NO TAGGED MISSIONS</p>
+                <p className="font-mono text-xs text-text-muted/40 mt-2">Tag intel documents with topgun-mission via the ONA panel</p>
+              </div>
+            ) : (
+              <IntelGrid docs={missionDocs} />
+            )}
+          </div>
+        )}
       </main>
     </div>
   );

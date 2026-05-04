@@ -6,6 +6,91 @@ import NavBar from "../components/NavBar";
 import HUDGrid from "../components/HUDGrid";
 import { addGithubRepo, removeGithubRepo } from "../api";
 
+// ── GitHub token verification ─────────────────────────────────────────────────
+
+type CheckStatus = "pending" | "checking" | "ok" | "fail";
+interface Check { label: string; status: CheckStatus; detail?: string; }
+
+async function verifyGithubToken(
+  repo: string,
+  pat: string,
+  onUpdate: (checks: Check[]) => void,
+): Promise<boolean> {
+  const headers = { Authorization: `Bearer ${pat}`, Accept: "application/vnd.github+json" };
+  const checks: Check[] = [
+    { label: "Authenticating token", status: "pending" },
+    { label: "Checking repository access", status: "pending" },
+    { label: "Verifying push permission", status: "pending" },
+    { label: "Verifying issues permission", status: "pending" },
+  ];
+  const set = (i: number, patch: Partial<Check>) => {
+    checks[i] = { ...checks[i], ...patch };
+    onUpdate([...checks]);
+  };
+
+  set(0, { status: "checking" });
+  try {
+    const r = await fetch("https://api.github.com/user", { headers });
+    if (!r.ok) { set(0, { status: "fail", detail: "Invalid or expired token" }); return false; }
+    const u = await r.json();
+    set(0, { status: "ok", detail: u.login });
+  } catch { set(0, { status: "fail", detail: "Could not reach GitHub API" }); return false; }
+
+  set(1, { status: "checking" });
+  let permissions: Record<string, boolean> = {};
+  try {
+    const r = await fetch(`https://api.github.com/repos/${repo}`, { headers });
+    if (!r.ok) {
+      set(1, { status: "fail", detail: r.status === 404 ? "Repository not found" : "Access denied" });
+      return false;
+    }
+    const data = await r.json();
+    permissions = data.permissions ?? {};
+    set(1, { status: "ok", detail: data.full_name });
+  } catch { set(1, { status: "fail", detail: "Repository check failed" }); return false; }
+
+  set(2, { status: "checking" });
+  if (!permissions.push) {
+    set(2, { status: "fail", detail: "Push access required for commits and PRs" });
+    return false;
+  }
+  set(2, { status: "ok", detail: "Commits, pushes, and PRs allowed" });
+
+  set(3, { status: "checking" });
+  try {
+    const r = await fetch(`https://api.github.com/repos/${repo}/issues?per_page=1`, { headers });
+    if (!r.ok) { set(3, { status: "fail", detail: "Cannot read issues" }); return false; }
+    set(3, { status: "ok" });
+  } catch { set(3, { status: "fail", detail: "Issues check failed" }); return false; }
+
+  return true;
+}
+
+function CheckRow({ check }: { check: Check }) {
+  const icon =
+    check.status === "ok" ? "✓" :
+    check.status === "fail" ? "✗" :
+    check.status === "checking" ? "·" : "·";
+  const colour =
+    check.status === "ok" ? "text-green-live" :
+    check.status === "fail" ? "text-red-alert" :
+    check.status === "checking" ? "text-amber-tac animate-pulse_amber" :
+    "text-text-muted";
+  return (
+    <div className="flex items-baseline gap-3">
+      <span className={`font-mono text-xs w-3 shrink-0 ${colour}`}>{icon}</span>
+      <span className={`font-mono text-xs ${check.status === "pending" ? "text-text-muted/40" : "text-text-primary"}`}>
+        {check.label}
+      </span>
+      {check.detail && (
+        <span className={`font-mono text-xs ml-auto ${check.status === "fail" ? "text-red-alert" : "text-text-muted"}`}>
+          {check.detail}
+        </span>
+      )}
+    </div>
+  );
+}
+
 const BASE = "/api";
 
 interface GithubRepo { name: string; repo: string; authenticated: boolean; }
@@ -57,6 +142,8 @@ export default function Connections() {
   const [ghName, setGhName] = useState("");
   const [ghRepo, setGhRepo] = useState("");
   const [ghPat, setGhPat] = useState("");
+  const [ghChecks, setGhChecks] = useState<Check[] | null>(null);
+  const [ghVerifying, setGhVerifying] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) loginWithRedirect();
@@ -102,17 +189,36 @@ export default function Connections() {
     finally { setBusy(false); }
   };
 
+  const resetGhForm = () => {
+    setGhName(""); setGhRepo(""); setGhPat("");
+    setGhChecks(null); setGhVerifying(false);
+    setShowGhForm(false);
+  };
+
   const handleAddGhRepo = async () => {
     if (!ghName || !ghRepo || !ghPat) return;
     const repo = ghRepo.replace(/^https?:\/\/github\.com\//, "").replace(/\/$/, "");
-    setBusy(true); setError(null);
+    setGhVerifying(true);
+    setGhChecks([
+      { label: "Authenticating token", status: "pending" },
+      { label: "Checking repository access", status: "pending" },
+      { label: "Verifying push permission", status: "pending" },
+      { label: "Verifying issues permission", status: "pending" },
+    ]);
+    const ok = await verifyGithubToken(repo, ghPat, setGhChecks);
+    if (!ok) { setGhVerifying(false); return; }
+    // All checks passed — save
+    setGhChecks(prev => prev ? [...prev, { label: "Saving credentials", status: "checking" }] : prev);
     try {
       await addGithubRepo(await getToken(), ghName, repo, ghPat);
-      setGhName(""); setGhRepo(""); setGhPat("");
-      setShowGhForm(false);
+      setGhChecks(prev => prev ? [...prev.slice(0, -1), { label: "Saving credentials", status: "ok", detail: "Encrypted and stored" }] : prev);
+      await new Promise(r => setTimeout(r, 800));
+      resetGhForm();
       await load();
-    } catch (e) { setError(String(e)); }
-    finally { setBusy(false); }
+    } catch (e) {
+      setGhChecks(prev => prev ? [...prev.slice(0, -1), { label: "Saving credentials", status: "fail", detail: String(e) }] : prev);
+    }
+    setGhVerifying(false);
   };
 
   const handleRemoveGhRepo = async (name: string) => {
@@ -222,28 +328,45 @@ export default function Connections() {
             <>
               {showGhForm && (
                 <div className="tac-border p-4 mb-3 space-y-3">
-                  <p className="font-mono text-xs text-text-muted">
-                    Issues from this repo will appear in Intel automatically.
-                  </p>
-                  <input type="text" placeholder="Connection name (e.g. my-project)"
-                    value={ghName} onChange={e => setGhName(e.target.value)}
-                    className="w-full bg-card border border-border-dim px-3 py-1.5 font-mono text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-amber-tac" />
-                  <input type="text" placeholder="Repository (owner/repo or full GitHub URL)"
-                    value={ghRepo} onChange={e => setGhRepo(e.target.value)}
-                    className="w-full bg-card border border-border-dim px-3 py-1.5 font-mono text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-amber-tac" />
-                  <input type="password" placeholder="Personal Access Token (repo scope)"
-                    value={ghPat} onChange={e => setGhPat(e.target.value)}
-                    className="w-full bg-card border border-border-dim px-3 py-1.5 font-mono text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-amber-tac" />
-                  <div className="flex gap-2">
-                    <button onClick={handleAddGhRepo} disabled={busy || !ghName || !ghRepo || !ghPat}
-                      className="font-mono text-xs px-4 py-1.5 border border-amber-tac text-amber-tac hover:bg-amber-tac/10 tracking-widest disabled:opacity-40">
-                      CONNECT
-                    </button>
-                    <button onClick={() => { setShowGhForm(false); setGhName(""); setGhRepo(""); setGhPat(""); }}
-                      className="font-mono text-xs px-4 py-1.5 border border-border-dim text-text-muted hover:text-text-secondary tracking-widest">
-                      CANCEL
-                    </button>
-                  </div>
+                  {!ghVerifying && !ghChecks ? (
+                    <>
+                      <p className="font-mono text-xs text-text-muted">
+                        Issues from this repo will appear in Intel. Token is verified before saving.
+                      </p>
+                      <input type="text" placeholder="Connection name (e.g. my-project)"
+                        value={ghName} onChange={e => setGhName(e.target.value)}
+                        className="w-full bg-card border border-border-dim px-3 py-1.5 font-mono text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-amber-tac" />
+                      <input type="text" placeholder="Repository (owner/repo or full GitHub URL)"
+                        value={ghRepo} onChange={e => setGhRepo(e.target.value)}
+                        className="w-full bg-card border border-border-dim px-3 py-1.5 font-mono text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-amber-tac" />
+                      <input type="password" placeholder="Personal Access Token"
+                        value={ghPat} onChange={e => setGhPat(e.target.value)}
+                        className="w-full bg-card border border-border-dim px-3 py-1.5 font-mono text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-amber-tac" />
+                      <div className="flex gap-2">
+                        <button onClick={handleAddGhRepo} disabled={!ghName || !ghRepo || !ghPat}
+                          className="font-mono text-xs px-4 py-1.5 border border-amber-tac text-amber-tac hover:bg-amber-tac/10 tracking-widest disabled:opacity-40">
+                          CONNECT
+                        </button>
+                        <button onClick={resetGhForm}
+                          className="font-mono text-xs px-4 py-1.5 border border-border-dim text-text-muted hover:text-text-secondary tracking-widest">
+                          CANCEL
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-mono text-xs text-text-muted tracking-widest uppercase mb-1">Verifying</p>
+                      <div className="space-y-2">
+                        {(ghChecks ?? []).map((c, i) => <CheckRow key={i} check={c} />)}
+                      </div>
+                      {!ghVerifying && ghChecks?.some(c => c.status === "fail") && (
+                        <button onClick={() => setGhChecks(null)}
+                          className="font-mono text-xs px-3 py-1 border border-border-dim text-text-muted hover:text-amber-tac tracking-widest mt-2">
+                          ← EDIT
+                        </button>
+                      )}
+                    </>
+                  )}
                 </div>
               )}
 

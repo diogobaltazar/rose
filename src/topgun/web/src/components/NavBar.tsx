@@ -5,7 +5,6 @@ const NAV_ITEMS = [
   { label: "MISSION DECK", path: "/deck/missions" },
   { label: "INTEL", path: "/deck/intel" },
   { label: "PILOTS", path: "/deck/pilots" },
-  { label: "CONNECTIONS", path: "/deck/connections" },
 ];
 
 export default function NavBar() {
@@ -48,7 +47,7 @@ export default function NavBar() {
         )}
         <Link
           to="/deck/settings"
-          className={`font-mono text-base transition-colors ${
+          className={`font-mono text-xl leading-none flex items-center transition-colors ${
             isActive("/deck/settings") ? "text-amber-tac" : "text-text-muted hover:text-text-secondary"
           }`}
           title="Settings"

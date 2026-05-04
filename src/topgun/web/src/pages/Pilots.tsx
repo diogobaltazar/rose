@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useAuth0 } from "@auth0/auth0-react";
 import NavBar from "../components/NavBar";
 import HUDGrid from "../components/HUDGrid";
@@ -67,9 +67,28 @@ function fmt(n: number): string {
 }
 
 export default function Pilots() {
-  const { isAuthenticated, isLoading, loginWithRedirect } = useAuth0();
+  const { isAuthenticated, isLoading, loginWithRedirect, user } = useAuth0();
 
   if (!isLoading && !isAuthenticated) { loginWithRedirect(); return null; }
+
+  const userPilot: Pilot | null = useMemo(() => {
+    if (!user) return null;
+    const callsign = (user.nickname ?? user.email?.split("@")[0] ?? "you").toUpperCase();
+    return {
+      callsign,
+      accomplished: 0,
+      failed: 0,
+      tokens: 0,
+      tools: 0,
+      usd: 0,
+      missions: [],
+      isUser: true,
+    } as Pilot & { isUser?: boolean };
+  }, [user]);
+
+  const allPilots = useMemo(() =>
+    userPilot ? [userPilot, ...PILOTS] : PILOTS,
+  [userPilot]);
 
   return (
     <div className="min-h-screen bg-base text-text-primary">
@@ -82,29 +101,38 @@ export default function Pilots() {
           <p className="font-mono text-xs text-text-muted mt-1">Pilot roster — mission telemetry and performance</p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {PILOTS.map((p) => <PilotCard key={p.callsign} pilot={p} />)}
+          {allPilots.map((p) => <PilotCard key={p.callsign} pilot={p} />)}
         </div>
       </main>
     </div>
   );
 }
 
-function PilotCard({ pilot }: { pilot: Pilot }) {
+function PilotCard({ pilot }: { pilot: Pilot & { isUser?: boolean } }) {
   const [open, setOpen] = useState(false);
   const [missionsOpen, setMissionsOpen] = useState(false);
+  const isUser = pilot.isUser ?? false;
 
   return (
-    <div className="tac-border flex flex-col">
+    <div className={`flex flex-col ${isUser ? "border border-amber-tac" : "tac-border"}`}>
       <button
         onClick={() => setOpen((v) => !v)}
         className="flex items-center justify-between px-5 py-4 hover:bg-card transition-colors text-left"
       >
         <div>
-          <div className="font-mono text-sm font-bold text-amber-tac tracking-widest">{pilot.callsign}</div>
+          <div className="flex items-center gap-2">
+            <div className="font-mono text-sm font-bold text-amber-tac tracking-widest">{pilot.callsign}</div>
+            {isUser && (
+              <span className="font-mono text-xs border border-amber-tac text-amber-tac px-1.5 py-0.5 tracking-widest">YOU</span>
+            )}
+          </div>
           <div className="font-mono text-xs text-text-muted mt-0.5">
             <span className="text-green-live">{pilot.accomplished}W</span>
             {" · "}
             <span className={pilot.failed > 0 ? "text-red-alert" : "text-text-muted"}>{pilot.failed}L</span>
+            {isUser && pilot.accomplished === 0 && (
+              <span className="ml-2 text-text-muted/50">— stats populate via daemon</span>
+            )}
           </div>
         </div>
         <span className="font-mono text-xs text-text-muted">{open ? "▲" : "▼"}</span>

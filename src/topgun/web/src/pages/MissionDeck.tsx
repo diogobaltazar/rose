@@ -6,12 +6,9 @@ import HUDGrid from "../components/HUDGrid";
 import { getIntelStats, getIntelList, peekCache } from "../api";
 import type { IntelStats, IntelDocument } from "../types";
 
-type View = "stats" | "cards";
-
 export default function MissionDeck() {
   const { isAuthenticated, isLoading, loginWithRedirect } = useAuth0();
   const { getToken } = useToken();
-  const [view, setView] = useState<View>("stats");
   const [stats, setStats] = useState<IntelStats | null>(() => peekCache<IntelStats>("intel-stats"));
   const [docs, setDocs] = useState<IntelDocument[]>(() => peekCache<IntelDocument[]>("intel-list") ?? []);
   const [loading, setLoading] = useState<boolean>(() => peekCache("intel-stats") === null);
@@ -21,24 +18,17 @@ export default function MissionDeck() {
     if (!isLoading && !isAuthenticated) loginWithRedirect();
   }, [isAuthenticated, isLoading, loginWithRedirect]);
 
-  const fetchStats = useCallback(async () => {
+  const fetchAll = useCallback(async () => {
     try {
       const token = await getToken();
-      setStats(await getIntelStats(token));
+      const [s, d] = await Promise.all([getIntelStats(token), getIntelList(token)]);
+      setStats(s);
+      setDocs(d);
     } catch (e) { setError(String(e)); }
     finally { setLoading(false); }
   }, [getToken]);
 
-  const fetchCards = useCallback(async () => {
-    try {
-      const token = await getToken();
-      // Only missions (topgun-mission tagged) — for now show all, filter by tag when available
-      setDocs(await getIntelList(token));
-    } catch (e) { setError(String(e)); }
-  }, [getToken]);
-
-  useEffect(() => { if (isAuthenticated) fetchStats(); }, [isAuthenticated, fetchStats]);
-  useEffect(() => { if (view === "cards" && isAuthenticated) fetchCards(); }, [view, isAuthenticated, fetchCards]);
+  useEffect(() => { if (isAuthenticated) fetchAll(); }, [isAuthenticated, fetchAll]);
 
   if (isLoading || (!isAuthenticated && !error)) {
     return <div className="min-h-screen bg-base flex items-center justify-center">
@@ -58,10 +48,14 @@ export default function MissionDeck() {
       <HUDGrid />
       <NavBar />
       <main className="relative z-10 max-w-6xl mx-auto px-6 py-10">
-        <SectionHeader title="Mission Deck" subtitle="Active missions and campaign status" view={view} onView={setView} />
+        <div className="mb-8">
+          <div className="font-mono text-xs text-amber-tac tracking-[0.4em] uppercase mb-1">Command Deck</div>
+          <h1 className="font-mono text-xl font-semibold text-text-primary">Mission Deck</h1>
+          <p className="font-mono text-xs text-text-muted mt-1">Active missions and campaign status</p>
+        </div>
         {error && <ErrorBox msg={error} />}
-        {view === "stats" && <MissionStats stats={missionStats} loading={loading} />}
-        {view === "cards" && <IntelGrid docs={docs} />}
+        <MissionStats stats={missionStats} loading={loading} />
+        {!loading && <div className="mt-8"><IntelGrid docs={docs} /></div>}
       </main>
     </div>
   );
@@ -85,27 +79,6 @@ function MissionStats({ stats, loading }: { stats: { total: number; drafts: numb
 
 // ── Shared components ─────────────────────────────────────────────────────────
 
-export function SectionHeader({ title, subtitle, view, onView }: {
-  title: string; subtitle: string; view: View; onView: (v: View) => void;
-}) {
-  return (
-    <div className="flex items-end justify-between mb-8">
-      <div>
-        <div className="font-mono text-xs text-amber-tac tracking-[0.4em] uppercase mb-1">Command Deck</div>
-        <h1 className="font-mono text-xl font-semibold text-text-primary">{title}</h1>
-        <p className="font-mono text-xs text-text-muted mt-1">{subtitle}</p>
-      </div>
-      <div className="flex items-center gap-0 border border-border-dim">
-        {(["stats", "cards"] as View[]).map((v) => (
-          <button key={v} onClick={() => onView(v)}
-            className={`font-mono text-xs px-4 py-1.5 tracking-widest uppercase transition-colors ${
-              view === v ? "bg-card text-amber-tac" : "text-text-muted hover:text-text-secondary"
-            }`}>{v}</button>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 export function StatCard({ label, value, index = 0 }: { label: string; value: number; index?: number }) {
   return (

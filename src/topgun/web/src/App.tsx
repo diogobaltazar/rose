@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Auth0Provider } from "@auth0/auth0-react";
+import { Auth0Provider, useAuth0 } from "@auth0/auth0-react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Landing from "./pages/Landing";
 import Callback from "./pages/Callback";
@@ -8,8 +8,22 @@ import IntelDeck from "./pages/IntelDeck";
 import Pilots from "./pages/Pilots";
 import Connections from "./pages/Connections";
 import Mission from "./pages/Mission";
-import { getConfig } from "./api";
+import { getConfig, getIntelStats, getIntelList } from "./api";
+import { useToken } from "./hooks/useToken";
 import type { AppConfig } from "./types";
+
+function PrefetchOnAuth() {
+  const { isAuthenticated } = useAuth0();
+  const { getToken } = useToken();
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    getToken().then(token => {
+      getIntelStats(token).catch(() => {});
+      getIntelList(token).catch(() => {});
+    });
+  }, [isAuthenticated, getToken]);
+  return null;
+}
 
 export default function App() {
   const [config, setConfig] = useState<AppConfig | null>(null);
@@ -60,6 +74,7 @@ export default function App() {
       }}
     >
       <BrowserRouter>
+        <PrefetchOnAuth />
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/callback" element={<Callback />} />

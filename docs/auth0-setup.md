@@ -15,9 +15,9 @@ In the application settings, set all three fields:
 
 | Field | Value |
 |---|---|
-| Allowed Callback URLs | `http://localhost:5100/callback, https://tgun.dev/callback` |
-| Allowed Logout URLs | `http://localhost:5100, https://tgun.dev` |
-| Allowed Web Origins | `http://localhost:5100, https://tgun.dev` |
+| Allowed Callback URLs | `http://localhost:5100/callback, https://tgun.dev/callback, https://amc-victoria.dev/callback` |
+| Allowed Logout URLs | `http://localhost:5100, https://tgun.dev, https://amc-victoria.dev` |
+| Allowed Web Origins | `http://localhost:5100, https://tgun.dev, https://amc-victoria.dev` |
 
 Save changes.
 

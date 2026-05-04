@@ -17,7 +17,7 @@ export default function NavBar() {
     <nav className="relative z-20 flex items-center justify-between px-6 py-3 border-b border-border-dim bg-base/80 backdrop-blur-sm">
       {/* Brand */}
       <Link to="/deck/missions" className="font-mono text-sm font-bold tracking-[0.3em] hover:opacity-80 transition-opacity shrink-0">
-        <span className="text-white/70">AMC VICTORIA</span>{" "}
+        <span className="text-white/70">ALMA VICTORIA</span>{" "}
         <span className="text-amber-tac">TOPGUN</span>
       </Link>
 

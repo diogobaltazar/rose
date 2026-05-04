@@ -67,8 +67,8 @@ export default function App() {
           <Route path="/deck/missions" element={<MissionDeck />} />
           <Route path="/deck/intel" element={<IntelDeck />} />
           <Route path="/deck/pilots" element={<Pilots />} />
-          <Route path="/deck/connections" element={<Connections />} />
-          <Route path="/deck/settings" element={<Navigate to="/deck/missions" replace />} />
+          <Route path="/deck/connections" element={<Navigate to="/deck/settings" replace />} />
+          <Route path="/deck/settings" element={<Connections />} />
           <Route path="/dashboard" element={<Navigate to="/deck/missions" replace />} />
           <Route path="/missions/:missionId" element={<Mission />} />
         </Routes>

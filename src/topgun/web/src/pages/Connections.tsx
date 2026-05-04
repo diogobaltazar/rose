@@ -71,7 +71,7 @@ export default function Connections() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("connected")) {
-      window.history.replaceState({}, "", "/deck/connections");
+      window.history.replaceState({}, "", "/deck/settings");
       load();
     }
   }, [load]);
@@ -132,7 +132,7 @@ export default function Connections() {
         </div>
 
         <button
-          onClick={() => navigate("/deck")}
+          onClick={() => navigate("/deck/missions")}
           className="font-mono text-xs text-text-muted hover:text-amber-tac mb-8 block tracking-widest"
         >
           ← BACK TO DECK
@@ -153,7 +153,7 @@ export default function Connections() {
           <div className="tac-border p-5 flex items-center justify-between">
             <div>
               <div className="font-mono text-xs text-text-primary">
-                {status?.backend.provider ? status.backend.provider.toUpperCase() : "NOT CONFIGURED"}
+                {status?.backend.connected ? "GOOGLE DRIVE" : "NOT CONFIGURED"}
               </div>
               <div className="font-mono text-xs text-text-muted mt-1">
                 {status?.backend.connected
@@ -176,7 +176,7 @@ export default function Connections() {
                 disabled={busy}
                 className="font-mono text-xs px-4 py-1.5 border border-amber-tac text-amber-tac hover:bg-amber-tac/10 tracking-widest"
               >
-                CONNECT GDRIVE
+                CONNECT
               </button>
             )}
           </div>
@@ -184,7 +184,7 @@ export default function Connections() {
           {showGdriveForm && !status?.backend.connected && (
             <div className="mt-4 space-y-3">
               <p className="font-mono text-xs text-text-muted">
-                Enter your GCP OAuth credentials (APIs &amp; Services → Credentials):
+                Enter your Google Cloud OAuth credentials (APIs &amp; Services → Credentials):
               </p>
               <input
                 type="text"

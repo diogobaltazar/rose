@@ -43,6 +43,7 @@ export default function Connections() {
   const { getToken } = useToken();
   const navigate = useNavigate();
   const [status, setStatus] = useState<ConnectionStatus | null>(null);
+  const [fetching, setFetching] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showGdriveForm, setShowGdriveForm] = useState(false);
@@ -54,12 +55,14 @@ export default function Connections() {
   }, [isAuthenticated, isLoading, loginWithRedirect]);
 
   const load = useCallback(async () => {
+    setFetching(true);
     try {
-      let token = "";
-      token = await getToken();
+      const token = await getToken();
       setStatus(await fetchConnections(token));
     } catch (e) {
       setError(String(e));
+    } finally {
+      setFetching(false);
     }
   }, [getToken]);
 
@@ -162,7 +165,7 @@ export default function Connections() {
               </div>
             </div>
 
-            {status?.backend.connected ? (
+            {!fetching && (status?.backend.connected ? (
               <button
                 onClick={() => handleRemove("backend")}
                 disabled={busy}
@@ -178,7 +181,7 @@ export default function Connections() {
               >
                 CONNECT
               </button>
-            )}
+            ))}
           </div>
 
           {showGdriveForm && !status?.backend.connected && (

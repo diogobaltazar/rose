@@ -42,6 +42,9 @@ export interface IntelDocument {
   uid: string;
   source: "github" | "obsidian";
   source_url: string;
+  title?: string;
+  labels?: string[];
+  auto_discovered?: boolean;
 }
 
 export interface IntelStats {

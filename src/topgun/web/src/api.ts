@@ -93,6 +93,16 @@ export async function deleteIntel(token: string, uid: string): Promise<void> {
   invalidateCache("intel-list", "intel-stats");
 }
 
+export async function tagAsMission(token: string, uid: string, sourceUrl: string): Promise<void> {
+  const r = await authFetch(`${BASE}/intel/${uid}/mission`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source_url: sourceUrl }),
+  });
+  if (!r.ok) throw new Error(`tag failed: ${await r.text()}`);
+  invalidateCache("intel-list", "intel-stats");
+}
+
 export async function addGithubRepo(token: string, name: string, repo: string, pat: string): Promise<void> {
   const r = await authFetch(`${BASE}/connect/github/repo`, token, {
     method: "POST",

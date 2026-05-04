@@ -8,8 +8,10 @@ import IntelDeck from "./pages/IntelDeck";
 import Pilots from "./pages/Pilots";
 import Connections from "./pages/Connections";
 import Mission from "./pages/Mission";
+import Sortie from "./pages/Sortie";
 import { getConfig, getIntelStats, getIntelList } from "./api";
 import { useToken } from "./hooks/useToken";
+import { EngagementProvider } from "./context/EngagementContext";
 import type { AppConfig } from "./types";
 
 function PrefetchOnAuth() {
@@ -74,6 +76,7 @@ export default function App() {
       }}
     >
       <BrowserRouter>
+        <EngagementProvider>
         <PrefetchOnAuth />
         <Routes>
           <Route path="/" element={<Landing />} />
@@ -84,9 +87,11 @@ export default function App() {
           <Route path="/deck/pilots" element={<Pilots />} />
           <Route path="/deck/connections" element={<Navigate to="/deck/settings" replace />} />
           <Route path="/deck/settings" element={<Connections />} />
+          <Route path="/deck/sortie" element={<Sortie />} />
           <Route path="/dashboard" element={<Navigate to="/deck/missions" replace />} />
           <Route path="/missions/:missionId" element={<Mission />} />
         </Routes>
+        </EngagementProvider>
       </BrowserRouter>
     </Auth0Provider>
   );

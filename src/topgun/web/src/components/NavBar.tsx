@@ -1,7 +1,8 @@
 import { useAuth0 } from "@auth0/auth0-react";
 import { Link, useLocation } from "react-router-dom";
+import { useEngagement } from "../context/EngagementContext";
 
-const NAV_ITEMS = [
+const BASE_NAV = [
   { label: "MISSION DECK", path: "/deck/missions" },
   { label: "INTEL", path: "/deck/intel" },
   { label: "PILOTS", path: "/deck/pilots" },
@@ -10,8 +11,13 @@ const NAV_ITEMS = [
 export default function NavBar() {
   const { user, logout } = useAuth0();
   const location = useLocation();
+  const { missions } = useEngagement();
 
   const isActive = (path: string) => location.pathname === path;
+  const navItems = [
+    ...BASE_NAV,
+    { label: "SORTIE", path: "/deck/sortie", badge: missions.length },
+  ];
 
   return (
     <nav className="relative z-20 flex items-center justify-between px-6 py-3 border-b border-border-dim bg-base/80 backdrop-blur-sm">
@@ -23,17 +29,22 @@ export default function NavBar() {
 
       {/* Nav items */}
       <div className="flex items-center gap-0 mx-6">
-        {NAV_ITEMS.map((item) => (
+        {navItems.map((item) => (
           <Link
             key={item.path}
             to={item.path}
-            className={`font-mono text-xs px-4 py-2 tracking-widest transition-colors ${
+            className={`font-mono text-xs px-4 py-2 tracking-widest transition-colors flex items-center gap-1.5 ${
               isActive(item.path)
                 ? "text-amber-tac border-b border-amber-tac"
                 : "text-text-muted hover:text-text-secondary"
             }`}
           >
             {item.label}
+            {"badge" in item && item.badge > 0 && (
+              <span className="font-mono text-xs bg-amber-tac text-base px-1.5 py-0.5 leading-none rounded-sm">
+                {item.badge}
+              </span>
+            )}
           </Link>
         ))}
       </div>

@@ -2,7 +2,9 @@ import typer
 from pathlib import Path
 from topgun.cli.install import install
 from topgun.cli.upgrade import upgrade
+from topgun.cli.auth import app as auth_app
 from topgun.cli.config import app as config_app
+from topgun.cli.intel import app as intel_app
 from topgun.cli.mission import app as mission_app
 from topgun.cli.notes import app as notes_app
 from topgun.cli.observe import app as observe_app
@@ -27,7 +29,9 @@ def main(ctx: typer.Context):
 
 app.command()(install)
 app.command()(upgrade)
+app.add_typer(auth_app)
 app.add_typer(config_app)
+app.add_typer(intel_app)
 app.add_typer(mission_app)
 app.add_typer(notes_app)
 app.add_typer(observe_app)

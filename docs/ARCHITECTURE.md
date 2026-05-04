@@ -539,6 +539,9 @@ topgun auth login backend                   # opens browser → Google OAuth →
 
 After step 3, Google Drive is connected. Your `topgun/` folder is created automatically on first write.
 
-### Scope used
+### Scopes used
 
-`https://www.googleapis.com/auth/drive.file` — access only files created by the topgun app. Users see these in Google Drive under **Computers** → **topgun**. topgun cannot read any other Drive files.
+- `drive.file` — create and write files in the topgun/ folder
+- `drive.readonly` — read any file in the user's Drive (needed to access the Obsidian vault the user manages themselves)
+
+Note: `drive.readonly` is a sensitive scope and requires Google verification for production. For development/testing, add test users in the OAuth consent screen.

@@ -34,10 +34,6 @@ def _vault_uid(path: str) -> str:
     return hashlib.sha1(path.encode()).hexdigest()[:12]
 
 
-def _is_topgun_format(content: str) -> bool:
-    """Check if an .md file has topgun frontmatter (date + status fields)."""
-    return bool(re.match(r"^---\n", content)) and "status:" in content[:500]
-
 
 def _vault_docs(client) -> list[dict[str, Any]]:
     """List all topgun-format .md files in topgun/vault/ on Google Drive."""
@@ -63,16 +59,19 @@ def _vault_docs(client) -> list[dict[str, Any]]:
 
         docs = []
         for f in md_files:
-            content = client.read_text(f["name"])
-            if _is_topgun_format(content):
-                path = f"{VAULT_PREFIX}{f['name']}"
-                docs.append({
-                    "uid": _vault_uid(path),
-                    "source": "obsidian",
-                    "source_url": path,
-                    "title": _extract_title(content),
-                    "auto_discovered": True,
-                })
+            path = f"{VAULT_PREFIX}{f['name']}"
+            try:
+                content = client._read_by_id(f["id"])
+                title = _extract_title(content) or f["name"].removesuffix(".md")
+            except Exception:
+                title = f["name"].removesuffix(".md")
+            docs.append({
+                "uid": _vault_uid(path),
+                "source": "obsidian",
+                "source_url": path,
+                "title": title,
+                "auto_discovered": True,
+            })
         return docs
     except Exception:
         return []
@@ -94,6 +93,7 @@ class IntelUpdate(BaseModel):
 
 
 # ── CRUD ──────────────────────────────────────────────────────────────────────
+
 
 @router.get("")
 def list_intel(auth: dict | None = Depends(require_auth)) -> list[dict[str, Any]]:

@@ -21,7 +21,10 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 
-GDRIVE_SCOPES = ["https://www.googleapis.com/auth/drive.file"]
+GDRIVE_SCOPES = [
+    "https://www.googleapis.com/auth/drive.file",      # write files created by app
+    "https://www.googleapis.com/auth/drive.readonly",  # read any file in Drive
+]
 GDRIVE_REDIRECT_URI = os.environ.get(
     "GDRIVE_REDIRECT_URI", "http://localhost:5101/connect/backend/callback"
 )
@@ -156,12 +159,22 @@ class DriveClient:
         file_id = self._file_id(filename)
         if not file_id:
             return ""
+        return self._read_by_id(file_id)
+
+    def _read_by_id(self, file_id: str) -> str:
+        # Check MIME type — Google Docs need export(), others use get_media()
+        meta = self._svc.files().get(fileId=file_id, fields="mimeType").execute()
+        mime = meta.get("mimeType", "")
         buf = io.BytesIO()
-        dl = MediaIoBaseDownload(buf, self._svc.files().get_media(fileId=file_id))
+        if mime == "application/vnd.google-apps.document":
+            request = self._svc.files().export_media(fileId=file_id, mimeType="text/plain")
+        else:
+            request = self._svc.files().get_media(fileId=file_id)
+        dl = MediaIoBaseDownload(buf, request)
         done = False
         while not done:
             _, done = dl.next_chunk()
-        return buf.getvalue().decode("utf-8")
+        return buf.getvalue().decode("utf-8", errors="replace")
 
     def write_text(self, filename: str, content: str) -> None:
         folder_id = self._folder()

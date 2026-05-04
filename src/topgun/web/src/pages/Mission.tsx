@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useAuth0 } from "@auth0/auth0-react";
+import { useToken } from "../hooks/useToken";
 import { getMissions, getEngagements } from "../api";
 import type { Mission as MissionType, Engagement } from "../types";
 import NavBar from "../components/NavBar";
@@ -10,7 +11,8 @@ import HUDGrid from "../components/HUDGrid";
 
 export default function Mission() {
   const { missionId } = useParams<{ missionId: string }>();
-  const { isAuthenticated, getAccessTokenSilently } = useAuth0();
+  const { isAuthenticated } = useAuth0();
+  const { getToken } = useToken();
   const [mission, setMission] = useState<MissionType | null>(null);
   const [engagements, setEngagements] = useState<Engagement[]>([]);
   const [loading, setLoading] = useState(true);
@@ -23,7 +25,7 @@ export default function Mission() {
     (async () => {
       try {
         let token = "";
-        try { token = await getAccessTokenSilently(); } catch { /* dev */ }
+        token = await getToken();
         const [allMissions, engs] = await Promise.all([
           getMissions(token),
           getEngagements(decoded, token),
@@ -34,7 +36,7 @@ export default function Mission() {
         setLoading(false);
       }
     })();
-  }, [isAuthenticated, decoded, getAccessTokenSilently]);
+  }, [isAuthenticated, decoded, getToken]);
 
   function copyCommand() {
     const cmd = `topgun engage --mission "${decoded}"`;

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth0 } from "@auth0/auth0-react";
+import { useToken } from "../hooks/useToken";
 import NavBar from "../components/NavBar";
 import HUDGrid from "../components/HUDGrid";
 import { getIntelStats, getIntelList, searchIntel } from "../api";
@@ -9,7 +10,8 @@ type Tab = "missions" | "intel";
 type View = "stats" | "cards";
 
 export default function CommandDeck() {
-  const { isAuthenticated, isLoading, getAccessTokenSilently, loginWithRedirect } = useAuth0();
+  const { isAuthenticated, isLoading, loginWithRedirect } = useAuth0();
+  const { getToken } = useToken();
   const [tab, setTab] = useState<Tab>("missions");
   const [view, setView] = useState<View>("stats");
   const [stats, setStats] = useState<IntelStats | null>(null);
@@ -28,7 +30,7 @@ export default function CommandDeck() {
   const fetchStats = useCallback(async () => {
     try {
       let token = "";
-      try { token = await getAccessTokenSilently(); } catch { /* dev mode */ }
+      token = await getToken();
       const data = await getIntelStats(token);
       setStats(data);
     } catch (e) {
@@ -36,7 +38,7 @@ export default function CommandDeck() {
     } finally {
       setLoading(false);
     }
-  }, [getAccessTokenSilently]);
+  }, [getToken]);
 
   useEffect(() => {
     if (isAuthenticated) fetchStats();
@@ -45,13 +47,13 @@ export default function CommandDeck() {
   const fetchCards = useCallback(async () => {
     try {
       let token = "";
-      try { token = await getAccessTokenSilently(); } catch { /* dev mode */ }
+      token = await getToken();
       const data = await getIntelList(token);
       setDocs(data);
     } catch (e) {
       setError(String(e));
     }
-  }, [getAccessTokenSilently]);
+  }, [getToken]);
 
   useEffect(() => {
     if (view === "cards" && isAuthenticated) fetchCards();
@@ -64,7 +66,7 @@ export default function CommandDeck() {
     }
     try {
       let token = "";
-      try { token = await getAccessTokenSilently(); } catch { /* dev mode */ }
+      token = await getToken();
       const results = await searchIntel(token, searchQuery);
       setSearchResults(results);
     } catch (e) {

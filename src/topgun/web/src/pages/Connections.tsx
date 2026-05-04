@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth0 } from "@auth0/auth0-react";
 import { useNavigate } from "react-router-dom";
+import { useToken } from "../hooks/useToken";
 import NavBar from "../components/NavBar";
 import HUDGrid from "../components/HUDGrid";
 
@@ -19,11 +20,12 @@ async function fetchConnections(token: string): Promise<ConnectionStatus> {
   return r.json();
 }
 
-async function initBackendAuth(token: string): Promise<string> {
-  const r = await fetch(`${BASE}/connect/backend/init`, {
+async function initBackendAuth(token: string, clientId: string, clientSecret: string): Promise<string> {
+  const params = new URLSearchParams({ client_id: clientId, client_secret: clientSecret });
+  const r = await fetch(`${BASE}/connect/backend/init?${params}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!r.ok) throw new Error("init failed");
+  if (!r.ok) throw new Error(`init failed: ${await r.text()}`);
   const data = await r.json();
   return data.auth_url;
 }
@@ -37,11 +39,15 @@ async function removeConnection(token: string, name: string): Promise<void> {
 }
 
 export default function Connections() {
-  const { isAuthenticated, isLoading, getAccessTokenSilently, loginWithRedirect } = useAuth0();
+  const { isAuthenticated, isLoading, loginWithRedirect } = useAuth0();
+  const { getToken } = useToken();
   const navigate = useNavigate();
   const [status, setStatus] = useState<ConnectionStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showGdriveForm, setShowGdriveForm] = useState(false);
+  const [gdriveClientId, setGdriveClientId] = useState("");
+  const [gdriveClientSecret, setGdriveClientSecret] = useState("");
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) loginWithRedirect();
@@ -50,12 +56,12 @@ export default function Connections() {
   const load = useCallback(async () => {
     try {
       let token = "";
-      try { token = await getAccessTokenSilently(); } catch { /* dev */ }
+      token = await getToken();
       setStatus(await fetchConnections(token));
     } catch (e) {
       setError(String(e));
     }
-  }, [getAccessTokenSilently]);
+  }, [getToken]);
 
   useEffect(() => {
     if (isAuthenticated) load();
@@ -71,12 +77,17 @@ export default function Connections() {
   }, [load]);
 
   const handleConnectBackend = async () => {
+    if (!gdriveClientId || !gdriveClientSecret) {
+      setShowGdriveForm(true);
+      return;
+    }
     setBusy(true);
+    setError(null);
     try {
-      let token = "";
-      try { token = await getAccessTokenSilently(); } catch { /* dev */ }
-      const url = await initBackendAuth(token);
+      const token = await getToken();
+      const url = await initBackendAuth(token, gdriveClientId, gdriveClientSecret);
       window.open(url, "_blank");
+      setShowGdriveForm(false);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -88,7 +99,7 @@ export default function Connections() {
     setBusy(true);
     try {
       let token = "";
-      try { token = await getAccessTokenSilently(); } catch { /* dev */ }
+      token = await getToken();
       await removeConnection(token, name);
       await load();
     } catch (e) {
@@ -169,6 +180,44 @@ export default function Connections() {
               </button>
             )}
           </div>
+
+          {showGdriveForm && !status?.backend.connected && (
+            <div className="mt-4 space-y-3">
+              <p className="font-mono text-xs text-text-muted">
+                Enter your GCP OAuth credentials (APIs &amp; Services → Credentials):
+              </p>
+              <input
+                type="text"
+                placeholder="Client ID  (.apps.googleusercontent.com)"
+                value={gdriveClientId}
+                onChange={e => setGdriveClientId(e.target.value)}
+                className="w-full bg-card border border-border-dim px-3 py-1.5 font-mono text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-amber-tac"
+              />
+              <input
+                type="password"
+                placeholder="Client Secret"
+                value={gdriveClientSecret}
+                onChange={e => setGdriveClientSecret(e.target.value)}
+                className="w-full bg-card border border-border-dim px-3 py-1.5 font-mono text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-amber-tac"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={handleConnectBackend}
+                  disabled={busy || !gdriveClientId || !gdriveClientSecret}
+                  className="font-mono text-xs px-4 py-1.5 border border-amber-tac text-amber-tac hover:bg-amber-tac/10 tracking-widest disabled:opacity-40"
+                >
+                  AUTHORIZE
+                </button>
+                <button
+                  onClick={() => setShowGdriveForm(false)}
+                  className="font-mono text-xs px-4 py-1.5 border border-border-dim text-text-muted hover:text-text-secondary tracking-widest"
+                >
+                  CANCEL
+                </button>
+              </div>
+            </div>
+          )}
+
         </section>
 
         {/* Service Connections */}

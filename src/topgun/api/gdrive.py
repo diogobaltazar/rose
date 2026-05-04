@@ -5,7 +5,8 @@ Reads/writes user data files in the user's topgun/ folder on Google Drive:
   registry.jsonl, timers.jsonl, config.json, credentials.enc, vault/
 
 Authentication: per-user refresh token stored encrypted in Redis.
-Encryption key = HMAC(BACKEND_SECRET, auth0_sub)
+Encryption key = HKDF-SHA256(BACKEND_SECRET + auth0_sub) → Fernet (AES-CBC + HMAC-SHA256).
+Legacy values (XOR cipher, no prefix) are still readable for backward compat.
 """
 
 import base64
@@ -15,6 +16,10 @@ import secrets
 import io
 import json
 import os
+
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+from cryptography.hazmat.primitives import hashes
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -31,7 +36,8 @@ TOPGUN_FOLDER = "topgun"
 
 # ── Encryption ────────────────────────────────────────────────────────────────
 
-def _derive_key(auth0_sub: str) -> bytes:
+def _derive_key_v1(auth0_sub: str) -> bytes:
+    """Legacy XOR key — used only for decrypting old Redis values."""
     return hmac.new(
         BACKEND_SECRET.encode(),
         auth0_sub.encode(),
@@ -39,16 +45,31 @@ def _derive_key(auth0_sub: str) -> bytes:
     ).digest()
 
 
+def _derive_key_v2(auth0_sub: str) -> bytes:
+    """HKDF-SHA256 key for Fernet (AES-CBC + HMAC-SHA256)."""
+    return HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=None,
+        info=b"topgun-fernet-v2",
+    ).derive((BACKEND_SECRET + auth0_sub).encode())
+
+
 def encrypt_token(token: str, auth0_sub: str) -> str:
-    key = _derive_key(auth0_sub)
-    token_bytes = token.encode()
-    key_stream = (key * (len(token_bytes) // len(key) + 1))[: len(token_bytes)]
-    return bytes(a ^ b for a, b in zip(token_bytes, key_stream)).hex()
+    """Encrypt with Fernet; ciphertext prefixed with 'v2:' for versioning."""
+    key = base64.urlsafe_b64encode(_derive_key_v2(auth0_sub))
+    ciphertext = Fernet(key).encrypt(token.encode())
+    return "v2:" + ciphertext.decode()
 
 
-def decrypt_token(encrypted_hex: str, auth0_sub: str) -> str:
-    key = _derive_key(auth0_sub)
-    encrypted = bytes.fromhex(encrypted_hex)
+def decrypt_token(stored: str, auth0_sub: str) -> str:
+    """Decrypt v2 (Fernet) or fall back to legacy XOR for old Redis values."""
+    if stored.startswith("v2:"):
+        key = base64.urlsafe_b64encode(_derive_key_v2(auth0_sub))
+        return Fernet(key).decrypt(stored[3:].encode()).decode()
+    # Legacy XOR path — handles values written before this upgrade
+    key = _derive_key_v1(auth0_sub)
+    encrypted = bytes.fromhex(stored)
     key_stream = (key * (len(encrypted) // len(key) + 1))[: len(encrypted)]
     return bytes(a ^ b for a, b in zip(encrypted, key_stream)).decode()
 

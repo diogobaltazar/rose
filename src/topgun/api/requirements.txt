@@ -3,6 +3,7 @@ uvicorn[standard]
 watchfiles
 httpx
 python-jose[cryptography]
+cryptography
 redis
 google-api-python-client
 google-auth-oauthlib

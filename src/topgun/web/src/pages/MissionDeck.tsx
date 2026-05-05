@@ -176,7 +176,6 @@ function IntelCard({ doc, index = 0, onTagged }: { doc: IntelDocument; index?: n
   const { uid, source, source_url: sourceUrl } = doc;
   const title = doc.title || sourceUrl?.split("/").pop()?.replace(".md", "") || uid;
   const labels = doc.labels ?? [];
-  const isMission = labels.includes("topgun-mission") || commitDone;
 
   const { engage, abort, isEngaged } = useEngagement();
   const { getToken } = useToken();
@@ -191,6 +190,8 @@ function IntelCard({ doc, index = 0, onTagged }: { doc: IntelDocument; index?: n
   const [replySent, setReplySent] = useState(false);
   const [committing, setCommitting] = useState(false);
   const [commitDone, setCommitDone] = useState(false);
+
+  const isMission = labels.includes("topgun-mission") || commitDone;
   const [commitError, setCommitError] = useState<string | null>(null);
   const termRef = useRef<HTMLDivElement>(null);
   const replyRef = useRef<HTMLInputElement>(null);

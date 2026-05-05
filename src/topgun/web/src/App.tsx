@@ -9,6 +9,7 @@ import Pilots from "./pages/Pilots";
 import Connections from "./pages/Connections";
 import Mission from "./pages/Mission";
 import Sortie from "./pages/Sortie";
+import Logbook from "./pages/Logbook";
 import { getConfig, getIntelStats, getIntelList } from "./api";
 import { useToken } from "./hooks/useToken";
 import { EngagementProvider } from "./context/EngagementContext";
@@ -88,6 +89,7 @@ export default function App() {
           <Route path="/deck/connections" element={<Navigate to="/deck/settings" replace />} />
           <Route path="/deck/settings" element={<Connections />} />
           <Route path="/deck/sortie" element={<Sortie />} />
+          <Route path="/deck/logbook" element={<Logbook />} />
           <Route path="/dashboard" element={<Navigate to="/deck/missions" replace />} />
           <Route path="/missions/:missionId" element={<Mission />} />
         </Routes>

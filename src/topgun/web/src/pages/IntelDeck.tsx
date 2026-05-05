@@ -104,10 +104,10 @@ export default function IntelDeck() {
               <div className="font-mono text-xs text-text-muted tracking-widest mb-4">
                 SEARCH — {searchResults.length} FOUND
               </div>
-              <IntelGrid docs={searchResults.map(r => ({ uid: r.uid, source: r.source, source_url: r.source_url, title: r.title } as IntelDocument & { title: string }))} />
+              <IntelGrid docs={searchResults.map(r => ({ uid: r.uid, source: r.source, source_url: r.source_url, title: r.title } as IntelDocument & { title: string }))} onTagged={fetchAll} />
             </>
           ) : (
-            <IntelGrid docs={docs} />
+            <IntelGrid docs={docs} onTagged={fetchAll} />
           )
         )}
       </main>

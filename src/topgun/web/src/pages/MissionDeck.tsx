@@ -66,7 +66,7 @@ export default function MissionDeck() {
                 <p className="font-mono text-xs text-text-muted/40 mt-2">Tag intel documents with topgun-mission via the ONA panel</p>
               </div>
             ) : (
-              <IntelGrid docs={missionDocs} />
+              <IntelGrid docs={missionDocs} onTagged={fetchAll} />
             )}
           </div>
         )}
@@ -106,7 +106,7 @@ export function StatCard({ label, value, index = 0 }: { label: string; value: nu
   );
 }
 
-export function IntelGrid({ docs }: { docs: IntelDocument[] }) {
+export function IntelGrid({ docs, onTagged }: { docs: IntelDocument[]; onTagged?: () => void }) {
   if (docs.length === 0) return (
     <div className="tac-border p-12 text-center bracket-corners">
       <p className="font-mono text-xs text-text-muted tracking-widest">NO DOCUMENTS</p>
@@ -114,7 +114,7 @@ export function IntelGrid({ docs }: { docs: IntelDocument[] }) {
   );
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-      {docs.map((doc, i) => <IntelCard key={doc.uid} doc={doc} index={i} />)}
+      {docs.map((doc, i) => <IntelCard key={doc.uid} doc={doc} index={i} onTagged={onTagged} />)}
     </div>
   );
 }
@@ -172,11 +172,11 @@ function makeTermLines(uid: string, title: string): { lines: string[]; question:
   };
 }
 
-function IntelCard({ doc, index = 0 }: { doc: IntelDocument; index?: number }) {
+function IntelCard({ doc, index = 0, onTagged }: { doc: IntelDocument; index?: number; onTagged?: () => void }) {
   const { uid, source, source_url: sourceUrl } = doc;
   const title = doc.title || sourceUrl?.split("/").pop()?.replace(".md", "") || uid;
   const labels = doc.labels ?? [];
-  const isMission = labels.includes("topgun-mission");
+  const isMission = labels.includes("topgun-mission") || commitDone;
 
   const { engage, abort, isEngaged } = useEngagement();
   const { getToken } = useToken();
@@ -245,7 +245,11 @@ function IntelCard({ doc, index = 0 }: { doc: IntelDocument; index?: number }) {
       await tagAsMission(await getToken(), uid, sourceUrl);
       setCommitDone(true);
       setTermLines(prev => [...prev, "", "◆  Tagged as MISSION. Panel closing..."]);
-      setTimeout(() => { setPanelOpen(false); invalidateCache("intel-list", "intel-stats"); }, 1200);
+      setTimeout(() => {
+        setPanelOpen(false);
+        invalidateCache("intel-list", "intel-stats");
+        onTagged?.();
+      }, 1200);
     } catch (e) {
       setCommitError(String(e));
       setTermLines(prev => [...prev, `✗  Error: ${String(e)}`]);

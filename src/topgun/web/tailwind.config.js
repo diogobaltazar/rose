@@ -67,12 +67,18 @@ export default {
           from: { opacity: "0", transform: "translateY(10px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
+        flash: {
+          "0%":   { color: "#FFB800" },
+          "40%":  { color: "#FFB800" },
+          "100%": { color: "inherit" },
+        },
       },
       animation: {
         scanline: "scanline 8s linear infinite",
         blink: "blink 1s step-end infinite",
         pulse_amber: "pulse_amber 2s ease-in-out infinite",
         fadeIn: "fadeIn 0.35s ease-out both",
+        flash: "flash 0.6s ease-out both",
       },
     },
   },

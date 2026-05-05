@@ -4,18 +4,17 @@ import NavBar from "../components/NavBar";
 import HUDGrid from "../components/HUDGrid";
 
 // ── Agent palette ─────────────────────────────────────────────────────────────
-// Three agents, three clearly distinct colours on dark backgrounds.
-// Amber = Opus (premium, warm), Cyan = Sonnet (fast, cool), Violet = Codex.
+// Amber = Opus (premium, warm), Cyan = Sonnet (fast, cool).
+// Codex excluded — it has no concept of skills, commands, or custom agents.
 
 const AGENTS = [
   { key: "opus",   name: "Claude Code Opus 4.5",   short: "Opus",   color: "#FFB800" },
   { key: "sonnet", name: "Claude Code Sonnet 4.5", short: "Sonnet", color: "#00d4ff" },
-  { key: "codex",  name: "Codex",                  short: "Codex",  color: "#a78bfa" },
 ] as const;
 
 type EntryType = "skill" | "command" | "agent";
 
-interface AgentWeeks { opus: number[]; sonnet: number[]; codex: number[]; }
+interface AgentWeeks { opus: number[]; sonnet: number[]; }
 interface Entry {
   name: string;
   type: EntryType;
@@ -28,7 +27,7 @@ interface Entry {
 // Characteristics:
 //   Opus   — highest baseline, consistent, low variance, already strong early
 //   Sonnet — starts lower, faster growth, medium variance, catches up
-//   Codex  — lowest on topgun-specific tasks, volatile, slower convergence
+
 
 const ENTRIES: Entry[] = [
   {
@@ -37,7 +36,6 @@ const ENTRIES: Entry[] = [
     weeks: {
       opus:   [3,4,5,4,7,8,7,10,11,12],
       sonnet: [1,2,3,3,5,6,8, 7,10,11],
-      codex:  [0,1,1,2,2,3,4, 3, 5, 6],
     },
   },
   {
@@ -46,7 +44,6 @@ const ENTRIES: Entry[] = [
     weeks: {
       opus:   [2,3,4,3,5,7,8, 9,11,12],
       sonnet: [1,1,3,2,4,5,6, 7, 9,10],
-      codex:  [0,0,1,1,2,2,3, 2, 4, 4],
     },
   },
   {
@@ -55,7 +52,6 @@ const ENTRIES: Entry[] = [
     weeks: {
       opus:   [2,3,5,4,6,7,7,8,10,11],
       sonnet: [1,2,3,4,5,6,5,7, 8,10],
-      codex:  [0,1,1,2,2,3,4,3, 5, 6],
     },
   },
   {
@@ -64,7 +60,6 @@ const ENTRIES: Entry[] = [
     weeks: {
       opus:   [3,5,6,6,8,8,9,9,10,10],
       sonnet: [2,3,4,5,6,7,7,8, 9,10],
-      codex:  [0,1,2,2,3,4,4,5, 5, 6],
     },
   },
   {
@@ -73,7 +68,6 @@ const ENTRIES: Entry[] = [
     weeks: {
       opus:   [2,3,3,5,4,7,7,9, 9,11],
       sonnet: [1,2,3,3,5,5,6,7, 8, 9],
-      codex:  [0,1,1,2,2,3,3,4, 4, 5],
     },
   },
   {
@@ -82,7 +76,6 @@ const ENTRIES: Entry[] = [
     weeks: {
       opus:   [2,3,4,5,6,6,8,8,9,10],
       sonnet: [1,2,3,4,5,6,6,7,8, 9],
-      codex:  [1,1,2,2,3,4,4,5,5, 6],
     },
   },
   {
@@ -91,7 +84,6 @@ const ENTRIES: Entry[] = [
     weeks: {
       opus:   [1,2,3,3,5,6,7,7,9, 9],
       sonnet: [0,1,2,3,4,4,6,6,7, 8],
-      codex:  [0,0,1,1,2,2,3,4,4, 5],
     },
   },
   {
@@ -100,7 +92,6 @@ const ENTRIES: Entry[] = [
     weeks: {
       opus:   [1,2,3,4,4,5,5,6,6,7],
       sonnet: [1,1,2,3,4,4,5,5,6,6],
-      codex:  [0,1,1,2,2,3,3,4,4,5],
     },
   },
   {
@@ -109,7 +100,6 @@ const ENTRIES: Entry[] = [
     weeks: {
       opus:   [2,3,4,4,6,6,7,7,8,8],
       sonnet: [1,2,3,4,5,5,6,7,7,8],
-      codex:  [0,1,1,2,3,3,4,4,5,5],
     },
   },
   {
@@ -118,7 +108,6 @@ const ENTRIES: Entry[] = [
     weeks: {
       opus:   [1,2,3,4,4,5,5,6,6,7],
       sonnet: [0,1,2,3,4,4,5,5,6,6],
-      codex:  [0,0,1,1,2,2,3,3,4,4],
     },
   },
   {
@@ -127,7 +116,6 @@ const ENTRIES: Entry[] = [
     weeks: {
       opus:   [3,4,5,5,7,7,8,10,11,13],
       sonnet: [2,3,4,4,5,7,7, 9,10,11],
-      codex:  [1,1,2,2,3,4,5, 4, 6, 7],
     },
   },
   {
@@ -136,7 +124,6 @@ const ENTRIES: Entry[] = [
     weeks: {
       opus:   [2,3,5,5,7,7,8,8,10,11],
       sonnet: [1,3,4,5,6,6,7,8, 9,10],
-      codex:  [0,1,2,2,3,4,5,5, 6, 7],
     },
   },
   {
@@ -145,7 +132,6 @@ const ENTRIES: Entry[] = [
     weeks: {
       opus:   [2,3,4,4,6,7,7,8,9,10],
       sonnet: [1,2,3,4,5,5,7,7,8, 9],
-      codex:  [0,1,1,2,3,3,4,4,5, 5],
     },
   },
 ];
@@ -159,7 +145,7 @@ function Sparkline({
   showLabels?: boolean; showGrid?: boolean;
 }) {
   const n = 10;
-  const allVals = [...weeks.opus, ...weeks.sonnet, ...weeks.codex];
+  const allVals = [...weeks.opus, ...weeks.sonnet];
   const maxY = Math.max(...allVals, 1);
   const x = (i: number) => (i / (n - 1)) * width;
   const y = (v: number) => height - (v / maxY) * (height - 4) - 2;
@@ -175,12 +161,12 @@ function Sparkline({
       {AGENTS.map(a => (
         <polyline key={a.key} points={pts(weeks[a.key])}
           fill="none" stroke={a.color} strokeWidth={showLabels ? 2 : 1.5}
-          strokeLinecap="round" strokeLinejoin="round" opacity={a.key === "codex" ? 0.8 : 1} />
+          strokeLinecap="round" strokeLinejoin="round" />
       ))}
       {/* terminal dots */}
       {AGENTS.map(a => (
         <circle key={a.key} cx={x(n-1)} cy={y(weeks[a.key][n-1])} r={showLabels ? 3 : 2}
-          fill={a.color} opacity={a.key === "codex" ? 0.8 : 1} />
+          fill={a.color} />
       ))}
       {showLabels && Array.from({length: n}, (_, i) => (
         <text key={i} x={x(i)} y={height + 14} textAnchor="middle"
@@ -199,7 +185,7 @@ function Legend({ compact = false }: { compact?: boolean }) {
     <div className={`flex items-center ${compact ? "gap-3" : "gap-5"}`}>
       {AGENTS.map(a => (
         <span key={a.key} className="flex items-center gap-1.5">
-          <span className="inline-block rounded-full" style={{ width: compact ? 20 : 24, height: 2, background: a.color, opacity: a.key === "codex" ? 0.8 : 1 }} />
+          <span className="inline-block rounded-full" style={{ width: compact ? 20 : 24, height: 2, background: a.color, opacity: 1 }} />
           <span className="font-mono tracking-wide" style={{ fontSize: compact ? 9 : 10, color: "rgba(255,255,255,0.45)" }}>
             {compact ? a.short : a.name}
           </span>
@@ -302,8 +288,8 @@ function EntryCardExpanded({ entry, onClose }: { entry: Entry; onClose: () => vo
         {agentStats.map(a => (
           <div key={a.key} className="border border-border-dim p-4 space-y-3">
             <div className="flex items-center gap-2">
-              <span className="inline-block w-3 h-3 rounded-full" style={{ background: a.color, opacity: a.key === "codex" ? 0.8 : 1 }} />
-              <span className="font-mono text-xs font-bold" style={{ color: a.color, opacity: a.key === "codex" ? 0.8 : 1 }}>
+              <span className="inline-block w-3 h-3 rounded-full" style={{ background: a.color, opacity: 1 }} />
+              <span className="font-mono text-xs font-bold" style={{ color: a.color, opacity: 1 }}>
                 {a.short}
               </span>
             </div>
@@ -342,7 +328,7 @@ function EntryCardExpanded({ entry, onClose }: { entry: Entry; onClose: () => vo
                     const h = Math.round((vals[j] / Math.max(total, 1)) * barH);
                     return h > 0 ? (
                       <div key={a.key} className="w-full rounded-sm"
-                        style={{ height: h, background: a.color, opacity: a.key === "codex" ? 0.7 : 0.85 }} />
+                        style={{ height: h, background: a.color, opacity: 0.85 }} />
                     ) : null;
                   })}
                 </div>

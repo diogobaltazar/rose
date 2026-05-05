@@ -145,6 +145,7 @@ function PilotCardExpanded({ pilot, onClose }: { pilot: Pilot; onClose: () => vo
               </div>
             ))}
           </div>
+        </div>
         <button
           onClick={onClose}
           className="font-mono text-xs text-text-muted hover:text-amber-tac transition-colors tracking-widest shrink-0"

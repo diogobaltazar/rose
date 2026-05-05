@@ -67,32 +67,14 @@ function fmt(n: number): string {
   return String(n);
 }
 
-function Mugshot({ callsign, size = "sm" }: { callsign: string; size?: "sm" | "lg" }) {
-  const dim = size === "sm" ? "w-10 h-10" : "w-20 h-20";
-  const textSize = size === "sm" ? "text-base" : "text-3xl";
-  return (
-    <div className={`${dim} relative border border-amber-tac/25 bg-card flex items-center justify-center shrink-0 overflow-hidden`}>
-      <div className="absolute inset-0">
-        <div className="absolute top-1/2 left-0 right-0 h-px bg-amber-tac/10" />
-        <div className="absolute left-1/2 top-0 bottom-0 w-px bg-amber-tac/10" />
-      </div>
-      <div className="absolute top-0 left-0 w-2 h-2 border-t border-l border-amber-tac/35" />
-      <div className="absolute top-0 right-0 w-2 h-2 border-t border-r border-amber-tac/35" />
-      <div className="absolute bottom-0 left-0 w-2 h-2 border-b border-l border-amber-tac/35" />
-      <div className="absolute bottom-0 right-0 w-2 h-2 border-b border-r border-amber-tac/35" />
-      <span className={`font-mono ${textSize} font-bold text-amber-tac/50 relative z-10`}>{callsign[0]}</span>
-    </div>
-  );
-}
 
 function PilotCardCompact({ pilot, onClick, index }: { pilot: Pilot; onClick: () => void; index: number }) {
   return (
     <button
       onClick={onClick}
-      className="tac-border flex items-center gap-4 px-4 py-3 hover:bg-card transition-colors text-left w-full animate-fadeIn"
+      className="tac-border flex items-center gap-3 px-4 py-3 hover:bg-card transition-colors text-left w-full animate-fadeIn"
       style={{ animationDelay: `${index * 0.06}s` }}
     >
-      <Mugshot callsign={pilot.callsign} size="sm" />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="font-mono text-sm font-bold text-amber-tac tracking-widest">{pilot.callsign}</span>

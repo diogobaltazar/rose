@@ -119,33 +119,57 @@ export function IntelGrid({ docs }: { docs: IntelDocument[] }) {
   );
 }
 
-function makeTermLines(uid: string, title: string): string[] {
-  return [
-    "◆  Spawning ONA environment...",
-    "◆  Loading Claude Code agent...",
-    "◆  Loading mission planner skill...",
-    "",
-    `$ /topgun-mission-plan intel document ${uid}`,
-    "",
-    "◆  Thinking...",
-    `◆  Reading intel: "${title}"`,
-    "◆  Fetching repository context...",
-    "◆  Scanning codebase structure...",
-    "◆  Mapping affected components...",
-    "◆  Estimating scope and complexity...",
-    "",
-    "  ┌─────────────────────────────────────┐",
-    "  │  MISSION PLAN DRAFT                 │",
-    "  ├─────────────────────────────────────┤",
-    "  │  Priority    HIGH                   │",
-    "  │  Complexity  MEDIUM                 │",
-    "  │  Est tokens  ~240k                  │",
-    "  │  Est cost    ~$2.40                 │",
-    "  │  Crew        2 pilots               │",
-    "  └─────────────────────────────────────┘",
-    "",
-    "◆  Plan ready. COMMIT to engage · ABORT to cancel.",
-  ];
+function makeTermLines(uid: string, title: string): { lines: string[]; question: string } {
+  const trimmed = title.length > 42 ? title.slice(0, 39) + "..." : title;
+  const isFeature = /^feat/i.test(title);
+  const isFix = /^fix/i.test(title);
+  const isRefactor = /^refactor/i.test(title);
+  const big = title.length > 60;
+  const complexity = big ? "HIGH · ~5-7 files   " : "MEDIUM · ~3-4 files ";
+  const tokens =     big ? "~380k               " : "~240k               ";
+  const cost =       big ? "~$3.80              " : "~$2.40              ";
+  const question = isFeature
+    ? "Should this ship as a standalone PR, or bundle with any in-flight related work?"
+    : isFix
+    ? "Can you confirm the reproduction steps, and is a regression test expected?"
+    : isRefactor
+    ? "Is backward compatibility with existing callers a hard requirement?"
+    : "Any constraints or acceptance criteria I should prioritise over the standard approach?";
+  return {
+    lines: [
+      "◆  Spawning ONA environment...",
+      "◆  Loading Claude Code agent...",
+      "◆  Loading mission planner skill...",
+      "",
+      `$ /topgun-mission-plan intel document ${uid}`,
+      "",
+      "◆  Thinking...",
+      `◆  Reading: "${trimmed}"`,
+      "◆  Fetching issue body, comments and linked PRs...",
+      "◆  Resolving referenced files and symbols...",
+      "◆  Tracing call sites and test coverage...",
+      "◆  Estimating implementation surface...",
+      "",
+      "  ┌─────────────────────────────────────┐",
+      "  │  MISSION PLAN DRAFT                 │",
+      "  ├─────────────────────────────────────┤",
+      `  │  Priority    HIGH                   │`,
+      `  │  Complexity  ${complexity}│`,
+      `  │  Est tokens  ${tokens}│`,
+      `  │  Est cost    ${cost}│`,
+      "  │  Crew        Lead + Wingman         │",
+      "  └─────────────────────────────────────┘",
+      "",
+      "◆  Entry points and test surface identified.",
+      "◆  Approach: branch → implement → test → PR.",
+      "",
+      "◆  One question before we engage:",
+      "",
+      `    ${question}`,
+      "",
+    ],
+    question,
+  };
 }
 
 function IntelCard({ doc, index = 0 }: { doc: IntelDocument; index?: number }) {
@@ -162,10 +186,14 @@ function IntelCard({ doc, index = 0 }: { doc: IntelDocument; index?: number }) {
   const [onaState, setOnaState] = useState<OnaState>("idle");
   const [panelOpen, setPanelOpen] = useState(false);
   const [termLines, setTermLines] = useState<string[]>([]);
+  const [termDone, setTermDone] = useState(false);
+  const [reply, setReply] = useState("");
+  const [replySent, setReplySent] = useState(false);
   const [committing, setCommitting] = useState(false);
   const [commitDone, setCommitDone] = useState(false);
   const [commitError, setCommitError] = useState<string | null>(null);
   const termRef = useRef<HTMLDivElement>(null);
+  const replyRef = useRef<HTMLInputElement>(null);
 
   const openSource = () => {
     if (source === "github" && sourceUrl) {
@@ -178,13 +206,24 @@ function IntelCard({ doc, index = 0 }: { doc: IntelDocument; index?: number }) {
   };
 
   const startStream = (uid: string, title: string) => {
-    const lines = makeTermLines(uid, title);
+    const { lines } = makeTermLines(uid, title);
     lines.forEach((line, i) => {
       setTimeout(() => {
         setTermLines(prev => [...prev, line]);
         if (termRef.current) termRef.current.scrollTop = termRef.current.scrollHeight;
+        if (i === lines.length - 1) {
+          setTermDone(true);
+          setTimeout(() => replyRef.current?.focus(), 80);
+        }
       }, i * 140);
     });
+  };
+
+  const handleReply = () => {
+    if (!reply.trim()) return;
+    setTermLines(prev => [...prev, `  ▸ ${reply}`, "", "◆  Understood. COMMIT to tag as mission or ABORT to cancel."]);
+    setReplySent(true);
+    setTimeout(() => { if (termRef.current) termRef.current.scrollTop = termRef.current.scrollHeight; }, 50);
   };
 
   const handleOnaClick = () => {
@@ -290,7 +329,7 @@ function IntelCard({ doc, index = 0 }: { doc: IntelDocument; index?: number }) {
       {panelOpen && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setPanelOpen(false)} />
-          <div className="fixed top-0 right-0 h-screen w-1/2 z-50 bg-[#080808] border-l border-border-dim flex flex-col">
+          <div className="fixed top-[45px] right-0 h-[calc(100vh-45px)] w-1/2 z-50 bg-[#080808] border-l border-t border-border-dim flex flex-col">
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-3 border-b border-border-dim shrink-0">
               <div>
@@ -315,13 +354,38 @@ function IntelCard({ doc, index = 0 }: { doc: IntelDocument; index?: number }) {
                   {line || "\u00a0"}
                 </div>
               ))}
-              {termLines.length > 0 && termLines.length < makeTermLines(uid, title).length && (
+              {!termDone && termLines.length > 0 && (
                 <span className="font-mono text-xs text-amber-tac animate-blink">█</span>
               )}
             </div>
 
+            {/* Reply input */}
+            {termDone && !replySent && !commitDone && (
+              <div className="px-5 py-3 border-t border-border-dim shrink-0 bg-[#0a0a0a]">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs text-amber-tac shrink-0">▸</span>
+                  <input
+                    ref={replyRef}
+                    type="text"
+                    value={reply}
+                    onChange={e => setReply(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") handleReply(); }}
+                    placeholder="Type your answer and press Enter..."
+                    className="flex-1 bg-transparent font-mono text-xs text-text-primary placeholder:text-text-muted/40 outline-none"
+                  />
+                  <button
+                    onClick={handleReply}
+                    disabled={!reply.trim()}
+                    className="font-mono text-xs text-amber-tac/60 hover:text-amber-tac disabled:opacity-20 tracking-widest shrink-0"
+                  >
+                    SEND ↵
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Actions */}
-            {!commitDone && source === "github" && (
+            {!commitDone && source === "github" && (termDone) && (
               <div className="flex gap-2 px-5 py-4 border-t border-border-dim shrink-0">
                 <button
                   onClick={handleCommit}

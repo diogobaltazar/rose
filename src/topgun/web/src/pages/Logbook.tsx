@@ -3,205 +3,226 @@ import { useAuth0 } from "@auth0/auth0-react";
 import NavBar from "../components/NavBar";
 import HUDGrid from "../components/HUDGrid";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// ── Agent palette ─────────────────────────────────────────────────────────────
+// Three agents, three clearly distinct colours on dark backgrounds.
+// Amber = Opus (premium, warm), Cyan = Sonnet (fast, cool), Violet = Codex.
+
+const AGENTS = [
+  { key: "opus",   name: "Claude Code Opus 4.5",   short: "Opus",   color: "#FFB800" },
+  { key: "sonnet", name: "Claude Code Sonnet 4.5", short: "Sonnet", color: "#00d4ff" },
+  { key: "codex",  name: "Codex",                  short: "Codex",  color: "#a78bfa" },
+] as const;
 
 type EntryType = "skill" | "command" | "agent";
-interface Week { succeeded: number; failed: number; }
+
+interface AgentWeeks { opus: number[]; sonnet: number[]; codex: number[]; }
 interface Entry {
   name: string;
   type: EntryType;
   description: string;
-  weeks: Week[];
+  // succeeded missions per agent per week (10 weeks, oldest first)
+  weeks: AgentWeeks;
 }
 
-// ── Data — realistic, non-linear improvement curves ───────────────────────────
-// Regressions, plateaus, and spikes make the data feel earned.
+// ── Data ──────────────────────────────────────────────────────────────────────
+// Characteristics:
+//   Opus   — highest baseline, consistent, low variance, already strong early
+//   Sonnet — starts lower, faster growth, medium variance, catches up
+//   Codex  — lowest on topgun-specific tasks, volatile, slower convergence
 
 const ENTRIES: Entry[] = [
-  // ── Skills ──────────────────────────────────────────────────────────────────
   {
-    name: "topgun",
-    type: "skill",
+    name: "topgun", type: "skill",
     description: "End-to-end development flow — research, plan, implement, test, deploy, commit, release to alpha. Covers GitHub issue management, worktree-based branching, verification loops, and deployment monitoring.",
-    weeks: [
-      {succeeded:1,failed:5},{succeeded:2,failed:4},{succeeded:4,failed:4},{succeeded:3,failed:3},
-      {succeeded:6,failed:3},{succeeded:8,failed:1},{succeeded:7,failed:2},{succeeded:11,failed:1},
-      {succeeded:12,failed:0},{succeeded:14,failed:1},
-    ],
+    weeks: {
+      opus:   [3,4,5,4,7,8,7,10,11,12],
+      sonnet: [1,2,3,3,5,6,8, 7,10,11],
+      codex:  [0,1,1,2,2,3,4, 3, 5, 6],
+    },
   },
   {
-    name: "topgun-mission-plan",
-    type: "skill",
-    description: "Mission planner — interactive planning session that produces GitHub issues, Obsidian tasks, and a mission UID stored in Redis. Run this before /topgun to define what is to be built.",
-    weeks: [
-      {succeeded:0,failed:3},{succeeded:2,failed:3},{succeeded:3,failed:2},{succeeded:2,failed:3},
-      {succeeded:5,failed:1},{succeeded:6,failed:1},{succeeded:8,failed:2},{succeeded:9,failed:0},
-      {succeeded:11,failed:1},{succeeded:12,failed:0},
-    ],
+    name: "topgun-mission-plan", type: "skill",
+    description: "Mission planner — interactive planning session that produces GitHub issues, Obsidian tasks, and a mission UID stored in Redis.",
+    weeks: {
+      opus:   [2,3,4,3,5,7,8, 9,11,12],
+      sonnet: [1,1,3,2,4,5,6, 7, 9,10],
+      codex:  [0,0,1,1,2,2,3, 2, 4, 4],
+    },
   },
   {
-    name: "topgun-task",
-    type: "skill",
+    name: "topgun-task", type: "skill",
     description: "Federated personal backlog — query, add, edit, and close tasks across GitHub repos and Obsidian vaults in natural language.",
-    weeks: [
-      {succeeded:1,failed:2},{succeeded:2,failed:2},{succeeded:4,failed:1},{succeeded:3,failed:2},
-      {succeeded:5,failed:1},{succeeded:7,failed:0},{succeeded:6,failed:1},{succeeded:8,failed:0},
-      {succeeded:10,failed:0},{succeeded:11,failed:0},
-    ],
+    weeks: {
+      opus:   [2,3,5,4,6,7,7,8,10,11],
+      sonnet: [1,2,3,4,5,6,5,7, 8,10],
+      codex:  [0,1,1,2,2,3,4,3, 5, 6],
+    },
   },
   {
-    name: "topgun-thought",
-    type: "skill",
+    name: "topgun-thought", type: "skill",
     description: "Personal notes assistant — create, search, browse, and edit notes across Obsidian vaults in natural language.",
-    weeks: [
-      {succeeded:0,failed:2},{succeeded:1,failed:1},{succeeded:2,failed:1},{succeeded:4,failed:0},
-      {succeeded:3,failed:1},{succeeded:5,failed:0},{succeeded:6,failed:0},{succeeded:7,failed:0},
-      {succeeded:9,failed:0},{succeeded:10,failed:0},
-    ],
+    weeks: {
+      opus:   [3,5,6,6,8,8,9,9,10,10],
+      sonnet: [2,3,4,5,6,7,7,8, 9,10],
+      codex:  [0,1,2,2,3,4,4,5, 5, 6],
+    },
   },
   {
-    name: "simplify",
-    type: "skill",
-    description: "Review changed code for reuse, quality, and efficiency, then fix any issues found. Runs after implementation to tighten up the result.",
-    weeks: [
-      {succeeded:2,failed:4},{succeeded:3,failed:3},{succeeded:3,failed:3},{succeeded:5,failed:2},
-      {succeeded:4,failed:2},{succeeded:7,failed:1},{succeeded:8,failed:1},{succeeded:9,failed:0},
-      {succeeded:11,failed:1},{succeeded:11,failed:0},
-    ],
+    name: "simplify", type: "skill",
+    description: "Review changed code for reuse, quality, and efficiency, then fix any issues found.",
+    weeks: {
+      opus:   [2,3,3,5,4,7,7,9, 9,11],
+      sonnet: [1,2,3,3,5,5,6,7, 8, 9],
+      codex:  [0,1,1,2,2,3,3,4, 4, 5],
+    },
   },
   {
-    name: "review",
-    type: "skill",
-    description: "Review a pull request — correctness, style, security, and test coverage. Produces a structured report with pass/fail criteria.",
-    weeks: [
-      {succeeded:1,failed:2},{succeeded:2,failed:2},{succeeded:4,failed:1},{succeeded:3,failed:1},
-      {succeeded:5,failed:1},{succeeded:6,failed:0},{succeeded:8,failed:1},{succeeded:8,failed:0},
-      {succeeded:9,failed:0},{succeeded:10,failed:0},
-    ],
+    name: "review", type: "skill",
+    description: "Review a pull request — correctness, style, security, and test coverage.",
+    weeks: {
+      opus:   [2,3,4,5,6,6,8,8,9,10],
+      sonnet: [1,2,3,4,5,6,6,7,8, 9],
+      codex:  [1,1,2,2,3,4,4,5,5, 6],
+    },
   },
   {
-    name: "security-review",
-    type: "skill",
-    description: "Complete a security review of the pending changes on the current branch — OWASP top 10, secrets exposure, injection, auth flows.",
-    weeks: [
-      {succeeded:0,failed:3},{succeeded:1,failed:2},{succeeded:2,failed:2},{succeeded:3,failed:1},
-      {succeeded:3,failed:2},{succeeded:5,failed:1},{succeeded:6,failed:0},{succeeded:7,failed:0},
-      {succeeded:8,failed:1},{succeeded:9,failed:0},
-    ],
-  },
-  // ── Commands ─────────────────────────────────────────────────────────────────
-  {
-    name: "less-permission-prompts",
-    type: "command",
-    description: "Scan transcripts for common read-only Bash and MCP tool calls, then add a prioritised allowlist to project settings.json to reduce permission prompts.",
-    weeks: [
-      {succeeded:0,failed:2},{succeeded:1,failed:1},{succeeded:1,failed:1},{succeeded:2,failed:1},
-      {succeeded:2,failed:0},{succeeded:3,failed:0},{succeeded:4,failed:1},{succeeded:4,failed:0},
-      {succeeded:5,failed:0},{succeeded:5,failed:0},
-    ],
+    name: "security-review", type: "skill",
+    description: "Complete a security review of the pending changes — OWASP top 10, secrets exposure, injection, auth flows.",
+    weeks: {
+      opus:   [1,2,3,3,5,6,7,7,9, 9],
+      sonnet: [0,1,2,3,4,4,6,6,7, 8],
+      codex:  [0,0,1,1,2,2,3,4,4, 5],
+    },
   },
   {
-    name: "update-config",
-    type: "command",
-    description: "Configure the Claude Code harness via settings.json — hooks, permissions, env vars. Handles automated behaviours and keybindings.",
-    weeks: [
-      {succeeded:1,failed:3},{succeeded:2,failed:2},{succeeded:2,failed:2},{succeeded:4,failed:1},
-      {succeeded:3,failed:2},{succeeded:5,failed:1},{succeeded:6,failed:0},{succeeded:6,failed:1},
-      {succeeded:7,failed:0},{succeeded:8,failed:0},
-    ],
+    name: "less-permission-prompts", type: "command",
+    description: "Scan transcripts for common read-only tool calls, then add a prioritised allowlist to project settings.json.",
+    weeks: {
+      opus:   [1,2,3,4,4,5,5,6,6,7],
+      sonnet: [1,1,2,3,4,4,5,5,6,6],
+      codex:  [0,1,1,2,2,3,3,4,4,5],
+    },
   },
   {
-    name: "schedule",
-    type: "command",
-    description: "Create, update, list, or run scheduled remote agents (triggers) that execute on a cron schedule.",
-    weeks: [
-      {succeeded:0,failed:1},{succeeded:1,failed:1},{succeeded:1,failed:0},{succeeded:2,failed:1},
-      {succeeded:3,failed:0},{succeeded:3,failed:0},{succeeded:4,failed:0},{succeeded:4,failed:0},
-      {succeeded:5,failed:0},{succeeded:5,failed:0},
-    ],
+    name: "update-config", type: "command",
+    description: "Configure the Claude Code harness via settings.json — hooks, permissions, env vars.",
+    weeks: {
+      opus:   [2,3,4,4,6,6,7,7,8,8],
+      sonnet: [1,2,3,4,5,5,6,7,7,8],
+      codex:  [0,1,1,2,3,3,4,4,5,5],
+    },
   },
-  // ── Agents ───────────────────────────────────────────────────────────────────
   {
-    name: "general-purpose",
-    type: "agent",
+    name: "schedule", type: "command",
+    description: "Create, update, list, or run scheduled remote agents on a cron schedule.",
+    weeks: {
+      opus:   [1,2,3,4,4,5,5,6,6,7],
+      sonnet: [0,1,2,3,4,4,5,5,6,6],
+      codex:  [0,0,1,1,2,2,3,3,4,4],
+    },
+  },
+  {
+    name: "general-purpose", type: "agent",
     description: "Full-capability agent — research, search, edit files, run commands, spawn subagents. Default workhorse for multi-step implementation tasks.",
-    weeks: [
-      {succeeded:2,failed:6},{succeeded:4,failed:5},{succeeded:5,failed:5},{succeeded:7,failed:4},
-      {succeeded:6,failed:4},{succeeded:9,failed:3},{succeeded:11,failed:2},{succeeded:10,failed:2},
-      {succeeded:13,failed:1},{succeeded:15,failed:1},
-    ],
+    weeks: {
+      opus:   [3,4,5,5,7,7,8,10,11,13],
+      sonnet: [2,3,4,4,5,7,7, 9,10,11],
+      codex:  [1,1,2,2,3,4,5, 4, 6, 7],
+    },
   },
   {
-    name: "Explore",
-    type: "agent",
-    description: "Fast read-only agent for codebase exploration — glob, grep, read, web-fetch. Three thoroughness levels: quick, medium, very thorough.",
-    weeks: [
-      {succeeded:1,failed:2},{succeeded:2,failed:2},{succeeded:3,failed:1},{succeeded:5,failed:1},
-      {succeeded:4,failed:1},{succeeded:6,failed:1},{succeeded:8,failed:0},{succeeded:7,failed:0},
-      {succeeded:9,failed:0},{succeeded:11,failed:0},
-    ],
+    name: "Explore", type: "agent",
+    description: "Fast read-only agent for codebase exploration — glob, grep, read, web-fetch. Three thoroughness levels.",
+    weeks: {
+      opus:   [2,3,5,5,7,7,8,8,10,11],
+      sonnet: [1,3,4,5,6,6,7,8, 9,10],
+      codex:  [0,1,2,2,3,4,5,5, 6, 7],
+    },
   },
   {
-    name: "Plan",
-    type: "agent",
-    description: "Software architect agent for designing implementation plans. Returns step-by-step plans, identifies critical files, and considers architectural trade-offs.",
-    weeks: [
-      {succeeded:1,failed:3},{succeeded:2,failed:3},{succeeded:3,failed:2},{succeeded:4,failed:2},
-      {succeeded:3,failed:2},{succeeded:6,failed:1},{succeeded:7,failed:1},{succeeded:8,failed:0},
-      {succeeded:9,failed:1},{succeeded:10,failed:0},
-    ],
+    name: "Plan", type: "agent",
+    description: "Software architect agent for designing implementation plans. Returns step-by-step plans, identifies critical files, considers trade-offs.",
+    weeks: {
+      opus:   [2,3,4,4,6,7,7,8,9,10],
+      sonnet: [1,2,3,4,5,5,7,7,8, 9],
+      codex:  [0,1,1,2,3,3,4,4,5, 5],
+    },
   },
 ];
 
 // ── Sparkline ─────────────────────────────────────────────────────────────────
 
-function Sparkline({ weeks, width = 160, height = 44, showLabels = false }: {
-  weeks: Week[];
-  width?: number;
-  height?: number;
-  showLabels?: boolean;
+function Sparkline({
+  weeks, width = 160, height = 44, showLabels = false, showGrid = false,
+}: {
+  weeks: AgentWeeks; width?: number; height?: number;
+  showLabels?: boolean; showGrid?: boolean;
 }) {
-  const n = weeks.length;
-  const maxY = Math.max(...weeks.map(w => w.succeeded + w.failed), 1);
+  const n = 10;
+  const allVals = [...weeks.opus, ...weeks.sonnet, ...weeks.codex];
+  const maxY = Math.max(...allVals, 1);
   const x = (i: number) => (i / (n - 1)) * width;
-  const y = (v: number) => height - (v / maxY) * height;
+  const y = (v: number) => height - (v / maxY) * (height - 4) - 2;
   const pts = (vals: number[]) =>
     vals.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
-  const sVals = weeks.map(w => w.succeeded);
-  const fVals = weeks.map(w => w.failed);
 
   return (
-    <svg width={width} height={height + (showLabels ? 16 : 0)} className="overflow-visible">
-      <line x1={0} y1={height} x2={width} y2={height} stroke="rgba(255,255,255,0.04)" strokeWidth="1" />
-      {showLabels && weeks.map((_, i) => (
+    <svg width={width} height={height + (showLabels ? 18 : 0)} className="overflow-visible">
+      {showGrid && [0.25, 0.5, 0.75, 1].map(t => (
+        <line key={t} x1={0} y1={y(maxY * t)} x2={width} y2={y(maxY * t)}
+          stroke="rgba(255,255,255,0.04)" strokeWidth="1" />
+      ))}
+      {AGENTS.map(a => (
+        <polyline key={a.key} points={pts(weeks[a.key])}
+          fill="none" stroke={a.color} strokeWidth={showLabels ? 2 : 1.5}
+          strokeLinecap="round" strokeLinejoin="round" opacity={a.key === "codex" ? 0.8 : 1} />
+      ))}
+      {/* terminal dots */}
+      {AGENTS.map(a => (
+        <circle key={a.key} cx={x(n-1)} cy={y(weeks[a.key][n-1])} r={showLabels ? 3 : 2}
+          fill={a.color} opacity={a.key === "codex" ? 0.8 : 1} />
+      ))}
+      {showLabels && Array.from({length: n}, (_, i) => (
         <text key={i} x={x(i)} y={height + 14} textAnchor="middle"
-          className="fill-text-muted" style={{ fontSize: 9, fontFamily: "IBM Plex Mono", fill: "rgba(255,255,255,0.3)" }}>
+          style={{ fontSize: 9, fontFamily: "IBM Plex Mono, monospace", fill: "rgba(255,255,255,0.3)" }}>
           W{i + 1}
         </text>
       ))}
-      <polyline points={pts(fVals)} fill="none" stroke="#ff3b30" strokeWidth="1.5"
-        strokeLinecap="round" strokeLinejoin="round" opacity="0.7" />
-      <polyline points={pts(sVals)} fill="none" stroke="#00c853" strokeWidth="1.5"
-        strokeLinecap="round" strokeLinejoin="round" />
-      {/* dots on last point */}
-      <circle cx={x(n-1)} cy={y(sVals[n-1])} r="2.5" fill="#00c853" />
-      <circle cx={x(n-1)} cy={y(fVals[n-1])} r="2.5" fill="#ff3b30" opacity="0.7" />
     </svg>
+  );
+}
+
+// ── Legend ────────────────────────────────────────────────────────────────────
+
+function Legend({ compact = false }: { compact?: boolean }) {
+  return (
+    <div className={`flex items-center ${compact ? "gap-3" : "gap-5"}`}>
+      {AGENTS.map(a => (
+        <span key={a.key} className="flex items-center gap-1.5">
+          <span className="inline-block rounded-full" style={{ width: compact ? 20 : 24, height: 2, background: a.color, opacity: a.key === "codex" ? 0.8 : 1 }} />
+          <span className="font-mono tracking-wide" style={{ fontSize: compact ? 9 : 10, color: "rgba(255,255,255,0.45)" }}>
+            {compact ? a.short : a.name}
+          </span>
+        </span>
+      ))}
+    </div>
   );
 }
 
 // ── Compact card ──────────────────────────────────────────────────────────────
 
-function EntryCardCompact({ entry, onClick, index }: { entry: Entry; onClick: () => void; index: number }) {
-  const totalSucceeded = entry.weeks.reduce((s, w) => s + w.succeeded, 0);
-  const totalFailed    = entry.weeks.reduce((s, w) => s + w.failed, 0);
+function EntryCardCompact({ entry, onClick, index }: {
+  entry: Entry; onClick: () => void; index: number;
+}) {
+  const totals = AGENTS.map(a => entry.weeks[a.key].reduce((s, v) => s + v, 0));
+  const leader = AGENTS[totals.indexOf(Math.max(...totals))];
   const typeCls =
     entry.type === "skill"   ? "border-cyan-hud text-cyan-hud" :
     entry.type === "command" ? "border-amber-tac/60 text-amber-tac/60" :
                                "border-green-live/60 text-green-live/60";
+
   return (
-    <button
-      onClick={onClick}
+    <button onClick={onClick}
       className="tac-border p-4 flex flex-col gap-3 hover:bg-card/60 transition-colors text-left w-full animate-fadeIn"
       style={{ animationDelay: `${index * 0.04}s` }}
     >
@@ -211,11 +232,20 @@ function EntryCardCompact({ entry, onClick, index }: { entry: Entry; onClick: ()
           {entry.type}
         </span>
       </div>
-      <Sparkline weeks={entry.weeks} />
-      <div className="flex items-center gap-4 pt-2 border-t border-border-dim">
-        <span className="font-mono text-xs text-green-live">+{totalSucceeded}</span>
-        <span className="font-mono text-xs text-red-alert">−{totalFailed}</span>
-        <span className="font-mono text-xs text-text-muted/40 ml-auto">▶</span>
+
+      <div>
+        <Legend compact />
+        <div className="mt-2">
+          <Sparkline weeks={entry.weeks} />
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between pt-2 border-t border-border-dim">
+        <span className="font-mono text-xs flex items-center gap-1.5">
+          <span className="inline-block w-2 h-2 rounded-full" style={{ background: leader.color }} />
+          <span className="text-text-muted/60">{leader.short} leads</span>
+        </span>
+        <span className="font-mono text-xs text-text-muted/40">▶</span>
       </div>
     </button>
   );
@@ -224,19 +254,23 @@ function EntryCardCompact({ entry, onClick, index }: { entry: Entry; onClick: ()
 // ── Expanded card ─────────────────────────────────────────────────────────────
 
 function EntryCardExpanded({ entry, onClose }: { entry: Entry; onClose: () => void }) {
-  const totalSucceeded = entry.weeks.reduce((s, w) => s + w.succeeded, 0);
-  const totalFailed    = entry.weeks.reduce((s, w) => s + w.failed, 0);
-  const total = totalSucceeded + totalFailed;
-  const rate  = total === 0 ? 0 : Math.round((totalSucceeded / total) * 100);
-  const lastWeek = entry.weeks[entry.weeks.length - 1];
-  const firstWeek = entry.weeks[0];
-  const peakSucceed = Math.max(...entry.weeks.map(w => w.succeeded));
-  const peakFail    = Math.max(...entry.weeks.map(w => w.failed));
-
+  const n = 10;
   const typeCls =
     entry.type === "skill"   ? "border-cyan-hud text-cyan-hud" :
     entry.type === "command" ? "border-amber-tac/60 text-amber-tac/60" :
                                "border-green-live/60 text-green-live/60";
+
+  const agentStats = AGENTS.map(a => {
+    const vals = entry.weeks[a.key];
+    const total = vals.reduce((s, v) => s + v, 0);
+    const last  = vals[n - 1];
+    const first = vals[0];
+    const peak  = Math.max(...vals);
+    const delta = last - first;
+    return { ...a, total, last, first, peak, delta };
+  });
+
+  const maxY = Math.max(...AGENTS.flatMap(a => entry.weeks[a.key]), 1);
 
   return (
     <div className="tac-border animate-fadeIn">
@@ -255,84 +289,69 @@ function EntryCardExpanded({ entry, onClose }: { entry: Entry; onClose: () => vo
       </div>
 
       {/* Chart */}
-      <div className="px-6 pt-6 pb-4">
-        <div className="flex items-center gap-4 mb-3">
-          <span className="font-mono text-xs text-green-live flex items-center gap-1.5">
-            <span className="inline-block w-6 h-px bg-green-live" /> succeeded
-          </span>
-          <span className="font-mono text-xs text-red-alert flex items-center gap-1.5">
-            <span className="inline-block w-6 h-px bg-red-alert opacity-70" /> failed
-          </span>
+      <div className="px-6 pt-5 pb-4">
+        <div className="flex items-center justify-between mb-4">
+          <span className="font-mono text-xs text-text-muted/50 tracking-widest">MISSIONS SUCCEEDED / WEEK</span>
+          <Legend />
         </div>
-        <Sparkline weeks={entry.weeks} width={600} height={80} showLabels />
+        <Sparkline weeks={entry.weeks} width={600} height={100} showLabels showGrid />
       </div>
 
-      {/* Stats row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-6 py-4 border-t border-b border-border-dim">
-        {[
-          { label: "TOTAL RUNS",    value: String(total) },
-          { label: "SUCCEEDED",     value: `+${totalSucceeded}` },
-          { label: "FAILED",        value: `−${totalFailed}` },
-          { label: "SUCCESS RATE",  value: `${rate}%` },
-        ].map(s => (
-          <div key={s.label} className="border border-border-dim p-3 text-center">
-            <div className={`font-mono text-base font-bold ${
-              s.label === "SUCCEEDED" ? "text-green-live" :
-              s.label === "FAILED"    ? "text-red-alert"  :
-              s.label === "SUCCESS RATE" ? (rate >= 80 ? "text-green-live" : rate >= 50 ? "text-amber-tac" : "text-red-alert") :
-              "text-amber-tac"
-            }`}>{s.value}</div>
-            <div className="font-mono text-xs text-text-muted tracking-widest mt-1">{s.label}</div>
+      {/* Per-agent stats */}
+      <div className="grid grid-cols-3 gap-3 px-6 py-4 border-t border-border-dim">
+        {agentStats.map(a => (
+          <div key={a.key} className="border border-border-dim p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="inline-block w-3 h-3 rounded-full" style={{ background: a.color, opacity: a.key === "codex" ? 0.8 : 1 }} />
+              <span className="font-mono text-xs font-bold" style={{ color: a.color, opacity: a.key === "codex" ? 0.8 : 1 }}>
+                {a.short}
+              </span>
+            </div>
+            <div className="font-mono text-xs text-text-muted/60 leading-none">{a.name}</div>
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              {[
+                { label: "TOTAL",  value: String(a.total) },
+                { label: "PEAK",   value: String(a.peak) + " /wk" },
+                { label: "LATEST", value: String(a.last) + " /wk" },
+                { label: "DELTA",  value: (a.delta >= 0 ? "+" : "") + a.delta },
+              ].map(s => (
+                <div key={s.label}>
+                  <div className={`font-mono text-sm font-bold ${
+                    s.label === "DELTA" ? (a.delta >= 0 ? "text-green-live" : "text-red-alert") : "text-text-primary"
+                  }`}>{s.value}</div>
+                  <div className="font-mono text-xs text-text-muted/50 tracking-widest mt-0.5">{s.label}</div>
+                </div>
+              ))}
+            </div>
           </div>
         ))}
       </div>
 
-      {/* Week table */}
-      <div className="px-6 py-4">
-        <div className="font-mono text-xs text-text-muted tracking-widest uppercase mb-3">Week by week</div>
-        <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5">
-          {entry.weeks.map((w, i) => {
-            const wTotal = w.succeeded + w.failed;
-            const wRate  = wTotal === 0 ? 100 : Math.round((w.succeeded / wTotal) * 100);
-            const barH   = Math.max(4, Math.round((wTotal / (peakSucceed + peakFail)) * 48));
+      {/* Week breakdown table */}
+      <div className="px-6 py-4 border-t border-border-dim">
+        <div className="font-mono text-xs text-text-muted/50 tracking-widest uppercase mb-3">Week breakdown</div>
+        <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${n}, 1fr)` }}>
+          {Array.from({length: n}, (_, i) => {
+            const vals = AGENTS.map(a => entry.weeks[a.key][i]);
+            const total = vals.reduce((s, v) => s + v, 0);
+            const barH = Math.max(4, Math.round((total / (maxY * AGENTS.length)) * 56));
             return (
               <div key={i} className="flex flex-col items-center gap-1">
-                <div className="flex flex-col-reverse gap-px w-full" style={{ height: 52 }}>
-                  <div className="w-full bg-green-live/70 rounded-sm" style={{ height: Math.round(barH * (w.succeeded / Math.max(wTotal, 1))) }} />
-                  <div className="w-full bg-red-alert/60 rounded-sm" style={{ height: Math.round(barH * (w.failed / Math.max(wTotal, 1))) }} />
+                <div className="flex flex-col-reverse gap-px w-full" style={{ height: 60 }}>
+                  {AGENTS.map((a, j) => {
+                    const h = Math.round((vals[j] / Math.max(total, 1)) * barH);
+                    return h > 0 ? (
+                      <div key={a.key} className="w-full rounded-sm"
+                        style={{ height: h, background: a.color, opacity: a.key === "codex" ? 0.7 : 0.85 }} />
+                    ) : null;
+                  })}
                 </div>
-                <div className="font-mono text-center" style={{ fontSize: 9, color: wRate === 100 ? "#00c853" : wRate === 0 ? "#ff3b30" : "rgba(255,255,255,0.3)" }}>
+                <div style={{ fontSize: 9, fontFamily: "IBM Plex Mono, monospace", color: "rgba(255,255,255,0.3)" }}>
                   W{i + 1}
                 </div>
               </div>
             );
           })}
-        </div>
-      </div>
-
-      {/* Trend note */}
-      <div className="px-6 pb-5 flex items-center gap-6">
-        <div>
-          <div className="font-mono text-xs text-text-muted">Started</div>
-          <div className="font-mono text-xs mt-0.5">
-            <span className="text-green-live">+{firstWeek.succeeded}</span>
-            {" / "}
-            <span className="text-red-alert">−{firstWeek.failed}</span>
-          </div>
-        </div>
-        <div className="flex-1 h-px bg-border-dim" />
-        <div>
-          <div className="font-mono text-xs text-text-muted">Latest</div>
-          <div className="font-mono text-xs mt-0.5">
-            <span className="text-green-live">+{lastWeek.succeeded}</span>
-            {" / "}
-            <span className="text-red-alert">−{lastWeek.failed}</span>
-          </div>
-        </div>
-        <div className="flex-1 h-px bg-border-dim" />
-        <div>
-          <div className="font-mono text-xs text-text-muted">Peak run</div>
-          <div className="font-mono text-xs text-amber-tac mt-0.5">{peakSucceed} missions</div>
         </div>
       </div>
     </div>
@@ -351,12 +370,20 @@ export default function Logbook() {
   if (!isLoading && !isAuthenticated) { loginWithRedirect(); return null; }
 
   const all = filter === "all" ? ENTRIES : ENTRIES.filter(e => e.type === filter);
-  const selectedIdx = selected ? all.findIndex(e => e.name === selected) : -1;
+  const selectedIdx   = selected ? all.findIndex(e => e.name === selected) : -1;
   const selectedEntry = selectedIdx >= 0 ? all[selectedIdx] : null;
   const before = selectedIdx >= 0 ? all.slice(0, selectedIdx) : all;
   const after  = selectedIdx >= 0 ? all.slice(selectedIdx + 1) : [];
 
   const toggle = (name: string) => setSelected(v => v === name ? null : name);
+
+  const grid = (entries: Entry[], offset = 0) => (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {entries.map((e, i) => (
+        <EntryCardCompact key={e.name} entry={e} onClick={() => toggle(e.name)} index={offset + i} />
+      ))}
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-base text-text-primary">
@@ -384,23 +411,9 @@ export default function Logbook() {
         </div>
 
         <div className="space-y-4">
-          {before.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {before.map((e, i) => (
-                <EntryCardCompact key={e.name} entry={e} onClick={() => toggle(e.name)} index={i} />
-              ))}
-            </div>
-          )}
-          {selectedEntry && (
-            <EntryCardExpanded entry={selectedEntry} onClose={() => setSelected(null)} />
-          )}
-          {after.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {after.map((e, i) => (
-                <EntryCardCompact key={e.name} entry={e} onClick={() => toggle(e.name)} index={i} />
-              ))}
-            </div>
-          )}
+          {before.length > 0 && grid(before)}
+          {selectedEntry && <EntryCardExpanded entry={selectedEntry} onClose={() => setSelected(null)} />}
+          {after.length > 0 && grid(after, before.length)}
         </div>
       </main>
     </div>

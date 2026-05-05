@@ -121,7 +121,6 @@ function PilotCardExpanded({ pilot, onClose }: { pilot: Pilot; onClose: () => vo
     <div className={`tac-border animate-fadeIn ${pilot.isUser ? "border-amber-tac" : ""}`}>
       {/* header */}
       <div className="flex items-start gap-6 px-6 py-5 border-b border-border-dim">
-        <Mugshot callsign={pilot.callsign} size="lg" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3 mb-3">
             <span className="font-mono text-lg font-bold text-amber-tac tracking-widest">{pilot.callsign}</span>
@@ -146,7 +145,6 @@ function PilotCardExpanded({ pilot, onClose }: { pilot: Pilot; onClose: () => vo
               </div>
             ))}
           </div>
-        </div>
         <button
           onClick={onClose}
           className="font-mono text-xs text-text-muted hover:text-amber-tac transition-colors tracking-widest shrink-0"
@@ -169,25 +167,48 @@ function PilotCardExpanded({ pilot, onClose }: { pilot: Pilot; onClose: () => vo
             </button>
             {missionsOpen && (
               <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                {pilot.missions.map((m, i) => (
+                {pilot.missions.map((m, i) => {
+                  const isLead = m.role.toLowerCase().includes("lead");
+                  const aircraft = isLead
+                    ? "Anthropic Claude Code · Opus 4.5"
+                    : "Anthropic Claude Code · Sonnet 4.5";
+                  const geo = `workspace-tgun-${m.uid.slice(0, 6)}.gitpod.io`;
+                  return (
                   <div
                     key={m.uid}
-                    className="border border-border-dim p-3 animate-fadeIn"
+                    className="border border-border-dim p-3 animate-fadeIn space-y-2"
                     style={{ animationDelay: `${i * 0.05}s` }}
                   >
-                    <div className="flex items-start justify-between gap-2 mb-2">
+                    {/* title + role */}
+                    <div className="flex items-start justify-between gap-2">
                       <span className="font-mono text-xs text-text-primary leading-snug">{m.title}</span>
                       <span className="font-mono text-xs text-text-muted border border-border-dim px-1.5 py-0.5 shrink-0 tracking-widest uppercase whitespace-nowrap">
                         {m.role}
                       </span>
                     </div>
-                    <div className="flex gap-3">
+                    {/* mission id */}
+                    <div className="font-mono text-xs text-text-muted/40">{m.uid}</div>
+                    {/* aircraft */}
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-amber-tac/60 text-xs">✈</span>
+                      <span className="font-mono text-xs text-text-muted">{aircraft}</span>
+                    </div>
+                    {/* geography */}
+                    <div className="flex items-center gap-1.5">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" className="opacity-40 shrink-0">
+                        <circle cx="12" cy="12" r="10"/><ellipse cx="12" cy="12" rx="4" ry="10"/><line x1="2" y1="12" x2="22" y2="12"/>
+                      </svg>
+                      <span className="font-mono text-xs text-text-muted/60">{geo}</span>
+                    </div>
+                    {/* telemetry */}
+                    <div className="flex gap-3 pt-1 border-t border-border-dim">
                       <span className="font-mono text-xs text-text-muted">{fmt(m.tokens)} tok</span>
                       <span className="font-mono text-xs text-text-muted">{m.tools} tools</span>
                       <span className="font-mono text-xs text-text-muted">${m.usd.toFixed(2)}</span>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </>

@@ -345,7 +345,7 @@ def list_cmd(
         due_cell = f"[{dc}]{due}[/{dc}]" if due else f"[{SMOKE}]—[/{SMOKE}]"
 
         url = t.get("url", "")
-        title_cell = f"[link={url}]{t['title']}[/link]" if url else t["title"]
+        title_cell = t["title"]
 
         row = [t.get("uid", ""), _type_tag(t.get("source", "")), title_cell, due_cell]
         if show_status:
@@ -579,6 +579,195 @@ def add():
     console.print(f"[{LEAF}]created[/{LEAF}]  [link={obs_url}]{title}[/link]")
 
 
+
+
+def _parse_frontmatter(text: str) -> dict:
+    """Return frontmatter key→value strings from a task.md."""
+    fields: dict = {}
+    in_front = False
+    for line in text.splitlines():
+        if line.strip() == "---":
+            if not in_front:
+                in_front = True
+                continue
+            else:
+                break
+        if in_front and ":" in line:
+            key, _, val = line.partition(":")
+            fields[key.strip()] = val.strip()
+    return fields
+
+
+def _get_section(text: str, section: str) -> str | None:
+    """Return the content of a ## Section block, stripped."""
+    m = re.search(rf"## {re.escape(section)}\n\n(.*?)(?:\n\n##|\Z)", text, re.DOTALL)
+    return m.group(1).strip() if m else None
+
+
+def _replace_section(text: str, section: str, new_content: str) -> str:
+    """Replace the content of a ## Section block in markdown."""
+    def _sub(m):
+        return m.group(1) + new_content + m.group(3)
+    return re.sub(
+        rf"(## {re.escape(section)}\n\n)(.*?)(\n\n##|\Z)",
+        _sub, text, flags=re.DOTALL, count=1,
+    )
+
+
+def _apply_obsidian_edits(task_file: Path, changes: dict) -> None:
+    """Apply structured changes to an Obsidian task.md in place."""
+    text = task_file.read_text(encoding="utf-8")
+
+    if changes.get("title") is not None:
+        text = re.sub(r"^# .+$", f"# {changes['title']}", text, count=1, flags=re.MULTILINE)
+
+    if changes.get("priority") is not None:
+        prio = changes["priority"] or ""
+        text = re.sub(r"^(priority:\s*).*$", f"priority: {prio}", text, count=1, flags=re.MULTILINE)
+
+    if changes.get("tags") is not None:
+        tags_str = ", ".join(f'"{t}"' for t in changes["tags"])
+        text = re.sub(r"^(tags:\s*\[)[^\]]*(\])", f"tags: [{tags_str}]", text, count=1, flags=re.MULTILINE)
+
+    for section, field in [
+        ("About", "about"),
+        ("Motivation", "motivation"),
+        ("Best Before", "best_before"),
+        ("Must Before", "must_before"),
+    ]:
+        if changes.get(field) is not None:
+            text = _replace_section(text, section, changes[field] or "_none_")
+
+    if changes.get("acceptance_criteria") is not None:
+        criteria = changes["acceptance_criteria"] or ["Done"]
+        text = _replace_section(text, "Acceptance Criteria", "\n".join(f"- [ ] {c}" for c in criteria))
+
+    task_file.write_text(text.rstrip() + "\n", encoding="utf-8")
+
+
+def _edit_github(source_id: str, changes: dict) -> bool:
+    """Apply structured changes to a GitHub issue."""
+    import subprocess as _sp
+
+    m = re.match(r"github:([^#]+)#(\d+)", source_id)
+    if not m:
+        console.print(f"[{ERR}]cannot parse github source ID:[/{ERR}] {source_id}")
+        return False
+    repo, number = m.group(1), m.group(2)
+
+    result = _sp.run(
+        ["gh", "issue", "view", number, "--repo", repo, "--json", "title,body,labels"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        console.print(f"[{ERR}]gh issue view failed:[/{ERR}] {result.stderr.strip()}")
+        return False
+
+    issue = json.loads(result.stdout)
+    body = issue.get("body", "") or ""
+    labels = [l["name"] for l in issue.get("labels", [])]
+
+    args = ["gh", "issue", "edit", number, "--repo", repo]
+
+    if changes.get("title") is not None:
+        args += ["--title", changes["title"]]
+
+    body_fields = ["about", "motivation", "best_before", "must_before", "acceptance_criteria"]
+    if any(changes.get(f) is not None for f in body_fields):
+        for section, field in [
+            ("About", "about"),
+            ("Motivation", "motivation"),
+            ("Best Before", "best_before"),
+            ("Must Before", "must_before"),
+        ]:
+            if changes.get(field) is not None:
+                body = _replace_section(body, section, changes[field] or "_none_")
+        if changes.get("acceptance_criteria") is not None:
+            criteria = changes["acceptance_criteria"] or ["Done"]
+            body = _replace_section(body, "Acceptance Criteria", "\n".join(f"- [ ] {c}" for c in criteria))
+        args += ["--body", body]
+
+    if changes.get("priority") is not None:
+        for lbl in [l for l in labels if l.startswith("priority:")]:
+            args += ["--remove-label", lbl]
+        if changes["priority"]:
+            args += ["--add-label", f"priority:{changes['priority']}"]
+
+    if len(args) == 4:
+        console.print(f"[{SMOKE}]no changes to apply[/{SMOKE}]")
+        return True
+
+    result = _sp.run(args, capture_output=True, text=True)
+    if result.returncode != 0:
+        console.print(f"[{ERR}]gh issue edit failed:[/{ERR}] {result.stderr.strip()}")
+        return False
+    return True
+
+
+@app.command("edit")
+def edit(
+    task: str = typer.Argument(..., help="Task UID, issue number, or description"),
+    title: Optional[str] = typer.Option(None, "--title", help="New title"),
+    due: Optional[str] = typer.Option(None, "--due", help="New due date (any format)"),
+):
+    """Edit a task's title or due date."""
+    if title is None and due is None:
+        console.print(f"[{WARN}]nothing to edit — provide --title and/or --due[/{WARN}]")
+        raise typer.Exit(1)
+
+    resolved = _resolve_task(task)
+    source_id: str = resolved["id"]
+    task_title = resolved.get("title", "")
+
+    iso_due: str | None = None
+    if due is not None:
+        from topgun.inference.anthropic import call, load_prompt
+        system = load_prompt("task_edit_date")
+        raw = call(
+            prompt=f"Today: {date.today().isoformat()}\nDate input: {due}",
+            system=system,
+            command="task_edit",
+            status_message="parsing date…",
+        )
+        iso_due = raw.strip().strip('"')
+        if iso_due == "invalid":
+            console.print(f"[{ERR}]could not parse date:[/{ERR}] {due}")
+            raise typer.Exit(1)
+
+    changes: dict = {}
+    if title is not None:
+        changes["title"] = title
+    if iso_due is not None:
+        changes["best_before"] = iso_due
+
+    task_file: Path | None = None
+    if source_id.startswith("obsidian:"):
+        parts = source_id.split(":", 2)
+        vault = _resolve_vault_path(parts[1])
+        for md_file in vault.rglob("task.md"):
+            try:
+                txt = md_file.read_text(encoding="utf-8")
+            except Exception:
+                continue
+            h1 = re.search(r"^# (.+)$", txt, re.MULTILINE)
+            if h1 and h1.group(1).strip() == task_title:
+                task_file = md_file
+                break
+        if task_file is None:
+            console.print(f"[{WARN}]task file not found[/{WARN}]")
+            raise typer.Exit(1)
+        _apply_obsidian_edits(task_file, changes)
+
+    elif source_id.startswith("github:"):
+        if not _edit_github(source_id, changes):
+            raise typer.Exit(1)
+    else:
+        console.print(f"[{WARN}]unknown source type[/{WARN}]")
+        raise typer.Exit(1)
+
+    console.print(f"[{LEAF}]updated[/{LEAF}]  [{SAGE}]{changes.get('title') or task_title}[/{SAGE}]")
+
+
 def _close_one(resolved: dict) -> bool:
     """Close a single resolved task. Returns True on success, False on failure."""
     source_id: str = resolved["id"]
@@ -598,14 +787,9 @@ def _close_one(resolved: dict) -> bool:
                 text = md_file.read_text(encoding="utf-8")
             except Exception:
                 continue
-            for line in text.splitlines():
-                from topgun.cli.backlog import _TASK_RE
-                if _TASK_RE.match(line):
-                    line_title = _TASK_RE.sub("", line).strip()
-                    if line_title == task_title:
-                        task_file = md_file
-                        break
-            if task_file:
+            h1 = re.search(r"^# (.+)$", text, re.MULTILINE)
+            if h1 and h1.group(1).strip() == task_title:
+                task_file = md_file
                 break
 
         if task_file is None:

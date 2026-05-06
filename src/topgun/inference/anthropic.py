@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 from rich.console import Console
 
 load_dotenv()
+load_dotenv(Path.home() / ".topgun" / ".env", override=False)
 
 _PROMPTS_DIR = Path(__file__).parent / "prompts"
 _LOG_FILE = Path(os.environ.get("TOPGUN_INFERENCE_LOG", str(
@@ -40,12 +41,29 @@ class InferenceError(RuntimeError):
         )
 
 
+def _jwt_expired(token: str) -> bool:
+    """Return True if token is a JWT whose exp claim is within 60 s of expiry."""
+    import base64 as _b64
+    import json as _json
+    parts = token.split(".")
+    if len(parts) != 3:
+        return False
+    try:
+        payload = parts[1] + "=="
+        data = _json.loads(_b64.urlsafe_b64decode(payload))
+        return time.time() >= data.get("exp", 0) - 60
+    except Exception:
+        return False
+
+
 def _get_token() -> str:
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    if api_key:
-        return api_key
+    for var in ("TOPGUN_ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY"):
+        api_key = os.environ.get(var, "").strip()
+        if api_key and not _jwt_expired(api_key):
+            return api_key
+
     raise EnvironmentError(
-        "ANTHROPIC_API_KEY is not set. Add it to your .env file."
+        "No valid API key found. Please set TOPGUN_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY."
     )
 
 

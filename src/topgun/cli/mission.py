@@ -10,9 +10,6 @@ from pathlib import Path
 from typing import List, Optional
 
 import typer
-from rich import box
-from rich.console import Console
-from rich.table import Table
 
 CONFIG_FILE = Path(
     os.environ.get("TOPGUN_CONFIG", str(Path.home() / ".config/topgun/config.json"))
@@ -20,7 +17,10 @@ CONFIG_FILE = Path(
 _TOPGUN_DIR = Path(os.environ.get("TOPGUN_DIR", str(Path.home() / ".topgun")))
 _MISSIONS_DIR = _TOPGUN_DIR / "mission"
 
-console = Console()
+from topgun.cli.theme import (
+    console, make_table, ok, err, warn, dim, accent,
+    SAGE, SMOKE, LEAF, WARN, ERR, PEARL, FERN, MOSS,
+)
 
 app = typer.Typer(
     name="mission",
@@ -335,12 +335,12 @@ def plan():
     import shutil
     claude_bin = shutil.which("claude")
     if not claude_bin:
-        console.print("[bold]Run this on your host machine:[/bold]\n")
-        console.print("  [cyan]claude[/cyan]\n")
-        console.print("[dim]Then type [bold]/topgun-mission-plan[/bold] to start the planning session.[/dim]")
-        console.print("[dim]Claude Code must be installed on the host — https://claude.ai/code[/dim]")
+        console.print(f"[{PEARL}]Run this on your host machine:[/{PEARL}]\n")
+        console.print(f"  [{SAGE}]claude[/{SAGE}]\n")
+        console.print(f"[{SMOKE}]Then type /topgun-mission-plan to start the planning session.[/{SMOKE}]")
+        console.print(f"[{SMOKE}]Claude Code must be installed on the host — https://claude.ai/code[/{SMOKE}]")
         raise typer.Exit(0)
-    console.print("[dim]launching mission planning session — type [bold]/topgun-mission-plan[/bold] to begin…[/dim]")
+    console.print(f"[{SMOKE}]launching mission planning session — type /topgun-mission-plan to begin…[/{SMOKE}]")
     os.execvp(claude_bin, [claude_bin])
 
 
@@ -349,23 +349,22 @@ def list_cmd():
     """List all missions (GitHub topgun-missions issues + Obsidian topgun-mission tasks)."""
     missions = _fetch_all_missions()
     if not missions:
-        console.print("[dim]no missions found[/dim]")
+        console.print(f"[{SMOKE}]no missions found[/{SMOKE}]")
         console.print(
-            "[dim]configure ona.missions_repo in ~/.config/topgun/config.json "
-            "or tag Obsidian tasks with #topgun-mission[/dim]"
+            f"[{SMOKE}]configure ona.missions_repo in ~/.config/topgun/config.json "
+            f"or tag Obsidian tasks with #topgun-mission[/{SMOKE}]"
         )
         return
 
-    table = Table(box=box.SIMPLE, show_header=True, header_style="bold", pad_edge=False)
-    table.add_column("ID", style="cyan", no_wrap=True)
-    table.add_column("Source", no_wrap=True)
-    table.add_column("Title")
-    table.add_column("Created", style="dim", no_wrap=True)
+    table = make_table(
+        ("ID", {"style": SAGE, "no_wrap": True}),
+        ("Source", {"no_wrap": True}),
+        ("Title", {}),
+        ("Created", {"style": SMOKE, "no_wrap": True}),
+    )
 
-    _SRC_COLOR = {"github": "blue", "obsidian": "magenta"}
     for m in missions:
-        color = _SRC_COLOR.get(m["source"], "white")
-        src = f"[{color}]{m['source']}[/{color}]"
+        src = f"[{FERN}]{m['source']}[/{FERN}]"
         created = (m.get("created_at") or "")[:10] or "—"
         url = m.get("url", "")
         title_cell = f"[link={url}]{m['title']}[/link]" if url else m["title"]
@@ -392,11 +391,11 @@ def engage(
     topgun mission engage logs <engagement-id>        view engagement logs
     """
     if not args:
-        console.print("[bold]Usage:[/bold]")
-        console.print("  topgun mission engage [cyan]<mission-id>[/cyan]")
-        console.print("  topgun mission engage [cyan]<mission-id>[/cyan] [bold]--maverick[/bold]")
-        console.print("  topgun mission engage [bold]list[/bold]  [[dim]--mission <id>[/dim]]  [[dim]--pilot <name>[/dim]]")
-        console.print("  topgun mission engage [bold]logs[/bold] [cyan]<engagement-id>[/cyan]")
+        console.print(f"[{PEARL}]Usage:[/{PEARL}]")
+        console.print(f"  topgun mission engage [{SAGE}]<mission-id>[/{SAGE}]")
+        console.print(f"  topgun mission engage [{SAGE}]<mission-id>[/{SAGE}] --maverick")
+        console.print(f"  topgun mission engage list  [{SMOKE}]--mission <id>[/{SMOKE}]  [{SMOKE}]--pilot <name>[/{SMOKE}]")
+        console.print(f"  topgun mission engage logs [{SAGE}]<engagement-id>[/{SAGE}]")
         return
 
     subcommand = args[0].lower()
@@ -407,7 +406,7 @@ def engage(
 
     if subcommand == "logs":
         if len(args) < 2:
-            console.print("[red]usage: topgun mission engage logs <engagement-id>[/red]")
+            console.print(f"[{ERR}]usage: topgun mission engage logs <engagement-id>[/{ERR}]")
             raise typer.Exit(1)
         _cmd_engage_logs(args[1])
         return
@@ -418,23 +417,24 @@ def engage(
 def _cmd_engage_list(mission_filter: str | None, pilot_filter: str | None) -> None:
     engagements = _read_all_engagements(mission_filter=mission_filter, pilot_filter=pilot_filter)
     if not engagements:
-        console.print("[dim]no engagements found[/dim]")
+        console.print(f"[{SMOKE}]no engagements found[/{SMOKE}]")
         return
 
-    table = Table(box=box.SIMPLE, show_header=True, header_style="bold", pad_edge=False)
-    table.add_column("ID", style="cyan", no_wrap=True)
-    table.add_column("Mission", no_wrap=True)
-    table.add_column("Pilot", no_wrap=True)
-    table.add_column("Mode", no_wrap=True)
-    table.add_column("Status", no_wrap=True)
-    table.add_column("Started", style="dim", no_wrap=True)
+    table = make_table(
+        ("ID", {"style": SAGE, "no_wrap": True}),
+        ("Mission", {"no_wrap": True}),
+        ("Pilot", {"no_wrap": True}),
+        ("Mode", {"no_wrap": True}),
+        ("Status", {"no_wrap": True}),
+        ("Started", {"style": SMOKE, "no_wrap": True}),
+    )
 
-    _STATUS_COLOR = {"running": "yellow", "success": "green", "failed": "red"}
-    _MODE_COLOR = {"local": "cyan", "ona": "blue"}
+    _STATUS_COLOR = {"running": WARN, "success": LEAF, "failed": ERR}
+    _MODE_COLOR = {"local": SAGE, "ona": FERN}
 
     for e in engagements:
-        sc = _STATUS_COLOR.get(e.get("status", ""), "dim")
-        mc = _MODE_COLOR.get(e.get("mode", ""), "dim")
+        sc = _STATUS_COLOR.get(e.get("status", ""), SMOKE)
+        mc = _MODE_COLOR.get(e.get("mode", ""), SMOKE)
         started = (e.get("started_at") or "")[:16].replace("T", " ")
         table.add_row(
             e["engagement_id"][:8],
@@ -450,7 +450,7 @@ def _cmd_engage_list(mission_filter: str | None, pilot_filter: str | None) -> No
 
 def _cmd_engage_logs(engagement_id: str) -> None:
     if not _MISSIONS_DIR.exists():
-        console.print("[dim]no engagements found[/dim]")
+        console.print(f"[{SMOKE}]no engagements found[/{SMOKE}]")
         return
 
     matched_dir: Path | None = None
@@ -472,26 +472,26 @@ def _cmd_engage_logs(engagement_id: str) -> None:
             break
 
     if not matched_dir:
-        console.print(f"[yellow]no engagement found for:[/yellow] {engagement_id}")
+        console.print(f"[{WARN}]no engagement found for:[/{WARN}] {engagement_id}")
         raise typer.Exit(1)
 
     if matched_meta and matched_meta.get("mode") == "ona" and matched_meta.get("ona_env_id"):
-        console.print("[dim]syncing logs from ONA…[/dim]")
+        console.print(f"[{SMOKE}]syncing logs from ONA…[/{SMOKE}]")
         _rsync_logs(matched_meta["ona_env_id"], matched_dir)
 
     claude_dir = matched_dir / "claude" / "projects"
     if not claude_dir.exists():
-        console.print("[dim]no logs found (engagement may still be running or logs not yet synced)[/dim]")
+        console.print(f"[{SMOKE}]no logs found[/{SMOKE}]")
         return
 
     transcripts = list(claude_dir.rglob("*.jsonl"))
     if not transcripts:
-        console.print("[dim]no transcript files found[/dim]")
+        console.print(f"[{SMOKE}]no transcript files found[/{SMOKE}]")
         return
 
     transcripts.sort(key=lambda p: p.stat().st_mtime, reverse=True)
     transcript = transcripts[0]
-    console.print(f"[dim]{transcript}[/dim]\n")
+    console.print(f"[{SMOKE}]{transcript}[/{SMOKE}]\n")
 
     with transcript.open() as f:
         for line in f:
@@ -509,20 +509,20 @@ def _cmd_engage_logs(engagement_id: str) -> None:
                     if isinstance(block, dict) and block.get("type") == "text":
                         text = block.get("text", "")[:300]
                         if role == "assistant":
-                            console.print(f"[cyan]▶[/cyan] {text}")
+                            console.print(f"[{SAGE}]▶[/{SAGE}] {text}")
                         elif role == "user":
-                            console.print(f"[dim]◀ {text}[/dim]")
+                            console.print(f"[{SMOKE}]◀ {text}[/{SMOKE}]")
             elif isinstance(content, str) and content:
                 text = content[:300]
                 if role == "assistant":
-                    console.print(f"[cyan]▶[/cyan] {text}")
+                    console.print(f"[{SAGE}]▶[/{SAGE}] {text}")
 
 
 def _cmd_engage_start(mission_id: str, maverick: bool) -> None:
     mission = _resolve_mission(mission_id)
     if not mission:
-        console.print(f"[yellow]mission not found:[/yellow] {mission_id}")
-        console.print("[dim]run: topgun mission list[/dim]")
+        console.print(f"[{WARN}]mission not found:[/{WARN}] {mission_id}")
+        console.print(f"[{SMOKE}]run: topgun mission list[/{SMOKE}]")
         raise typer.Exit(1)
 
     engagement_id = str(uuid.uuid4())
@@ -531,37 +531,37 @@ def _cmd_engage_start(mission_id: str, maverick: bool) -> None:
     safe_mission_id = mission["id"].replace(":", "-")
     env_name = f"mission-{safe_mission_id}-engage-{engagement_id[:8]}"
 
-    console.print(f"\n  [bold]mission[/bold]    {mission['title']}")
-    console.print(f"  [bold]pilot[/bold]      [cyan]{pilot}[/cyan]")
-    console.print(f"  [bold]mode[/bold]       {mode}")
-    console.print(f"  [bold]engage[/bold]     {engagement_id[:8]}\n")
+    console.print(f"\n  [{SMOKE}]mission[/{SMOKE}]  {mission['title']}")
+    console.print(f"  [{SMOKE}]pilot[/{SMOKE}]    [{SAGE}]{pilot}[/{SAGE}]")
+    console.print(f"  [{SMOKE}]mode[/{SMOKE}]     {mode}")
+    console.print(f"  [{SMOKE}]engage[/{SMOKE}]   {engagement_id[:8]}\n")
 
     if maverick:
         eng_dir = _write_engagement_meta(mission["id"], engagement_id, pilot, "local")
         content = _get_mission_content(mission)
         if not content:
-            console.print("[red]could not retrieve mission content[/red]")
+            console.print(f"[{ERR}]could not retrieve mission content[/{ERR}]")
             _update_engagement_status(eng_dir, "failed")
             raise typer.Exit(1)
-        console.print("[dim]engaging locally as Maverick…[/dim]")
+        console.print(f"[{SMOKE}]engaging locally…[/{SMOKE}]")
         result = subprocess.run(["claude", "--dangerously-skip-permissions", "-p", content])
         status = "success" if result.returncode == 0 else "failed"
         _update_engagement_status(eng_dir, status)
-        color = "green" if status == "success" else "red"
+        color = LEAF if status == "success" else ERR
         console.print(f"\n[{color}]{status}[/{color}]  {engagement_id[:8]}")
         return
 
     # ONA execution
     class_id = _get_class_id()
     if not class_id:
-        console.print("[red]ona.class_id is required in ~/.config/topgun/config.json[/red]")
-        console.print('[dim]add: { "ona": { "class_id": "<your-class-id>" } }[/dim]')
+        console.print(f"[{ERR}]ona.class_id is required in ~/.config/topgun/config.json[/{ERR}]")
+        console.print(f'[{SMOKE}]add: {{ "ona": {{ "class_id": "<your-class-id>" }} }}[/{SMOKE}]')
         raise typer.Exit(1)
 
     eng_dir = _write_engagement_meta(mission["id"], engagement_id, pilot, "ona", ona_env_name=env_name)
 
     try:
-        console.print("[dim]creating ONA environment…[/dim]")
+        console.print(f"[{SMOKE}]creating ONA environment…[/{SMOKE}]")
         env_id = _create_ona_env(env_name, class_id)
 
         meta_file = eng_dir / "meta.json"
@@ -569,8 +569,8 @@ def _cmd_engage_start(mission_id: str, maverick: bool) -> None:
         meta["ona_env_id"] = env_id
         meta_file.write_text(json.dumps(meta, indent=2) + "\n")
 
-        console.print(f"[dim]environment: {env_id}[/dim]")
-        console.print("[dim]waiting for environment to start…[/dim]")
+        console.print(f"[{SMOKE}]environment: {env_id}[/{SMOKE}]")
+        console.print(f"[{SMOKE}]waiting for environment…[/{SMOKE}]")
         _wait_ona_ready(env_id)
 
         if mission["source"] == "github":
@@ -587,22 +587,22 @@ def _cmd_engage_start(mission_id: str, maverick: bool) -> None:
                 "Do not stop until a PR is created."
             )
 
-        console.print("[dim]launching Claude Code…[/dim]")
+        console.print(f"[{SMOKE}]launching Claude Code…[/{SMOKE}]")
         exec_result = subprocess.run([
             "ona", "environment", "exec", env_id,
             "--timeout", "3600",
             "--", "claude", "--dangerously-skip-permissions", "-p", prompt,
         ])
 
-        console.print("[dim]syncing logs…[/dim]")
+        console.print(f"[{SMOKE}]syncing logs…[/{SMOKE}]")
         _rsync_logs(env_id, eng_dir)
 
         status = "success" if exec_result.returncode == 0 else "failed"
         _update_engagement_status(eng_dir, status)
-        color = "green" if status == "success" else "red"
+        color = LEAF if status == "success" else ERR
         console.print(f"\n[{color}]{status}[/{color}]  {engagement_id[:8]}  {env_name}")
 
     except Exception as e:
         _update_engagement_status(eng_dir, "failed")
-        console.print(f"[red]engagement failed:[/red] {e}")
+        console.print(f"[{ERR}]engagement failed:[/{ERR}] {e}")
         raise typer.Exit(1)

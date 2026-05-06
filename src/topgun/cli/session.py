@@ -5,8 +5,6 @@ from datetime import datetime
 from pathlib import Path
 
 import typer
-from rich.console import Console
-from rich.table import Table
 
 app = typer.Typer(name="session", help="Manage Claude Code session transcripts.", add_completion=False, invoke_without_command=True)
 
@@ -15,7 +13,8 @@ app = typer.Typer(name="session", help="Manage Claude Code session transcripts."
 def _session_help(ctx: typer.Context):
     if ctx.invoked_subcommand is None:
         typer.echo(ctx.get_help())
-console = Console()
+
+from topgun.cli.theme import console, make_table, SAGE, SMOKE, LEAF, ERR
 
 _CLAUDE_DIR     = Path(os.environ.get("CLAUDE_DIR",      Path.home() / ".claude"))
 _TOPGUN_DIR     = Path(os.environ.get("TOPGUN_DIR",      Path.home() / ".topgun"))
@@ -127,22 +126,23 @@ def _format_size(size_bytes: int) -> str:
 def list_sessions():
     """List all sessions in ~/.claude/projects/, newest first."""
     if not CLAUDE_PROJECTS.exists():
-        console.print(f"[dim]No projects directory found at {CLAUDE_PROJECTS}[/dim]")
+        console.print(f"[{SMOKE}]No projects directory found at {CLAUDE_PROJECTS}[/{SMOKE}]")
         raise typer.Exit()
 
     sessions = _collect_sessions()
 
     if not sessions:
-        console.print("[dim]No session transcripts found.[/dim]")
+        console.print(f"[{SMOKE}]No session transcripts found.[/{SMOKE}]")
         raise typer.Exit()
 
     sessions.sort(key=lambda s: s["modified"], reverse=True)
 
-    table = Table(show_header=True, header_style="bold")
-    table.add_column("Session ID", style="cyan", no_wrap=True)
-    table.add_column("Project")
-    table.add_column("Last Modified", style="dim")
-    table.add_column("Size", justify="right")
+    table = make_table(
+        ("Session ID", {"style": SAGE, "no_wrap": True}),
+        ("Project", {}),
+        ("Last Modified", {"style": SMOKE}),
+        ("Size", {"justify": "right"}),
+    )
 
     for s in sessions:
         table.add_row(
@@ -185,7 +185,7 @@ def archive():
     sessions = _collect_sessions()
 
     if not sessions:
-        console.print("[dim]No sessions found.[/dim]")
+        console.print(f"[{SMOKE}]No sessions found.[/{SMOKE}]")
         raise typer.Exit()
 
     sessions.sort(key=lambda s: s["modified"], reverse=True)
@@ -221,7 +221,7 @@ def archive():
 
     for s in selected:
         _archive_session(s)
-        console.print(f"[green]archived[/green]  {s['session_id']}")
+        console.print(f"[{LEAF}]archived[/{LEAF}]  {s['session_id']}")
 
 
 @app.command("delete")
@@ -237,4 +237,4 @@ def delete(
         session_path.unlink()
     else:
         shutil.rmtree(session_path)
-    console.print(f"[red]Deleted[/red] {session_path}")
+    console.print(f"[{ERR}]deleted[/{ERR}] {session_path}")

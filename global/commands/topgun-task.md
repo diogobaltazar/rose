@@ -49,42 +49,6 @@ Before creating any Obsidian task, read the template from the tasks vault:
 cat <vault_path>/_templates/task.md
 ```
 
-If the template does not exist, use this default:
-
-```
----
-date: {{date}}
-tags: [{{tags}}]
-status: open
----
-
-# {{title}}
-
-## About
-
-{{about}}
-
-## Motivation
-
-{{motivation}}
-
-## Acceptance Criteria
-
-- [ ] {{criterion}}
-
-## Dependencies
-
-_none_
-
-## Best Before
-
-{{best_before}}
-
-## Must Before
-
-{{must_before}}
-```
-
 ## Step 3 — Route intelligently
 
 Read the user's request and decide which sources are relevant based on their `description`. Do not query sources that are clearly unrelated.
@@ -187,11 +151,15 @@ gh issue edit <number> --repo <repo> --body "<new body>"
 gh issue edit <number> --repo <repo> --remove-label "priority:high" --add-label "priority:medium"
 ```
 
-### Closing a GitHub issue
+### Closing GitHub issues
+
+Supports closing one or multiple issues in a single request. For each ID provided:
 
 ```bash
 gh issue close <number> --repo <repo>
 ```
+
+If the user provides multiple IDs (e.g. "close 12, 14, 17"), close each one in sequence and confirm all at the end.
 
 ### Creating an Obsidian task
 
@@ -246,9 +214,14 @@ _none_
 _none_
 ```
 
-### Completing an Obsidian task
+### Completing Obsidian tasks
 
-Read `<task_dir>/task.md`, update the frontmatter `status` field to `closed`, and append `✅ <today's date>` as a completion note. Then confirm in one sentence.
+Supports closing one or multiple tasks in a single request. For each task:
+
+1. Read `<task_dir>/task.md`.
+2. Update the frontmatter `status` field to `closed`.
+3. Update the frontmatter `closed_at` field to today's date (`YYYY-MM-DD`).
+4. Confirm all closures at the end in one sentence.
 
 ### Editing an Obsidian task
 

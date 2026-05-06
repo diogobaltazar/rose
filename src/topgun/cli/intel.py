@@ -2,13 +2,9 @@
 
 import re
 import typer
-from rich.console import Console
-from rich.table import Table
-from rich import box
 
 from topgun.sdk.client import TopgunClient
-
-console = Console()
+from topgun.cli.theme import console, make_table, SAGE, SMOKE, LEAF, ERR, WARN, PEARL, FERN
 app = typer.Typer(
     name="intel",
     help="Manage intel documents.",
@@ -31,22 +27,19 @@ def intel_list(
     client = TopgunClient()
 
     if maverick:
-        console.print("[dim]--maverick not yet implemented for intel list[/dim]")
+        console.print(f"[{SMOKE}]--maverick not yet implemented for intel list[/{SMOKE}]")
         raise typer.Exit(1)
 
     try:
         stats = client.intel_stats()
     except Exception as e:
-        console.print(f"[red]Error fetching stats: {e}[/red]")
+        console.print(f"[{ERR}]Error fetching stats: {e}[/{ERR}]")
         raise typer.Exit(1)
 
-    console.print()
-    console.print("[bold]INTEL STATS[/bold]", style="yellow")
-    console.print()
-
-    table = Table(box=box.MINIMAL_DOUBLE_HEAD, show_edge=False)
-    table.add_column("Metric", style="dim")
-    table.add_column("Count", justify="right", style="yellow")
+    table = make_table(
+        ("Metric", {"style": SMOKE}),
+        ("Count", {"justify": "right", "style": SAGE}),
+    )
 
     table.add_row("Total Intel", str(stats.get("total", 0)))
     table.add_row("GitHub", str(stats.get("by_source", {}).get("github", 0)))
@@ -56,7 +49,6 @@ def intel_list(
     table.add_row("Ready", str(stats.get("ready", 0)))
 
     console.print(table)
-    console.print()
 
     try:
         docs = client.list_intel()
@@ -64,10 +56,11 @@ def intel_list(
         return
 
     if docs:
-        doc_table = Table(box=box.MINIMAL_DOUBLE_HEAD, show_edge=False)
-        doc_table.add_column("UID", style="dim")
-        doc_table.add_column("Source", style="cyan")
-        doc_table.add_column("URL", style="blue")
+        doc_table = make_table(
+            ("UID", {"style": SMOKE}),
+            ("Source", {"style": FERN}),
+            ("URL", {"style": SAGE}),
+        )
 
         for doc in docs:
             doc_table.add_row(
@@ -76,6 +69,7 @@ def intel_list(
                 doc.get("source_url", ""),
             )
 
+        console.print()
         console.print(doc_table)
 
 
@@ -88,7 +82,7 @@ def intel_track(
     client = TopgunClient()
 
     if maverick:
-        console.print("[dim]--maverick not yet implemented for intel track[/dim]")
+        console.print(f"[{SMOKE}]--maverick not yet implemented for intel track[/{SMOKE}]")
         raise typer.Exit(1)
 
     gh_match = re.match(r"https://github\.com/([^/]+/[^/]+)/issues/(\d+)", target)
@@ -101,11 +95,11 @@ def intel_track(
 
     try:
         doc = client.create_intel(source=source, source_url=source_url)
-        console.print(f"[green]Tracked as intel:[/green] {doc.get('uid', '')}")
-        console.print(f"  source: {doc.get('source', '')}")
-        console.print(f"  url: {doc.get('source_url', '')}")
+        console.print(f"[{LEAF}]Tracked as intel:[/{LEAF}] {doc.get('uid', '')}")
+        console.print(f"  [{SMOKE}]source:[/{SMOKE}] {doc.get('source', '')}")
+        console.print(f"  [{SMOKE}]url:[/{SMOKE}] {doc.get('source_url', '')}")
     except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
+        console.print(f"[{ERR}]Error: {e}[/{ERR}]")
         raise typer.Exit(1)
 
 
@@ -118,23 +112,24 @@ def intel_search(
     client = TopgunClient()
 
     if maverick:
-        console.print("[dim]--maverick not yet implemented for intel search[/dim]")
+        console.print(f"[{SMOKE}]--maverick not yet implemented for intel search[/{SMOKE}]")
         raise typer.Exit(1)
 
     try:
         results = client.search_intel(query)
     except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
+        console.print(f"[{ERR}]Error: {e}[/{ERR}]")
         raise typer.Exit(1)
 
     if not results:
-        console.print("[dim]No matches found.[/dim]")
+        console.print(f"[{SMOKE}]No matches found.[/{SMOKE}]")
         return
 
-    table = Table(box=box.MINIMAL_DOUBLE_HEAD, show_edge=False)
-    table.add_column("UID", style="dim")
-    table.add_column("Source", style="cyan")
-    table.add_column("Title")
+    table = make_table(
+        ("UID", {"style": SMOKE}),
+        ("Source", {"style": FERN}),
+        ("Title", {}),
+    )
 
     for r in results:
         table.add_row(r.get("uid", ""), r.get("source", ""), r.get("title", ""))

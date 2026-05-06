@@ -14,9 +14,6 @@ from typing import List, Optional
 
 import click
 import typer
-from rich.console import Console
-from rich.table import Table
-from rich import box
 
 from topgun.cli.backlog import (
     _fetch_all,
@@ -29,10 +26,12 @@ from topgun.cli.backlog import (
     PRIORITY_ORDER,
     TYPE_COLOR,
 )
+from topgun.cli.theme import (
+    console, make_table, ok, err, warn, dim, accent, heading,
+    SAGE, SMOKE, LEAF, WARN, ERR, PEARL, FERN, MOSS,
+)
 from topgun.cli.timer_match import fetch_tasks, match, match_by_id, _uid
 from topgun.services import timer as timer_svc
-
-console = Console()
 app = typer.Typer(
     name="task",
     help="Manage tasks and track time.",
@@ -73,29 +72,27 @@ def _help(ctx: typer.Context):
 # ---------------------------------------------------------------------------
 
 def _type_tag(t: str) -> str:
-    color = TYPE_COLOR.get(t, "white")
-    return f"[{color}]{t}[/{color}]"
+    return f"[{FERN}]{t}[/{FERN}]"
 
 
 def _due_color(due: str | None) -> str:
-    """Return a Rich color tag for a due date based on urgency."""
     if not due:
-        return "dim"
+        return SMOKE
     try:
         delta = (date.fromisoformat(due) - date.today()).days
     except ValueError:
-        return "dim"
+        return SMOKE
     if delta < 0:
-        return "bold red"
+        return f"bold {ERR}"
     if delta == 0:
-        return "red"
+        return ERR
     if delta <= 3:
-        return "color(202)"   # orange-red
+        return WARN
     if delta <= 7:
-        return "color(208)"   # orange
+        return WARN
     if delta <= 14:
-        return "yellow"
-    return "green"
+        return SAGE
+    return LEAF
 
 
 def _fmt_duration(seconds: float) -> str:
@@ -153,25 +150,25 @@ def _resolve_task(task_arg: str) -> dict:
         return task
 
     if _is_structured_id(task_arg):
-        console.print(f"[yellow]no task found for id:[/yellow] {task_arg}")
+        console.print(f"[{WARN}]no task found for id:[/{WARN}] {task_arg}")
         raise typer.Exit(1)
 
-    console.print(f"[dim]searching for:[/dim] {task_arg}")
+    console.print(f"[{SMOKE}]searching for:[/{SMOKE}] {task_arg}")
     candidates = match(task_arg)
 
     if not candidates:
-        console.print("[yellow]no matching tasks found[/yellow]")
+        console.print(f"[{WARN}]no matching tasks found[/{WARN}]")
         raise typer.Exit(1)
 
     if len(candidates) == 1:
         task = candidates[0]
-        console.print(f"[dim]matched:[/dim] [cyan]{task['title']}[/cyan]")
+        console.print(f"[{SMOKE}]matched:[/{SMOKE}] [{SAGE}]{task['title']}[/{SAGE}]")
         return task
 
-    console.print("\n[bold]Multiple matches — select a task:[/bold]\n")
+    console.print(f"\n[{PEARL}]Multiple matches:[/{PEARL}]\n")
     for i, c in enumerate(candidates, 1):
         score_pct = f"{int(c.get('score', 0) * 100)}%"
-        console.print(f"  [dim]{i}[/dim]  [cyan]{c['title']}[/cyan]  [dim]{score_pct}[/dim]")
+        console.print(f"  [{SMOKE}]{i}[/{SMOKE}]  [{SAGE}]{c['title']}[/{SAGE}]  [{SMOKE}]{score_pct}[/{SMOKE}]")
 
     console.print()
     raw = typer.prompt("task #", default="1")
@@ -179,7 +176,7 @@ def _resolve_task(task_arg: str) -> dict:
         idx = int(raw.strip()) - 1
         assert 0 <= idx < len(candidates)
     except (ValueError, AssertionError):
-        console.print("[red]invalid selection[/red]")
+        console.print(f"[{ERR}]invalid selection[/{ERR}]")
         raise typer.Exit(1)
 
     return candidates[idx]
@@ -198,20 +195,20 @@ def start(
     if active:
         elapsed = _fmt_duration(timer_svc.elapsed_seconds(active["ts"]))
         console.print(
-            f"[yellow]timer already running[/yellow] — {active['task_title']} ({elapsed})\n"
-            f"run [bold]topgun task stop[/bold] first"
+            f"[{WARN}]timer already running[/{WARN}] — {active['task_title']} ({elapsed})\n"
+            f"run topgun task stop first"
         )
         raise typer.Exit(1)
 
     if task is None:
         task = _editor_query()
         if not task:
-            console.print("[yellow]no description entered — cancelled[/yellow]")
+            console.print(f"[{WARN}]cancelled[/{WARN}]")
             raise typer.Exit(1)
 
     resolved = _resolve_task(task)
     timer_svc.start_timer(resolved["id"], resolved["title"])
-    console.print(f"[green]started[/green]  [cyan]{resolved['title']}[/cyan]  [dim]{resolved['uid']}[/dim]")
+    console.print(f"[{LEAF}]started[/{LEAF}]  [{SAGE}]{resolved['title']}[/{SAGE}]  [{SMOKE}]{resolved['uid']}[/{SMOKE}]")
 
 
 @app.command("stop")
@@ -220,10 +217,10 @@ def stop():
     try:
         result = timer_svc.stop_timer()
     except ValueError:
-        console.print("[yellow]no timer running[/yellow]")
+        console.print(f"[{WARN}]no timer running[/{WARN}]")
         raise typer.Exit(1)
     elapsed = _fmt_duration(result["elapsed_s"])
-    console.print(f"[green]stopped[/green]  [cyan]{result['task_title']}[/cyan]  [dim]{elapsed}[/dim]")
+    console.print(f"[{LEAF}]stopped[/{LEAF}]  [{SAGE}]{result['task_title']}[/{SAGE}]  [{SMOKE}]{elapsed}[/{SMOKE}]")
 
 
 @app.command("status")
@@ -231,11 +228,11 @@ def status():
     """Show the currently running timer."""
     st = timer_svc.timer_status()
     if not st:
-        console.print("[dim]no timer running[/dim]")
+        console.print(f"[{SMOKE}]no timer running[/{SMOKE}]")
         return
     elapsed = _fmt_duration(st["elapsed_s"])
     uid = _uid(st["task_id"])
-    console.print(f"[green]●[/green]  [cyan]{st['task_title']}[/cyan]  [bold]{elapsed}[/bold]  [dim]{uid}[/dim]")
+    console.print(f"[{LEAF}]●[/{LEAF}]  [{SAGE}]{st['task_title']}[/{SAGE}]  [{PEARL}]{elapsed}[/{PEARL}]  [{SMOKE}]{uid}[/{SMOKE}]")
 
 
 # ---------------------------------------------------------------------------
@@ -315,47 +312,44 @@ def list_cmd(
 
     if not tasks:
         label = "/".join(statuses)
-        console.print(f"[dim]no {label} tasks found[/dim]")
+        console.print(f"[{SMOKE}]no {label} tasks found[/{SMOKE}]")
         return
 
     totals = timer_svc.totals_by_task_id()
     active = timer_svc.active_period()
     active_id = active["task_id"] if active else None
 
-    table = Table(box=box.SIMPLE, show_header=True, header_style="bold", pad_edge=False)
-    table.add_column("UID", style="dim", no_wrap=True)
-    table.add_column("Type", no_wrap=True)
-    table.add_column("Title")
-    table.add_column("Due", width=12, no_wrap=True)
+    cols = [
+        ("UID", {"style": SMOKE, "no_wrap": True}),
+        ("Type", {"no_wrap": True}),
+        ("Title", {}),
+        ("Due", {"width": 12, "no_wrap": True}),
+    ]
     if show_status:
-        table.add_column("Status", width=10, no_wrap=True)
-    table.add_column("Time", justify="right")
+        cols.append(("Status", {"width": 10, "no_wrap": True}))
+    cols.append(("Time", {"justify": "right"}))
     if verbose:
-        table.add_column("Source", style="dim")
+        cols.append(("Source", {"style": SMOKE}))
+    table = make_table(*cols)
 
-    _STATUS_COLOR = {"open": "green", "closed": "dim", "inprogress": "yellow"}
+    _STATUS_COLOR = {"open": LEAF, "closed": SMOKE, "inprogress": WARN}
 
-    has_links = False
     for t in tasks:
         seconds = totals.get(t["id"])
         time_str = _fmt_duration(seconds) if seconds else "—"
-        marker = " [green]●[/green]" if t["id"] == active_id else ""
+        marker = f" [{LEAF}]●[/{LEAF}]" if t["id"] == active_id else ""
 
         due = t.get("due", "")
         dc = _due_color(due)
-        due_cell = f"[{dc}]{due}[/{dc}]" if due else "[dim]—[/dim]"
+        due_cell = f"[{dc}]{due}[/{dc}]" if due else f"[{SMOKE}]—[/{SMOKE}]"
 
         url = t.get("url", "")
-        if url:
-            has_links = True
-            title_cell = f"{t['title']} [link={url}][dim]↗[/dim][/link]"
-        else:
-            title_cell = t["title"]
+        title_cell = f"[link={url}]{t['title']}[/link]" if url else t["title"]
 
         row = [t.get("uid", ""), _type_tag(t.get("source", "")), title_cell, due_cell]
         if show_status:
             st = t.get("state", "open")
-            sc = _STATUS_COLOR.get(st, "dim")
+            sc = _STATUS_COLOR.get(st, SMOKE)
             row.append(f"[{sc}]{st}[/{sc}]")
         row.append(f"{time_str}{marker}")
         if verbose:
@@ -363,8 +357,6 @@ def list_cmd(
         table.add_row(*row)
 
     console.print(table)
-    if has_links:
-        console.print("[dim]  ↗ click to open task in browser or Obsidian[/dim]")
 
 
 @app.command("show")
@@ -374,7 +366,7 @@ def show(
     """Show task details and time intervals."""
     resolved = match_by_id(task)
     if not resolved:
-        console.print(f"[yellow]task not found:[/yellow] {task}")
+        console.print(f"[{WARN}]task not found:[/{WARN}] {task}")
         raise typer.Exit(1)
 
     intervals = timer_svc.intervals_by_task_id(resolved["id"])
@@ -382,30 +374,31 @@ def show(
     total_s = sum(i["duration_s"] for i in intervals)
 
     url = resolved.get("url", "")
-    title_str = f"[link={url}]{resolved['title']}[/link]" if url else f"[cyan]{resolved['title']}[/cyan]"
+    title_str = f"[link={url}]{resolved['title']}[/link]" if url else f"[{SAGE}]{resolved['title']}[/{SAGE}]"
 
-    console.print(f"\n  [dim]uid[/dim]     {uid}")
-    console.print(f"  [dim]source[/dim]  {resolved['id']}")
-    console.print(f"  [dim]title[/dim]   {title_str}")
+    console.print(f"\n  [{SMOKE}]uid[/{SMOKE}]     {uid}")
+    console.print(f"  [{SMOKE}]source[/{SMOKE}]  {resolved['id']}")
+    console.print(f"  [{SMOKE}]title[/{SMOKE}]   {title_str}")
     if url:
-        console.print(f"  [dim]url[/dim]     [dim]{url}[/dim]")
+        console.print(f"  [{SMOKE}]url[/{SMOKE}]     [{SMOKE}]{url}[/{SMOKE}]")
     console.print()
 
     if not intervals:
-        console.print("  [dim]no time recorded for this task[/dim]\n")
+        console.print(f"  [{SMOKE}]no time recorded[/{SMOKE}]\n")
         return
 
-    table = Table(box=box.SIMPLE, show_header=True, header_style="bold", pad_edge=False)
-    table.add_column("Start")
-    table.add_column("End")
-    table.add_column("Duration", justify="right")
+    table = make_table(
+        ("Start", {}),
+        ("End", {}),
+        ("Duration", {"justify": "right"}),
+    )
 
     for iv in intervals:
-        end_str = _fmt_dt(iv["end"]) if iv["end"] else "[green]running[/green]"
+        end_str = _fmt_dt(iv["end"]) if iv["end"] else f"[{LEAF}]running[/{LEAF}]"
         table.add_row(_fmt_dt(iv["start"]), end_str, _fmt_duration(iv["duration_s"]))
 
     console.print(table)
-    console.print(f"\n  [bold]Total[/bold]  {_fmt_duration(total_s)}\n")
+    console.print(f"\n  [{PEARL}]Total[/{PEARL}]  {_fmt_duration(total_s)}\n")
 
 
 # ---------------------------------------------------------------------------
@@ -510,22 +503,22 @@ def add():
     github_sources = [s for s in sources if s["type"] == "github"]
 
     if not obsidian_sources:
-        console.print("[yellow]no Obsidian sources tracked — run: topgun task track --type obsidian[/yellow]")
+        console.print(f"[{WARN}]no Obsidian sources tracked — run: topgun task track --type obsidian[/{WARN}]")
         raise typer.Exit(1)
 
     console.print()
-    console.print("[bold]Select a source:[/bold]\n")
+    console.print(f"[{PEARL}]Select a source:[/{PEARL}]\n")
 
     numbered: list[dict] = []
     for idx, s in enumerate(obsidian_sources, 1):
         label = s.get("path", "?")
         desc = s.get("description", "")
-        console.print(f"  [dim]{idx}[/dim]  [magenta]obsidian[/magenta]  [cyan]{label}[/cyan]  [dim]{desc}[/dim]")
+        console.print(f"  [{SMOKE}]{idx}[/{SMOKE}]  [{FERN}]obsidian[/{FERN}]  [{SAGE}]{label}[/{SAGE}]  [{SMOKE}]{desc}[/{SMOKE}]")
         numbered.append(s)
     for s in github_sources:
         label = s.get("repo", "?")
         desc = s.get("description", "")
-        console.print(f"      [dim]github[/dim]    [dim]{label}[/dim]  [dim]{desc}  [unavailable][/dim]")
+        console.print(f"      [{SMOKE}]github    {label}  {desc}  [unavailable][/{SMOKE}]")
 
     console.print()
     raw = typer.prompt("source #", default="1")
@@ -533,29 +526,27 @@ def add():
         choice_idx = int(raw.strip()) - 1
         assert 0 <= choice_idx < len(numbered)
     except (ValueError, AssertionError):
-        console.print("[red]invalid selection[/red]")
+        console.print(f"[{ERR}]invalid selection[/{ERR}]")
         raise typer.Exit(1)
     chosen = numbered[choice_idx]
 
-    # Erase source list and prompt; replace with a single compact line.
-    # Lines printed: blank(1) + "Select a source:\n"(2) + sources + blank(1) + prompt(1)
     n_erase = 5 + len(obsidian_sources) + len(github_sources)
     sys.stdout.write(f"\033[{n_erase}A\033[J")
     sys.stdout.flush()
     console.print(
-        f"  [magenta]obsidian[/magenta]  "
-        f"[cyan]{chosen.get('description', chosen.get('path', '?'))}[/cyan]"
+        f"  [{FERN}]obsidian[/{FERN}]  "
+        f"[{SAGE}]{chosen.get('description', chosen.get('path', '?'))}[/{SAGE}]"
     )
 
     today = date.today().isoformat()
     text = click.edit(_ADD_EDITOR_TEMPLATE)
     if not text:
-        console.print("[yellow]no input — cancelled[/yellow]")
+        console.print(f"[{WARN}]cancelled[/{WARN}]")
         raise typer.Exit(1)
     lines = [l for l in text.splitlines() if not l.startswith("#")]
     description = " ".join(lines).strip()
     if not description:
-        console.print("[yellow]no description entered — cancelled[/yellow]")
+        console.print(f"[{WARN}]cancelled[/{WARN}]")
         raise typer.Exit(1)
 
     from topgun.inference.anthropic import call, load_prompt
@@ -572,8 +563,8 @@ def add():
     try:
         structured = json.loads(clean)
     except json.JSONDecodeError:
-        console.print("[red]could not parse model response — task not saved[/red]")
-        console.print(f"[dim]{raw_json}[/dim]")
+        console.print(f"[{ERR}]could not parse model response — task not saved[/{ERR}]")
+        console.print(f"[{SMOKE}]{raw_json}[/{SMOKE}]")
         raise typer.Exit(1)
 
     task_dir = _write_obsidian_task(chosen["path"], structured)
@@ -584,7 +575,7 @@ def add():
     relative_file = quote(f"{task_dir.name}/task.md")
     obs_url = f"obsidian://open?vault={quote(vault_name)}&file={relative_file}"
     title = structured.get("title", "Untitled")
-    console.print(f"[green]created[/green]  [link={obs_url}]{title}[/link]")
+    console.print(f"[{LEAF}]created[/{LEAF}]  [link={obs_url}]{title}[/link]")
 
 
 def _close_one(resolved: dict) -> bool:
@@ -594,7 +585,7 @@ def _close_one(resolved: dict) -> bool:
     if source_id.startswith("obsidian:"):
         parts = source_id.split(":", 2)
         if len(parts) < 3:
-            console.print(f"[red]cannot parse obsidian source ID:[/red] {source_id}")
+            console.print(f"[{ERR}]cannot parse obsidian source ID:[/{ERR}] {source_id}")
             return False
         vault_path = parts[1]
         task_title = parts[2]
@@ -617,7 +608,7 @@ def _close_one(resolved: dict) -> bool:
                 break
 
         if task_file is None:
-            console.print(f"[yellow]task file not found for:[/yellow] {task_title}")
+            console.print(f"[{WARN}]task file not found for:[/{WARN}] {task_title}")
             return False
 
         text = task_file.read_text(encoding="utf-8")
@@ -631,13 +622,13 @@ def _close_one(resolved: dict) -> bool:
         today = date.today().isoformat()
         text = text.rstrip() + f"\n\n✅ {today}\n"
         task_file.write_text(text, encoding="utf-8")
-        console.print(f"[green]closed[/green]  [cyan]{resolved['title']}[/cyan]")
+        console.print(f"[{LEAF}]closed[/{LEAF}]  [{SAGE}]{resolved['title']}[/{SAGE}]")
         return True
 
     elif source_id.startswith("github:"):
         m = re.match(r"github:([^#]+)#(\d+)", source_id)
         if not m:
-            console.print(f"[red]cannot parse github source ID:[/red] {source_id}")
+            console.print(f"[{ERR}]cannot parse github source ID:[/{ERR}] {source_id}")
             return False
         repo, number = m.group(1), m.group(2)
         import subprocess as _sp
@@ -647,13 +638,13 @@ def _close_one(resolved: dict) -> bool:
         )
         if result.returncode != 0:
             err = result.stderr.strip() or result.stdout.strip()
-            console.print(f"[red]gh issue close failed:[/red] {err}")
+            console.print(f"[{ERR}]gh issue close failed:[/{ERR}] {err}")
             return False
-        console.print(f"[green]closed[/green]  [cyan]{resolved['title']}[/cyan]")
+        console.print(f"[{LEAF}]closed[/{LEAF}]  [{SAGE}]{resolved['title']}[/{SAGE}]")
         return True
 
     else:
-        console.print(f"[yellow]unknown source type for:[/yellow] {source_id}")
+        console.print(f"[{WARN}]unknown source type for:[/{WARN}] {source_id}")
         return False
 
 
@@ -665,7 +656,7 @@ def close(
     if not task_refs:
         query = _editor_query()
         if not query:
-            console.print("[yellow]no description entered — cancelled[/yellow]")
+            console.print(f"[{WARN}]cancelled[/{WARN}]")
             raise typer.Exit(1)
         resolved = _resolve_task(query)
         if not _close_one(resolved):
@@ -746,9 +737,9 @@ def track(
     sources.append(entry)
     _write_config(data)
     label = entry.get("repo") or entry.get("path")
-    console.print(f"[green]ok[/green]  {_type_tag(entry['type'])}\t[cyan]{label}[/cyan]")
+    console.print(f"[{LEAF}]ok[/{LEAF}]  {_type_tag(entry['type'])}  [{SAGE}]{label}[/{SAGE}]")
     if entry["type"] == "github" and not os.environ.get(entry["token_env"]):
-        console.print(f"[yellow]add to ~/.zshrc:[/yellow]  export {entry['token_env']}=$(gh auth token)")
+        console.print(f"[{WARN}]add to ~/.zshrc:[/{WARN}]  export {entry['token_env']}=$(gh auth token)")
 
 
 @app.command("untrack")
@@ -761,7 +752,7 @@ def untrack():
 
     for i, s in enumerate(sources, 1):
         label = s.get("repo") or s.get("path", "?")
-        console.print(f"  [dim]{i}[/dim]  {_type_tag(s['type'])}\t{label}")
+        console.print(f"  [{SMOKE}]{i}[/{SMOKE}]  {_type_tag(s['type'])}  {label}")
 
     raw = typer.prompt("remove #")
     try:
@@ -776,7 +767,7 @@ def untrack():
     data.setdefault("backlog", {})["sources"] = sources
     _write_config(data)
     label = removed.get("repo") or removed.get("path", "?")
-    console.print(f"[green]ok[/green]  removed [cyan]{label}[/cyan]")
+    console.print(f"[{LEAF}]ok[/{LEAF}]  removed [{SAGE}]{label}[/{SAGE}]")
 
 
 @app.command("sources")
@@ -790,4 +781,4 @@ def sources_cmd():
     for s in sources:
         label = s.get("repo") or s.get("path", "?")
         desc = s.get("description", "")
-        console.print(f"  {_type_tag(s['type'])}\t[cyan]{label}[/cyan]\t[dim]{desc}[/dim]")
+        console.print(f"  {_type_tag(s['type'])}  [{SAGE}]{label}[/{SAGE}]  [{SMOKE}]{desc}[/{SMOKE}]")

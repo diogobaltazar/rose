@@ -6,15 +6,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import typer
-from rich.console import Console
-from rich.table import Table
-from rich import box
 
 CONFIG_FILE = Path(
     os.environ.get("TOPGUN_CONFIG", str(Path.home() / ".config/topgun/config.json"))
 )
 
-console = Console()
+from topgun.cli.theme import console, make_table, SAGE, SMOKE, LEAF, WARN, ERR, FERN
+
 app = typer.Typer(name="backlog", help="Manage your federated backlog.", add_completion=False, invoke_without_command=True)
 
 
@@ -75,11 +73,10 @@ def _get_sources() -> list[dict]:
 # Helpers
 # ---------------------------------------------------------------------------
 
-TYPE_COLOR = {"github": "blue", "obsidian": "magenta"}
+TYPE_COLOR = {"github": FERN, "obsidian": FERN}
 
 def _type_tag(t: str) -> str:
-    color = TYPE_COLOR.get(t, "white")
-    return f"[{color}]{t}[/{color}]"
+    return f"[{FERN}]{t}[/{FERN}]"
 
 
 # ---------------------------------------------------------------------------
@@ -131,9 +128,9 @@ def track(
     sources.append(entry)
     _write_config(data)
     label = entry.get("repo") or entry.get("path")
-    console.print(f"[green]ok[/green]  {_type_tag(entry['type'])}\t[cyan]{label}[/cyan]")
+    console.print(f"[{LEAF}]ok[/{LEAF}]  {_type_tag(entry['type'])}  [{SAGE}]{label}[/{SAGE}]")
     if entry["type"] == "github" and not os.environ.get(entry["token_env"]):
-        console.print(f"[yellow]add to ~/.zshrc:[/yellow]  export {entry['token_env']}=$(gh auth token)")
+        console.print(f"[{WARN}]add to ~/.zshrc:[/{WARN}]  export {entry['token_env']}=$(gh auth token)")
 
 
 @app.command("untrack")
@@ -146,7 +143,7 @@ def untrack():
 
     for i, s in enumerate(sources, 1):
         label = s.get("repo") or s.get("path", "?")
-        console.print(f"  [dim]{i}[/dim]  {_type_tag(s['type'])}\t{label}")
+        console.print(f"  [{SMOKE}]{i}[/{SMOKE}]  {_type_tag(s['type'])}  {label}")
 
     raw = typer.prompt("remove #")
     try:
@@ -161,7 +158,7 @@ def untrack():
     data.setdefault("backlog", {})["sources"] = sources
     _write_config(data)
     label = removed.get("repo") or removed.get("path", "?")
-    console.print(f"[green]ok[/green]  removed [cyan]{label}[/cyan]")
+    console.print(f"[{LEAF}]ok[/{LEAF}]  removed [{SAGE}]{label}[/{SAGE}]")
 
 
 @app.command("sources")
@@ -175,7 +172,7 @@ def sources_cmd():
     for s in sources:
         label = s.get("repo") or s.get("path", "?")
         desc = s.get("description", "")
-        console.print(f"  {_type_tag(s['type'])}\t[cyan]{label}[/cyan]\t[dim]{desc}[/dim]")
+        console.print(f"  {_type_tag(s['type'])}  [{SAGE}]{label}[/{SAGE}]  [{SMOKE}]{desc}[/{SMOKE}]")
 
 
 @app.command("list")
@@ -190,15 +187,16 @@ def list_cmd(
 
     items, errors = _fetch_all(sources)
 
-    table = Table(box=box.SIMPLE, show_header=True, header_style="bold", pad_edge=False)
-    table.add_column("Type", no_wrap=True)
-    table.add_column("Title")
-    table.add_column("Tags", style="dim")
-    table.add_column("Priority", width=8)
-    table.add_column("Due", width=12)
-    table.add_column("Status", width=8)
+    table = make_table(
+        ("Type", {"no_wrap": True}),
+        ("Title", {}),
+        ("Tags", {"style": SMOKE}),
+        ("Priority", {"width": 8}),
+        ("Due", {"width": 12}),
+        ("Status", {"width": 8}),
+    )
     if verbose:
-        table.add_column("Source", style="dim")
+        table.add_column("Source", style=SMOKE)
 
     for item in sorted(items, key=_sort_key):
         pri = item["priority"]
@@ -220,7 +218,7 @@ def list_cmd(
     console.print(table)
     if errors:
         for e in errors:
-            console.print(f"[yellow]⚠ {e}[/yellow]")
+            console.print(f"[{WARN}]{e}[/{WARN}]")
 
 
 # ---------------------------------------------------------------------------

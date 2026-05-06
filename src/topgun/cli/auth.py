@@ -15,6 +15,7 @@ app = typer.Typer(
     help="Authenticate topgun and connected services.",
     add_completion=False,
     invoke_without_command=True,
+    rich_markup_mode=None,
 )
 
 def _config_dir() -> Path:

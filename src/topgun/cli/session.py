@@ -6,7 +6,7 @@ from pathlib import Path
 
 import typer
 
-app = typer.Typer(name="session", help="Manage Claude Code session transcripts.", add_completion=False, invoke_without_command=True)
+app = typer.Typer(name="session", help="Manage Claude Code session transcripts.", add_completion=False, invoke_without_command=True, rich_markup_mode=None)
 
 
 @app.callback()

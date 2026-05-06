@@ -13,8 +13,8 @@ CONFIG_FILE = Path(
 SUPPORTED_BACKENDS = ["gdrive", "s3"]
 SUPPORTED_PROVIDERS = ["github", "caldav", "gdrive"]
 
-app = typer.Typer(name="config", help="Manage topgun configuration.", add_completion=False, invoke_without_command=True)
-observe_app = typer.Typer(name="observe", help="Projects to monitor with topgun observe.", add_completion=False, invoke_without_command=True)
+app = typer.Typer(name="config", help="Manage topgun configuration.", add_completion=False, invoke_without_command=True, rich_markup_mode=None)
+observe_app = typer.Typer(name="observe", help="Projects to monitor with topgun observe.", add_completion=False, invoke_without_command=True, rich_markup_mode=None)
 app.add_typer(observe_app)
 
 

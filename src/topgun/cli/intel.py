@@ -10,6 +10,7 @@ app = typer.Typer(
     help="Manage intel documents.",
     add_completion=False,
     invoke_without_command=True,
+    rich_markup_mode=None,
 )
 
 

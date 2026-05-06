@@ -14,7 +14,7 @@ import typer
 
 from topgun.cli.theme import console, make_table, SAGE, SMOKE, LEAF, WARN, ERR, PEARL
 from topgun.cli.timer_match import match, match_by_id
-app = typer.Typer(name="timer", help="Track time spent per task.", add_completion=False, invoke_without_command=True)
+app = typer.Typer(name="timer", help="Track time spent per task.", add_completion=False, invoke_without_command=True, rich_markup_mode=None)
 
 TIMER_LOG = Path(os.environ.get("TOPGUN_TIMER_LOG", str(Path.home() / ".topgun" / "timer.jsonl")))
 

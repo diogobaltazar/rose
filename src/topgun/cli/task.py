@@ -37,6 +37,7 @@ app = typer.Typer(
     help="Manage tasks and track time.",
     add_completion=False,
     invoke_without_command=True,
+    rich_markup_mode=None,
 )
 
 TIMER_LOG = Path(os.environ.get("TOPGUN_TIMER_LOG", str(Path.home() / ".topgun" / "timer.jsonl")))

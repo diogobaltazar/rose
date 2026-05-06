@@ -19,6 +19,7 @@ app = typer.Typer(
     help="View and manage pilots.",
     add_completion=False,
     invoke_without_command=True,
+    rich_markup_mode=None,
 )
 
 DEFAULT_PILOTS = ["maverick", "rooster", "hangman", "ice", "phoenix", "payback", "fanboy", "bob"]

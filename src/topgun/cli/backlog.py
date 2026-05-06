@@ -13,7 +13,7 @@ CONFIG_FILE = Path(
 
 from topgun.cli.theme import console, make_table, SAGE, SMOKE, LEAF, WARN, ERR, FERN
 
-app = typer.Typer(name="backlog", help="Manage your federated backlog.", add_completion=False, invoke_without_command=True)
+app = typer.Typer(name="backlog", help="Manage your federated backlog.", add_completion=False, invoke_without_command=True, rich_markup_mode=None)
 
 
 @app.callback()

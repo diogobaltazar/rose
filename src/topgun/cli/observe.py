@@ -1035,7 +1035,7 @@ def render_tabbed_view(sessions: list[dict], selected: int) -> "Text":
 
 # ── Typer app ──────────────────────────────────────────────────────────────────
 
-app = typer.Typer(name="observe", help="Session inspector.", add_completion=False)
+app = typer.Typer(name="observe", help="Session inspector.", add_completion=False, rich_markup_mode=None)
 
 
 @app.command("watch")

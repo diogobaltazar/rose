@@ -9,7 +9,7 @@ from topgun.cli.theme import console, SAGE, SMOKE, LEAF, WARN, FERN
 CONFIG_FILE = Path(
     os.environ.get("TOPGUN_CONFIG", str(Path.home() / ".config/topgun/config.json"))
 )
-app = typer.Typer(name="notes", help="Manage your notes vaults.", add_completion=False, invoke_without_command=True)
+app = typer.Typer(name="notes", help="Manage your notes vaults.", add_completion=False, invoke_without_command=True, rich_markup_mode=None)
 
 
 @app.callback()

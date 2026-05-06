@@ -8,7 +8,9 @@ import typer
 
 from topgun.cli.theme import console, make_table, ok, err, warn, dim, SMOKE, LEAF, WARN, ERR
 
-ROSE_DIR = Path("/topgun")
+_CONTAINER_DIR = Path("/topgun")
+_LOCAL_DIR = Path(__file__).parents[3]  # src/topgun/cli/upgrade.py → repo root
+ROSE_DIR = _CONTAINER_DIR if _CONTAINER_DIR.exists() else _LOCAL_DIR
 
 
 def _merge_hooks(dest: dict, src: dict) -> list[str]:
@@ -137,6 +139,7 @@ def upgrade(
             "date: {{date}}\n"
             "tags: [{{tags}}]\n"
             "status: open\n"
+            "closed_at: _none_\n"
             "---\n"
             "\n"
             "# {{title}}\n"

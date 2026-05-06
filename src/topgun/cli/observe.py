@@ -64,22 +64,22 @@ _transcript_cache: dict[Path, tuple[float, dict]] = {}
 _subagent_cache:   dict[Path, tuple[float, dict]] = {}
 
 # ── Rich styles ────────────────────────────────────────────────────────────────
-STYLE_NEON     = "bold color(118)"   # live dot / session ID
+STYLE_NEON     = "bold color(40)"    # live dot / session ID
 STYLE_NEON_DIM = "color(28)"         # branch / worktree / agent name
 STYLE_PEARL    = "color(253)"        # feature one-liner
 STYLE_SILVER   = "color(245)"        # ← resume arrow
-STYLE_DIM      = "dim"               # labels, dates, secondary info
+STYLE_DIM      = "color(240)"        # labels, dates, secondary info
 STYLE_BOLD     = "bold"              # project name
 STYLE_KEY      = "color(245)"        # header key column
 STYLE_VAL      = "color(253)"        # header value column
-STYLE_DELTA    = "color(39)"         # value-increased highlight
+STYLE_DELTA    = "color(114)"        # value-increased highlight
 STYLE_TAB_SEL  = "bold reverse"      # selected tab
 STYLE_TAB      = "color(245)"        # unselected tab
-STYLE_MEM      = "color(109)"        # matrix: memory (soft blue)
-STYLE_TOOL     = "color(180)"        # matrix: tools (warm amber)
-STYLE_TIME     = "color(145)"        # matrix: time (muted lavender)
-STYLE_TOK      = "color(114)"        # matrix: tokens (soft green)
-STYLE_USD      = "color(216)"        # matrix: USD (peach)
+STYLE_MEM      = "color(157)"        # matrix: memory (mint)
+STYLE_TOOL     = "color(114)"        # matrix: tools (sage)
+STYLE_TIME     = "color(245)"        # matrix: time (silver)
+STYLE_TOK      = "color(71)"         # matrix: tokens (fern)
+STYLE_USD      = "color(253)"        # matrix: USD (pearl)
 
 # ── Value-change highlight state ──────────────────────────────────────────────
 _prev_metrics:    dict[str, float] = {}

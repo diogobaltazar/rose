@@ -5,12 +5,8 @@ import subprocess
 from pathlib import Path
 
 import typer
-from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
-from rich import box
 
-console = Console()
+from topgun.cli.theme import console, make_table, ok, err, warn, dim, SMOKE, LEAF, WARN, ERR
 
 ROSE_DIR = Path("/topgun")
 
@@ -98,14 +94,16 @@ def upgrade(
     """Safely upgrade commands, hooks, and hook settings from the topgun source."""
 
     if not claude_dir.exists():
-        console.print(f"error: {claude_dir} does not exist")
+        console.print(err(f"{claude_dir} does not exist"))
         raise typer.Exit(1)
 
     global_src = ROSE_DIR / "global"
-    results = Table(box=box.SIMPLE, show_header=False, pad_edge=False)
-    results.add_column("status", style="bold", width=4)
-    results.add_column("item")
-    results.add_column("note", style="dim")
+    results = make_table(
+        ("", {"width": 3}),
+        ("item", {}),
+        ("note", {"style": SMOKE}),
+        show_header=False,
+    )
 
     # Ensure ~/.topgun directory structure exists
     topgun_dir = Path.home() / ".topgun"
@@ -116,7 +114,7 @@ def upgrade(
     for d in [topgun_dir, topgun_dir / "archive", notes_vault, notes_templates, task_vault, task_templates]:
         if not d.exists():
             d.mkdir(parents=True, exist_ok=True)
-            results.add_row("[green]✓[/green]", str(d.relative_to(Path.home())), "created")
+            results.add_row(ok("✓"), str(d.relative_to(Path.home())), "created")
 
     default_template = notes_templates / "note.md"
     if not default_template.exists():
@@ -130,7 +128,7 @@ def upgrade(
             "\n"
             "{{content}}\n"
         )
-        results.add_row("[green]✓[/green]", str(default_template.relative_to(Path.home())), "created")
+        results.add_row(ok("✓"), str(default_template.relative_to(Path.home())), "created")
 
     default_task_template = task_templates / "task.md"
     if not default_task_template.exists():
@@ -167,15 +165,15 @@ def upgrade(
             "\n"
             "{{must_before}}\n"
         )
-        results.add_row("[green]✓[/green]", str(default_task_template.relative_to(Path.home())), "created")
+        results.add_row(ok("✓"), str(default_task_template.relative_to(Path.home())), "created")
 
     # Set up ONA SSH config for rsync-based log retrieval
     if shutil.which("ona"):
         r = subprocess.run(["ona", "environment", "ssh-config"], capture_output=True, text=True)
         if r.returncode == 0:
-            results.add_row("[green]✓[/green]", "ona ssh-config", "updated")
+            results.add_row(ok("✓"), "ona ssh-config", "updated")
         else:
-            results.add_row("[yellow]~[/yellow]", "ona ssh-config", "skipped (not authenticated)")
+            results.add_row(warn("~"), "ona ssh-config", "skipped (not authenticated)")
 
     # 1. Copy command files individually — never delete existing commands
     src_commands = global_src / "commands"
@@ -185,7 +183,7 @@ def upgrade(
         for src_file in sorted(src_commands.iterdir()):
             if src_file.is_file():
                 shutil.copy2(src_file, dst_commands / src_file.name)
-                results.add_row("[green]✓[/green]", f"commands/{src_file.name}", "copied")
+                results.add_row(ok("✓"), f"commands/{src_file.name}", "copied")
 
     # 2. Copy agent definitions individually — never delete existing agents
     src_agents = global_src / "agents"
@@ -195,7 +193,7 @@ def upgrade(
         for src_file in sorted(src_agents.iterdir()):
             if src_file.is_file():
                 shutil.copy2(src_file, dst_agents / src_file.name)
-                results.add_row("[green]✓[/green]", f"agents/{src_file.name}", "copied")
+                results.add_row(ok("✓"), f"agents/{src_file.name}", "copied")
 
     # 4. Copy hook scripts individually — never delete existing hooks
     src_hooks_dir = global_src / "hooks"
@@ -205,7 +203,7 @@ def upgrade(
         for src_file in sorted(src_hooks_dir.iterdir()):
             if src_file.is_file():
                 shutil.copy2(src_file, dst_hooks_dir / src_file.name)
-                results.add_row("[green]✓[/green]", f"hooks/{src_file.name}", "copied")
+                results.add_row(ok("✓"), f"hooks/{src_file.name}", "copied")
 
     # 5. Merge hook configuration into settings.json — never replace the file wholesale
     src_settings_path = global_src / "settings.json"
@@ -218,9 +216,8 @@ def upgrade(
             try:
                 dst_settings = json.loads(dst_settings_path.read_text())
             except json.JSONDecodeError as e:
-                results.add_row("[red]✗[/red]", "settings.json", f"could not parse: {e}")
+                results.add_row(err("✗"), "settings.json", f"could not parse: {e}")
                 console.print(results)
-                console.print()
                 raise typer.Exit(1)
 
             hook_changes = _merge_hooks(dst_settings, src_settings)
@@ -228,9 +225,9 @@ def upgrade(
             dst_settings_path.write_text(json.dumps(dst_settings, indent=2) + "\n")
 
             for change in hook_changes:
-                results.add_row("[green]✓[/green]", "settings.json", change)
+                results.add_row(ok("✓"), "settings.json", change)
             for change in perm_changes:
-                results.add_row("[green]✓[/green]", "settings.json", change)
+                results.add_row(ok("✓"), "settings.json", change)
         else:
             # No existing settings.json — write hooks and permissions sections
             dst_settings_path.write_text(
@@ -243,6 +240,6 @@ def upgrade(
                 )
                 + "\n"
             )
-            results.add_row("[green]✓[/green]", "settings.json", "created with hooks and permissions")
+            results.add_row(ok("✓"), "settings.json", "created with hooks and permissions")
 
     console.print(results)

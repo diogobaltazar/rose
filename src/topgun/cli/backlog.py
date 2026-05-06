@@ -380,50 +380,48 @@ def _fetch_obsidian(vault_path: str, statuses: list[str] | None = None) -> list[
         # is surfaced in context.
         is_task_file = relative.name == "task.md"
 
-        # For directory-based task files, read status and due dates from
-        # frontmatter and section headings rather than checkbox emoji patterns.
+        # task.md files: read title from H1 heading and all metadata from
+        # frontmatter/sections. Skip the checkbox loop entirely.
         if is_task_file:
             fm = _parse_frontmatter(text)
             status = fm.get("status", "open")
             if status not in statuses:
                 continue
-            # Due date: prefer Must Before, fall back to Best Before.
-            # Strip null placeholders first so the `or` chain works correctly.
             _null = {"_none_", "none", ""}
             must_before = _parse_body_section(text, "Must Before").strip()
             must_before = must_before if must_before.lower() not in _null else ""
             best_before = _parse_body_section(text, "Best Before").strip()
             best_before = best_before if best_before.lower() not in _null else ""
             due = must_before or best_before
+            h1 = re.search(r"^# (.+)$", text, re.MULTILINE)
+            if not h1:
+                continue
+            title = h1.group(1).strip()
+            items.append({
+                "type": "obsidian",
+                "title": title,
+                "source_full": vault_path,
+                "priority": fm.get("priority", ""),
+                "due": due,
+                "state": status,
+                "tags": [],
+                "url": f"obsidian://open?path={quote(str(host_file))}",
+            })
+            continue
 
         for line in text.splitlines():
             if not _TASK_RE.match(line):
                 continue
             title = _TASK_RE.sub("", line).strip()
 
-            if is_task_file:
-                # Due date and priority already resolved from frontmatter/sections.
-                title = _DUE_RE.sub("", title).strip()
-                pri_match = _PRI_RE.search(title)
-                priority = PRIORITY_ICON.get(pri_match.group(1), "") if pri_match else fm.get("priority", "")
-                title = _PRI_RE.sub("", title).strip()
-                tags = _TAG_RE.findall(title)
-                title = _TAG_RE.sub("", title).strip()
-                obs_url = f"obsidian://open?path={quote(str(host_file))}"
-            else:
-                due_match = _DUE_RE.search(title)
-                due = due_match.group(1) if due_match else ""
-                title = _DUE_RE.sub("", title).strip()
-
-                pri_match = _PRI_RE.search(title)
-                priority = PRIORITY_ICON.get(pri_match.group(1), "") if pri_match else ""
-                title = _PRI_RE.sub("", title).strip()
-
-                tags = _TAG_RE.findall(title)
-                title = _TAG_RE.sub("", title).strip()
-                status = "open"
-
-                obs_url = f"obsidian://search?query={quote(title)}"
+            due_match = _DUE_RE.search(title)
+            due = due_match.group(1) if due_match else ""
+            title = _DUE_RE.sub("", title).strip()
+            pri_match = _PRI_RE.search(title)
+            priority = PRIORITY_ICON.get(pri_match.group(1), "") if pri_match else ""
+            title = _PRI_RE.sub("", title).strip()
+            tags = _TAG_RE.findall(title)
+            title = _TAG_RE.sub("", title).strip()
 
             items.append({
                 "type": "obsidian",
@@ -431,9 +429,9 @@ def _fetch_obsidian(vault_path: str, statuses: list[str] | None = None) -> list[
                 "source_full": vault_path,
                 "priority": priority,
                 "due": due,
-                "state": status,
+                "state": "open",
                 "tags": tags,
-                "url": obs_url,
+                "url": f"obsidian://search?query={quote(title)}",
             })
     return items
 

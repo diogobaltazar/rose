@@ -3,11 +3,8 @@ import os
 from pathlib import Path
 
 import typer
-from rich.console import Console
-from rich.table import Table
-from rich import box
 
-console = Console()
+from topgun.cli.theme import console, make_table, SAGE, SMOKE, LEAF, ERR, WARN
 
 CONFIG_FILE = Path(
     os.environ.get("TOPGUN_CONFIG", str(Path.home() / ".config" / "topgun" / "config.json"))
@@ -16,8 +13,8 @@ CONFIG_FILE = Path(
 SUPPORTED_BACKENDS = ["gdrive", "s3"]
 SUPPORTED_PROVIDERS = ["github", "caldav", "gdrive"]
 
-app = typer.Typer(name="config", help="Manage topgun configuration.", add_completion=False, invoke_without_command=True)
-observe_app = typer.Typer(name="observe", help="Projects to monitor with topgun observe.", add_completion=False, invoke_without_command=True)
+app = typer.Typer(name="config", help="Manage topgun configuration.", add_completion=False, invoke_without_command=True, rich_markup_mode=None)
+observe_app = typer.Typer(name="observe", help="Projects to monitor with topgun observe.", add_completion=False, invoke_without_command=True, rich_markup_mode=None)
 app.add_typer(observe_app)
 
 
@@ -43,8 +40,8 @@ def config_set(
 
     if key == "backend":
         if not value or value not in SUPPORTED_BACKENDS:
-            console.print(f"[red]Usage: topgun config set backend <provider>[/red]")
-            console.print(f"[dim]Supported: {', '.join(SUPPORTED_BACKENDS)}[/dim]")
+            console.print(f"[{ERR}]Usage: topgun config set backend <provider>[/{ERR}]")
+            console.print(f"[{SMOKE}]Supported: {', '.join(SUPPORTED_BACKENDS)}[/{SMOKE}]")
             raise typer.Exit(1)
         storage = data.setdefault("storage", {})
         storage["provider"] = value
@@ -55,14 +52,14 @@ def config_set(
         if client_secret:
             storage["client_secret"] = client_secret
         _write(data)
-        console.print(f"[green]Storage backend set to: {value}[/green]")
+        console.print(f"[{LEAF}]Storage backend set to: {value}[/{LEAF}]")
         if not client_id or not client_secret:
-            console.print(f"[yellow]Tip: provide --client-id and --client-secret from your GCP OAuth app[/yellow]")
+            console.print(f"[{WARN}]Tip: provide --client-id and --client-secret from your GCP OAuth app[/{WARN}]")
         return
 
     if key in SUPPORTED_PROVIDERS:
         if not name:
-            console.print(f"[red]--name required. Example: topgun config set {key} --name my-{key}[/red]")
+            console.print(f"[{ERR}]--name required. Example: topgun config set {key} --name my-{key}[/{ERR}]")
             raise typer.Exit(1)
         conn: dict = {"provider": key}
         if account:
@@ -72,13 +69,13 @@ def config_set(
         connections = data.setdefault("connections", {})
         connections[name] = conn
         _write(data)
-        console.print(f"[green]Connection '{name}' declared ({key}).[/green]")
+        console.print(f"[{LEAF}]Connection '{name}' declared ({key}).[/{LEAF}]")
         if key != "caldav":
-            console.print(f"[dim]Next: topgun auth login --name {name}[/dim]")
+            console.print(f"[{SMOKE}]Next: topgun auth login --name {name}[/{SMOKE}]")
         return
 
-    console.print(f"[red]Unknown: {key}[/red]")
-    console.print(f"[dim]Backends: {', '.join(SUPPORTED_BACKENDS)}  Providers: {', '.join(SUPPORTED_PROVIDERS)}[/dim]")
+    console.print(f"[{ERR}]Unknown: {key}[/{ERR}]")
+    console.print(f"[{SMOKE}]Backends: {', '.join(SUPPORTED_BACKENDS)}  Providers: {', '.join(SUPPORTED_PROVIDERS)}[/{SMOKE}]")
     raise typer.Exit(1)
 
 
@@ -87,20 +84,19 @@ def config_list():
     """List all declared connections and storage backend."""
     data = _read()
 
-    table = Table(box=box.MINIMAL_DOUBLE_HEAD, show_edge=False)
-    table.add_column("Name", style="yellow")
-    table.add_column("Type", style="dim")
-    table.add_column("Detail", style="dim")
+    table = make_table(
+        ("Name", {"style": SAGE}),
+        ("Type", {"style": SMOKE}),
+        ("Detail", {"style": SMOKE}),
+    )
 
     backend = data.get("storage", {}).get("provider", "")
-    table.add_row("backend", backend or "[dim]not set[/dim]", "")
+    table.add_row("backend", backend or f"[{SMOKE}]not set[/{SMOKE}]", "")
 
     for name, conn in data.get("connections", {}).items():
         table.add_row(name, conn.get("provider", ""), conn.get("account", ""))
 
-    console.print()
     console.print(table)
-    console.print()
 
 
 @app.command("remove")
@@ -111,12 +107,12 @@ def config_remove(
     data = _read()
     connections = data.get("connections", {})
     if name not in connections:
-        console.print(f"[red]No connection named '{name}'.[/red]")
+        console.print(f"[{ERR}]No connection named '{name}'.[/{ERR}]")
         raise typer.Exit(1)
     del connections[name]
     data["connections"] = connections
     _write(data)
-    console.print(f"[green]Removed '{name}'.[/green]")
+    console.print(f"[{LEAF}]Removed '{name}'.[/{LEAF}]")
 
 
 @observe_app.callback()

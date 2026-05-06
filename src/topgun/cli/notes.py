@@ -3,14 +3,13 @@ import os
 from pathlib import Path
 
 import typer
-from rich.console import Console
+
+from topgun.cli.theme import console, SAGE, SMOKE, LEAF, WARN, FERN
 
 CONFIG_FILE = Path(
     os.environ.get("TOPGUN_CONFIG", str(Path.home() / ".config/topgun/config.json"))
 )
-
-console = Console()
-app = typer.Typer(name="notes", help="Manage your notes vaults.", add_completion=False, invoke_without_command=True)
+app = typer.Typer(name="notes", help="Manage your notes vaults.", add_completion=False, invoke_without_command=True, rich_markup_mode=None)
 
 
 @app.callback()
@@ -19,11 +18,8 @@ def _notes_help(ctx: typer.Context):
         typer.echo(ctx.get_help())
 
 
-TYPE_COLOR = {"obsidian": "magenta"}
-
 def _type_tag(t: str) -> str:
-    color = TYPE_COLOR.get(t, "white")
-    return f"[{color}]{t}[/{color}]"
+    return f"[{FERN}]{t}[/{FERN}]"
 
 
 def _read_config() -> dict:
@@ -74,7 +70,7 @@ def track(
     entry = {"type": "obsidian", "path": resolved, "description": description}
     sources.append(entry)
     _write_config(data)
-    console.print(f"[green]ok[/green]  {_type_tag('obsidian')}\t[cyan]{resolved}[/cyan]")
+    console.print(f"[{LEAF}]ok[/{LEAF}]  {_type_tag('obsidian')}  [{SAGE}]{resolved}[/{SAGE}]")
 
 
 @app.command("untrack")
@@ -86,7 +82,7 @@ def untrack():
         raise typer.Exit()
 
     for i, s in enumerate(sources, 1):
-        console.print(f"  [dim]{i}[/dim]  {_type_tag(s['type'])}\t{s.get('path', '?')}")
+        console.print(f"  [{SMOKE}]{i}[/{SMOKE}]  {_type_tag(s['type'])}  {s.get('path', '?')}")
 
     raw = typer.prompt("remove #")
     try:
@@ -100,7 +96,7 @@ def untrack():
     data = _read_config()
     data.setdefault("notes", {})["sources"] = sources
     _write_config(data)
-    console.print(f"[green]ok[/green]  removed [cyan]{removed.get('path', '?')}[/cyan]")
+    console.print(f"[{LEAF}]ok[/{LEAF}]  removed [{SAGE}]{removed.get('path', '?')}[/{SAGE}]")
 
 
 @app.command("sources")
@@ -113,4 +109,4 @@ def sources_cmd():
 
     for s in sources:
         desc = s.get("description", "")
-        console.print(f"  {_type_tag(s['type'])}\t[cyan]{s.get('path', '?')}[/cyan]\t[dim]{desc}[/dim]")
+        console.print(f"  {_type_tag(s['type'])}  [{SAGE}]{s.get('path', '?')}[/{SAGE}]  [{SMOKE}]{desc}[/{SMOKE}]")

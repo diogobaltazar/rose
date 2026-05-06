@@ -18,6 +18,7 @@ app = typer.Typer(
     add_completion=False,
     pretty_exceptions_enable=False,
     invoke_without_command=True,
+    rich_markup_mode=None,
 )
 
 

@@ -8,16 +8,14 @@ from pathlib import Path
 
 import httpx
 import typer
-from rich.console import Console
-from rich.table import Table
-from rich import box
 
-console = Console()
+from topgun.cli.theme import console, make_table, SAGE, SMOKE, LEAF, ERR, WARN, PEARL
 app = typer.Typer(
     name="auth",
     help="Authenticate topgun and connected services.",
     add_completion=False,
     invoke_without_command=True,
+    rich_markup_mode=None,
 )
 
 def _config_dir() -> Path:
@@ -90,7 +88,7 @@ def _login_topgun():
         r.raise_for_status()
         cfg = r.json()
     except Exception as e:
-        console.print(f"[red]Cannot reach topgun API: {e}[/red]")
+        console.print(f"[{ERR}]Cannot reach topgun API: {e}[/{ERR}]")
         raise typer.Exit(1)
 
     domain = cfg.get("auth0_domain", "")
@@ -98,7 +96,7 @@ def _login_topgun():
     audience = cfg.get("auth0_audience", "")
 
     if not domain or not client_id:
-        console.print("[red]Auth0 not configured on this server.[/red]")
+        console.print(f"[{ERR}]Auth0 not configured on this server.[/{ERR}]")
         raise typer.Exit(1)
 
     # Device authorization request
@@ -116,7 +114,7 @@ def _login_topgun():
         r.raise_for_status()
         device = r.json()
     except Exception as e:
-        console.print(f"[red]Device flow failed: {e}[/red]")
+        console.print(f"[{ERR}]Device flow failed: {e}[/{ERR}]")
         raise typer.Exit(1)
 
     verification_uri = device.get("verification_uri_complete") or device.get("verification_uri")
@@ -126,9 +124,9 @@ def _login_topgun():
     expires_in = device.get("expires_in", 300)
 
     console.print()
-    console.print(f"[yellow]Open this URL in your browser:[/yellow]")
-    console.print(f"  [bold]{verification_uri}[/bold]")
-    console.print(f"[dim]  Code: {user_code}[/dim]")
+    console.print(f"[{WARN}]Open this URL in your browser:[/{WARN}]")
+    console.print(f"  [{PEARL}]{verification_uri}[/{PEARL}]")
+    console.print(f"  [{SMOKE}]Code: {user_code}[/{SMOKE}]")
     console.print()
 
     webbrowser.open(verification_uri)
@@ -154,7 +152,7 @@ def _login_topgun():
                 if "id_token" in data:
                     data["access_token"] = data["id_token"]
                 _save_auth(data)
-                console.print("[green]Authenticated.[/green]")
+                console.print(f"[{LEAF}]Authenticated.[/{LEAF}]")
                 return
             err = data.get("error", "")
             if err == "authorization_pending":
@@ -162,12 +160,12 @@ def _login_topgun():
             if err == "slow_down":
                 interval += 5
                 continue
-            console.print(f"[red]Auth error: {err}[/red]")
+            console.print(f"[{ERR}]Auth error: {err}[/{ERR}]")
             raise typer.Exit(1)
         except httpx.RequestError:
             continue
 
-    console.print("[red]Timed out waiting for authorization.[/red]")
+    console.print(f"[{ERR}]Timed out waiting for authorization.[/{ERR}]")
     raise typer.Exit(1)
 
 
@@ -176,11 +174,11 @@ def _login_backend():
     Automatically runs Auth0 login first if not already authenticated."""
     token = _access_token()
     if not token:
-        console.print("[dim]Not logged in — authenticating with topgun first...[/dim]")
+        console.print(f"[{SMOKE}]Not logged in — authenticating with topgun first...[/{SMOKE}]")
         _login_topgun()
         token = _access_token()
         if not token:
-            console.print("[red]Auth0 login failed.[/red]")
+            console.print(f"[{ERR}]Auth0 login failed.[/{ERR}]")
             raise typer.Exit(1)
         console.print()
 
@@ -188,13 +186,13 @@ def _login_backend():
     storage = cfg.get("storage", {})
     backend = storage.get("provider", "")
     if not backend:
-        console.print("[red]No backend configured. Run: topgun config set backend gdrive[/red]")
+        console.print(f"[{ERR}]No backend configured. Run: topgun config set backend gdrive[/{ERR}]")
         raise typer.Exit(1)
 
     client_id = storage.get("client_id", "")
     client_secret = storage.get("client_secret", "")
     if not client_id or not client_secret:
-        console.print("[red]Missing OAuth credentials. Run:[/red]")
+        console.print(f"[{ERR}]Missing OAuth credentials. Run:[/{ERR}]")
         console.print(f"  topgun config set backend {backend} --client-id <id> --client-secret <secret>")
         raise typer.Exit(1)
 
@@ -208,15 +206,15 @@ def _login_backend():
         r.raise_for_status()
         auth_url = r.json().get("auth_url", "")
     except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
+        console.print(f"[{ERR}]Error: {e}[/{ERR}]")
         raise typer.Exit(1)
 
     console.print()
-    console.print(f"[yellow]Opening browser for {backend} authentication...[/yellow]")
-    console.print(f"  [bold]{auth_url}[/bold]")
+    console.print(f"[{WARN}]Opening browser for {backend} authentication...[/{WARN}]")
+    console.print(f"  [{PEARL}]{auth_url}[/{PEARL}]")
     console.print()
     webbrowser.open(auth_url)
-    console.print("[dim]Complete the OAuth flow in your browser. The backend will receive the token automatically.[/dim]")
+    console.print(f"[{SMOKE}]Complete the OAuth flow in your browser.[/{SMOKE}]")
 
 
 def _login_service(name: str):
@@ -224,14 +222,14 @@ def _login_service(name: str):
     cfg = _load_config()
     connections = cfg.get("connections", {})
     if name not in connections:
-        console.print(f"[red]No connection named '{name}'. Run: topgun config set github --name {name}[/red]")
+        console.print(f"[{ERR}]No connection named '{name}'. Run: topgun config set github --name {name}[/{ERR}]")
         raise typer.Exit(1)
 
     provider = connections[name].get("provider", "")
     if provider == "github":
         _login_github(name)
     else:
-        console.print(f"[red]OAuth not yet implemented for provider: {provider}[/red]")
+        console.print(f"[{ERR}]OAuth not yet implemented for provider: {provider}[/{ERR}]")
         raise typer.Exit(1)
 
 
@@ -240,7 +238,7 @@ def _login_github(name: str):
     import os
     client_id = os.environ.get("GITHUB_CLIENT_ID", "")
     if not client_id:
-        console.print("[red]GITHUB_CLIENT_ID env var not set.[/red]")
+        console.print(f"[{ERR}]GITHUB_CLIENT_ID env var not set.[/{ERR}]")
         raise typer.Exit(1)
 
     try:
@@ -253,12 +251,12 @@ def _login_github(name: str):
         r.raise_for_status()
         device = r.json()
     except Exception as e:
-        console.print(f"[red]GitHub device flow failed: {e}[/red]")
+        console.print(f"[{ERR}]GitHub device flow failed: {e}[/{ERR}]")
         raise typer.Exit(1)
 
     console.print()
-    console.print(f"[yellow]Open:[/yellow] [bold]{device['verification_uri']}[/bold]")
-    console.print(f"[yellow]Enter code:[/yellow] [bold]{device['user_code']}[/bold]")
+    console.print(f"[{WARN}]Open:[/{WARN}] [{PEARL}]{device['verification_uri']}[/{PEARL}]")
+    console.print(f"[{WARN}]Enter code:[/{WARN}] [{PEARL}]{device['user_code']}[/{PEARL}]")
     console.print()
     webbrowser.open(device["verification_uri"])
 
@@ -287,14 +285,14 @@ def _login_github(name: str):
                     headers={"Authorization": f"Bearer {token}"},
                     timeout=10,
                 )
-                console.print(f"[green]GitHub connected as '{name}'.[/green]")
+                console.print(f"[{LEAF}]GitHub connected as '{name}'.[/{LEAF}]")
                 return
             if data.get("error") == "authorization_pending":
                 continue
         except Exception:
             continue
 
-    console.print("[red]Timed out.[/red]")
+    console.print(f"[{ERR}]Timed out.[/{ERR}]")
     raise typer.Exit(1)
 
 
@@ -306,7 +304,7 @@ def auth_logout(
     if name:
         token = _access_token()
         if not token:
-            console.print("[red]Not logged in.[/red]")
+            console.print(f"[{ERR}]Not logged in.[/{ERR}]")
             raise typer.Exit(1)
         try:
             r = httpx.delete(
@@ -315,15 +313,15 @@ def auth_logout(
                 timeout=10,
             )
             r.raise_for_status()
-            console.print(f"[green]Connection '{name}' removed.[/green]")
+            console.print(f"[{LEAF}]Connection '{name}' removed.[/{LEAF}]")
         except Exception as e:
-            console.print(f"[red]Error: {e}[/red]")
+            console.print(f"[{ERR}]Error: {e}[/{ERR}]")
         return
 
     f = _config_dir() / "auth.json"
     if f.exists():
         f.unlink()
-    console.print("[green]Logged out.[/green]")
+    console.print(f"[{LEAF}]Logged out.[/{LEAF}]")
 
 
 @app.command("status")
@@ -332,27 +330,26 @@ def auth_status():
     auth = _load_auth()
     cfg = _load_config()
 
-    table = Table(box=box.MINIMAL_DOUBLE_HEAD, show_edge=False)
-    table.add_column("Service", style="dim")
-    table.add_column("Status")
-    table.add_column("Detail", style="dim")
+    table = make_table(
+        ("Service", {"style": SMOKE}),
+        ("Status", {}),
+        ("Detail", {"style": SMOKE}),
+    )
 
     table.add_row(
         "topgun",
-        "[green]authenticated[/green]" if auth else "[red]not logged in[/red]",
+        f"[{LEAF}]authenticated[/{LEAF}]" if auth else f"[{ERR}]not logged in[/{ERR}]",
         "run: topgun auth login" if not auth else "",
     )
 
     backend = cfg.get("storage", {}).get("provider", "")
     table.add_row(
         f"backend ({backend or '—'})",
-        "[dim]configured[/dim]" if backend else "[red]not set[/red]",
+        f"[{SMOKE}]configured[/{SMOKE}]" if backend else f"[{ERR}]not set[/{ERR}]",
         "run: topgun config set backend gdrive" if not backend else "run: topgun auth login backend",
     )
 
     for name, conn in cfg.get("connections", {}).items():
-        table.add_row(name, f"[dim]{conn.get('provider', '')}[/dim]", conn.get("account", ""))
+        table.add_row(name, f"[{SMOKE}]{conn.get('provider', '')}[/{SMOKE}]", conn.get("account", ""))
 
-    console.print()
     console.print(table)
-    console.print()

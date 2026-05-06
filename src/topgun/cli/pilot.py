@@ -7,21 +7,19 @@ from pathlib import Path
 from typing import Optional
 
 import typer
-from rich import box
-from rich.console import Console
-from rich.table import Table
 
 CONFIG_FILE = Path(
     os.environ.get("TOPGUN_CONFIG", str(Path.home() / ".config/topgun/config.json"))
 )
 
-console = Console()
+from topgun.cli.theme import console, make_table, SAGE, SMOKE, LEAF, PEARL
 
 app = typer.Typer(
     name="pilot",
     help="View and manage pilots.",
     add_completion=False,
     invoke_without_command=True,
+    rich_markup_mode=None,
 )
 
 DEFAULT_PILOTS = ["maverick", "rooster", "hangman", "ice", "phoenix", "payback", "fanboy", "bob"]
@@ -82,34 +80,34 @@ def list_cmd(
     if engaged:
         envs = _get_engaged_envs()
         if not envs:
-            console.print("[dim]no pilots currently engaged[/dim]")
+            console.print(f"[{SMOKE}]no pilots currently engaged[/{SMOKE}]")
             return
 
-        table = Table(box=box.SIMPLE, show_header=True, header_style="bold", pad_edge=False)
-        table.add_column("Pilot", style="cyan", no_wrap=True)
-        table.add_column("Role", no_wrap=True)
-        table.add_column("Environment", style="dim")
+        table = make_table(
+            ("Pilot", {"style": SAGE, "no_wrap": True}),
+            ("Role", {"no_wrap": True}),
+            ("Environment", {"style": SMOKE}),
+        )
 
         for env in envs:
             name = env.get("name", "")
             env_id = env.get("id", "")[:20]
-            # Maverick always leads
-            table.add_row("maverick", "[bold]team lead[/bold]", f"{name}  {env_id}")
+            table.add_row("maverick", f"[{PEARL}]team lead[/{PEARL}]", f"{name}  {env_id}")
 
         console.print(table)
         return
 
-    table = Table(box=box.SIMPLE, show_header=True, header_style="bold", pad_edge=False)
-    table.add_column("Pilot", style="cyan", no_wrap=True)
-    table.add_column("Role", no_wrap=True)
+    table = make_table(
+        ("Pilot", {"style": SAGE, "no_wrap": True}),
+        ("Role", {"no_wrap": True}),
+    )
 
     for pilot in pilots:
-        role = "[bold]team lead[/bold]" if pilot == "maverick" else "wingman"
-        marker = " [green]✦[/green]" if pilot == default_pilot else ""
+        role = f"[{PEARL}]team lead[/{PEARL}]" if pilot == "maverick" else "wingman"
+        marker = f" [{LEAF}]✦[/{LEAF}]" if pilot == default_pilot else ""
         table.add_row(f"{pilot}{marker}", role)
 
     console.print(table)
     console.print(
-        f"\n  [dim]✦ your pilot ({default_pilot})[/dim]  "
-        "[dim]configure via ona.default_pilot in ~/.config/topgun/config.json[/dim]"
+        f"\n  [{SMOKE}]✦ your pilot ({default_pilot})[/{SMOKE}]"
     )

@@ -31,6 +31,7 @@ from topgun.cli.theme import (
     SAGE, SMOKE, LEAF, WARN, ERR, PEARL, FERN, MOSS,
 )
 from topgun.cli.timer_match import fetch_tasks, match, match_by_id, _uid
+from topgun.errors import TopgunError
 from topgun.services import timer as timer_svc
 app = typer.Typer(
     name="task",
@@ -155,7 +156,11 @@ def _resolve_task(task_arg: str) -> dict:
         raise typer.Exit(1)
 
     console.print(f"[{SMOKE}]searching for:[/{SMOKE}] {task_arg}")
-    candidates = match(task_arg)
+    try:
+        candidates = match(task_arg)
+    except TopgunError as e:
+        console.print(f"[{ERR}]error:[/{ERR}] {e}")
+        raise typer.Exit(1) from None
 
     if not candidates:
         console.print(f"[{WARN}]no matching tasks found[/{WARN}]")
@@ -584,7 +589,11 @@ def add():
     from topgun.inference.anthropic import call, load_prompt
     system = load_prompt("task_add")
     user_msg = f"Today's date: {today}\n\nTask description:\n{description}"
-    raw_json = call(prompt=user_msg, system=system, command="task_add", status_message="structuring task…")
+    try:
+        raw_json = call(prompt=user_msg, system=system, command="task_add", status_message="structuring task…")
+    except TopgunError as e:
+        console.print(f"[{ERR}]error:[/{ERR}] {e}")
+        raise typer.Exit(1) from None
 
     # Strip markdown code fences if the model wrapped the JSON.
     clean = raw_json.strip()
@@ -754,12 +763,16 @@ def edit(
     if due is not None:
         from topgun.inference.anthropic import call, load_prompt
         system = load_prompt("task_edit_date")
-        raw = call(
-            prompt=f"Today: {date.today().isoformat()}\nDate input: {due}",
-            system=system,
-            command="task_edit",
-            status_message="parsing date…",
-        )
+        try:
+            raw = call(
+                prompt=f"Today: {date.today().isoformat()}\nDate input: {due}",
+                system=system,
+                command="task_edit",
+                status_message="parsing date…",
+            )
+        except TopgunError as e:
+            console.print(f"[{ERR}]error:[/{ERR}] {e}")
+            raise typer.Exit(1) from None
         iso_due = raw.strip().strip('"')
         if iso_due == "invalid":
             console.print(f"[{ERR}]could not parse date:[/{ERR}] {due}")

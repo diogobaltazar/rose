@@ -14,6 +14,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 from rich.console import Console
 
+from topgun.errors import AuthError, InferenceAPIError
+
 load_dotenv()
 load_dotenv(Path.home() / ".topgun" / ".env", override=False)
 
@@ -27,18 +29,8 @@ _MODEL = "claude-haiku-4-5-20251001"
 _console = Console()
 
 
-class InferenceError(RuntimeError):
-    """Raised when the inference API returns a non-2xx response or is unreachable."""
-
-    def __init__(self, status_code: int, url: str, body: str, key_hint: str, base_url: str) -> None:
-        self.status_code = status_code
-        self.response_body = body
-        preview = body[:500].strip() or "(empty)"
-        super().__init__(
-            f"Inference API returned {status_code} for {url}\n"
-            f"Response: {preview}\n"
-            f"Key (last 4): {key_hint}  Base URL: {base_url}"
-        )
+# Re-export so existing imports of InferenceError from this module still work.
+InferenceError = InferenceAPIError
 
 
 def _jwt_expired(token: str) -> bool:
@@ -62,8 +54,8 @@ def _get_token() -> str:
         if api_key and not _jwt_expired(api_key):
             return api_key
 
-    raise EnvironmentError(
-        "No valid API key found. Please set TOPGUN_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY."
+    raise AuthError(
+        "no valid API key found — set TOPGUN_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY"
     )
 
 
@@ -124,11 +116,11 @@ def call(prompt: str, system: str, command: str, status_message: str = "thinking
                 timeout=60,
             )
         except httpx.ConnectError as e:
-            raise InferenceError(0, url, str(e), "(n/a)", base_url) from None
+            raise InferenceAPIError(0, url, str(e), "(n/a)", base_url) from None
     duration_ms = round((time.monotonic() - t0) * 1000)
     if not response.is_success:
         key_hint = f"…{token[-4:]}" if len(token) >= 4 else "(too short)"
-        raise InferenceError(response.status_code, url, response.text or "", key_hint, base_url)
+        raise InferenceAPIError(response.status_code, url, response.text or "", key_hint, base_url)
     data = response.json()
 
     usage = data.get("usage", {})

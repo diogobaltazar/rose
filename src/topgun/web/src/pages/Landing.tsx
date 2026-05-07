@@ -276,7 +276,7 @@ export default function Landing() {
 
       {/* Footer */}
       <footer className="relative z-10 border-t border-border-dim px-6 sm:px-12 py-6 flex items-center justify-between">
-        <span className="font-mono text-xs text-text-muted tracking-widest">AUTONOMOUS MISSION CONTROL VICTORIA</span>
+        <span className="font-mono text-xs text-text-muted tracking-widest">AUTONOMOUS MISSION CONTROL ALMA VICTORIA</span>
         <a
           href="https://github.com/diogobaltazar/TopGun"
           target="_blank"

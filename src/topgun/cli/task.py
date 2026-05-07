@@ -245,6 +245,28 @@ def _list_sort_key(t: dict) -> tuple:
     return (due or "9999-99-99", t.get("source_full", ""), t["title"])
 
 
+def _filter_sources(
+    sources: list[dict],
+    obsidian_only: bool,
+    vault_names: list[str],
+    github_only: bool,
+    repo_names: list[str],
+) -> list[dict]:
+    want_obsidian = obsidian_only or bool(vault_names)
+    want_github = github_only or bool(repo_names)
+    if not want_obsidian and not want_github:
+        return sources
+    result = []
+    for s in sources:
+        if s["type"] == "obsidian" and want_obsidian:
+            if not vault_names or any(kw.lower() in s.get("path", "").lower() for kw in vault_names):
+                result.append(s)
+        elif s["type"] == "github" and want_github:
+            if not repo_names or any(kw.lower() in s.get("repo", "").lower() for kw in repo_names):
+                result.append(s)
+    return result
+
+
 def _parse_filter(filter_str: str) -> list[str]:
     """Parse '--filter status=open,closed' into a list of status strings."""
     statuses = []
@@ -268,11 +290,20 @@ def list_cmd(
     search: Optional[str] = typer.Option(None, "--search", "-s", help="Keyword search across task titles"),
     sort: Optional[str] = typer.Option(None, "--sort", help="Sort by: title, priority, due, source, state, created_at"),
     order: Optional[str] = typer.Option(None, "--order", help="Sort order: asc or desc"),
+    obsidian: bool = typer.Option(False, "--obsidian", is_flag=True, help="Restrict to Obsidian sources only"),
+    vault: Optional[List[str]] = typer.Option(None, "--vault", help="Filter Obsidian by vault name substring (repeatable); implies --obsidian"),
+    github: bool = typer.Option(False, "--github", is_flag=True, help="Restrict to GitHub sources only"),
+    repo: Optional[List[str]] = typer.Option(None, "--repo", help="Filter GitHub by repo name substring (repeatable); implies --github"),
 ):
     """List tasks with accumulated time where recorded. Defaults to open tasks only."""
-    sources = _get_sources()
-    if not sources:
+    all_sources = _get_sources()
+    if not all_sources:
         typer.echo("no sources tracked — run: topgun task track")
+        raise typer.Exit()
+
+    sources = _filter_sources(all_sources, obsidian, vault or [], github, repo or [])
+    if not sources:
+        typer.echo("no sources match the given filters")
         raise typer.Exit()
 
     statuses = _parse_filter(filter) if filter else ["open"]
@@ -300,7 +331,7 @@ def list_cmd(
                 "state": item.get("state", "open"),
             })
     else:
-        tasks = fetch_tasks(statuses=statuses)
+        tasks = fetch_tasks(statuses=statuses, sources=sources)
         if search:
             kw = search.lower()
             tasks = [t for t in tasks if kw in t["title"].lower()]

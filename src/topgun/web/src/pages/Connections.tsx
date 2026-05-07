@@ -262,6 +262,19 @@ export default function Connections() {
         {/* ── Storage Backend ───────────────────────────── */}
         <section className="mb-8">
           <div className="font-mono text-xs text-text-muted tracking-widest uppercase mb-4">Storage Backend</div>
+          {fetching ? (
+            <div className="tac-border p-5 flex items-center justify-between">
+              <div>
+                <div className="font-mono text-xs text-amber-tac animate-pulse_amber tracking-widest">
+                  CONNECTING TO GOOGLE DRIVE…
+                </div>
+                <div className="font-mono text-xs text-text-muted mt-1">
+                  drive.google.com · verifying credentials
+                </div>
+              </div>
+              <span className="font-mono text-xs text-amber-tac animate-pulse_amber tracking-widest">···</span>
+            </div>
+          ) : (
           <div className="tac-border p-5 flex items-center justify-between">
             <div>
               <div className="font-mono text-xs text-text-primary">
@@ -271,7 +284,7 @@ export default function Connections() {
                 {status?.backend.connected ? "Connected — all user data stored here" : "No storage backend connected"}
               </div>
             </div>
-            {!fetching && (status?.backend.connected ? (
+            {status?.backend.connected ? (
               <button onClick={() => handleRemove("backend")} disabled={busy}
                 className="font-mono text-xs px-4 py-1.5 border border-red-alert text-red-alert hover:bg-red-alert/10 tracking-widest">
                 DISCONNECT
@@ -281,8 +294,9 @@ export default function Connections() {
                 className="font-mono text-xs px-4 py-1.5 border border-amber-tac text-amber-tac hover:bg-amber-tac/10 tracking-widest">
                 CONNECT
               </button>
-            ))}
+            )}
           </div>
+          )}
           {showGdriveForm && !status?.backend.connected && (
             <div className="mt-4 space-y-3">
               <p className="font-mono text-xs text-text-muted">
@@ -312,7 +326,7 @@ export default function Connections() {
         <section className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <div className="font-mono text-xs text-text-muted tracking-widest uppercase">GitHub Repositories</div>
-            {status?.backend.connected && !showGhForm && (
+            {!fetching && status?.backend.connected && !showGhForm && (
               <button onClick={() => setShowGhForm(true)}
                 className="font-mono text-xs px-3 py-1 border border-amber-tac/40 text-amber-tac/60 hover:border-amber-tac hover:text-amber-tac tracking-widest">
                 + ADD
@@ -320,7 +334,24 @@ export default function Connections() {
             )}
           </div>
 
-          {!status?.backend.connected ? (
+          {fetching ? (
+            <div className="space-y-2">
+              {[
+                "github.com · checking repository access",
+                "github.com · verifying credentials",
+              ].map((hint, i) => (
+                <div key={i} className="tac-border p-4 flex items-center justify-between">
+                  <div>
+                    <div className="font-mono text-xs text-amber-tac animate-pulse_amber tracking-widest">
+                      LOADING REPOSITORIES…
+                    </div>
+                    <div className="font-mono text-xs text-text-muted mt-1">{hint}</div>
+                  </div>
+                  <span className="font-mono text-xs text-amber-tac animate-pulse_amber tracking-widest">···</span>
+                </div>
+              ))}
+            </div>
+          ) : !status?.backend.connected ? (
             <div className="tac-border p-6 text-center">
               <p className="font-mono text-xs text-text-muted">Connect a storage backend first.</p>
             </div>

@@ -49,9 +49,20 @@ Before creating any Obsidian task, read the template from the tasks vault:
 cat <vault_path>/_templates/task.md
 ```
 
-## Step 3 — Route intelligently
+## Step 3 — Apply source filters
 
-Read the user's request and decide which sources are relevant based on their `description`. Do not query sources that are clearly unrelated.
+Before routing, check the user's request for explicit source flags. These override natural-language routing.
+
+| Flag | Effect |
+|------|--------|
+| `--obsidian` | Restrict to Obsidian sources only |
+| `--obsidian <name>` | Restrict to Obsidian sources whose `path` contains `<name>` (case-insensitive). Multiple values allowed: `--obsidian vault1 --obsidian vault2` |
+| `--github` | Restrict to GitHub sources only |
+| `--github <repo>` | Restrict to GitHub sources whose `repo` contains `<repo>` (case-insensitive, partial match). Multiple values allowed: `--github topgun --github myrepo` |
+
+Flags may be combined: `--obsidian personal --github topgun` queries one Obsidian vault and one GitHub repo.
+
+If no flags are present, route intelligently:
 
 - "Have I done groceries this week?" → personal/Obsidian only
 - "Any open issues on topgun?" → topgun GitHub repo only

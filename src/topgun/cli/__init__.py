@@ -1,3 +1,5 @@
+import os
+import time
 import typer
 from pathlib import Path
 from topgun.cli.install import install
@@ -11,6 +13,7 @@ from topgun.cli.observe import app as observe_app
 from topgun.cli.pilot import app as pilot_app
 from topgun.cli.session import app as session_app
 from topgun.cli.task import app as task_app
+from topgun.cli.theme import console, SMOKE
 
 app = typer.Typer(
     name="topgun",
@@ -22,8 +25,22 @@ app = typer.Typer(
 )
 
 
+def _warn_if_no_api_key() -> None:
+    for var in ("TOPGUN_ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY"):
+        if os.environ.get(var, "").strip():
+            return
+    with console.status(
+        f"[{SMOKE}]no api key found — some operations unavailable  "
+        f"(set TOPGUN_ANTHROPIC_API_KEY)[/{SMOKE}]",
+        spinner="dots",
+        spinner_style=SMOKE,
+    ):
+        time.sleep(1.2)
+
+
 @app.callback()
 def main(ctx: typer.Context):
+    _warn_if_no_api_key()
     if ctx.invoked_subcommand is None:
         typer.echo(ctx.get_help())
 

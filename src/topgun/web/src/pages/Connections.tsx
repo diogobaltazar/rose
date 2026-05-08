@@ -4,7 +4,8 @@ import { useNavigate } from "react-router-dom";
 import { useToken } from "../hooks/useToken";
 import NavBar from "../components/NavBar";
 import HUDGrid from "../components/HUDGrid";
-import { addGithubRepo, removeGithubRepo, saveLlmConfig, fetchLlmConfig, verifyLlmConfig } from "../api";
+import { addGithubRepo, removeGithubRepo, saveLlmConfig, fetchLlmConfig, verifyLlmConfig, getConnections, peekCache, invalidateCache } from "../api";
+import type { ConnectionStatus } from "../api";
 import ChatDialog from "../components/ChatDialog";
 import ProviderPicker from "../components/ProviderPicker";
 
@@ -153,20 +154,6 @@ function HelpIcon({ onClick }: { onClick: () => void }) {
   );
 }
 
-interface GithubRepo { name: string; repo: string; authenticated: boolean; open_issues: number | null; open_prs: number | null; }
-interface ConnectionStatus {
-  backend: { provider: string; connected: boolean; file_count: number | null };
-  llm: { connected: boolean };
-  services: { name: string; provider: string; account: string }[];
-  github_repos: GithubRepo[];
-}
-
-async function fetchConnections(token: string): Promise<ConnectionStatus> {
-  const r = await fetch(`${BASE}/connect`, { headers: { Authorization: `Bearer ${token}` } });
-  if (!r.ok) throw new Error("fetch failed");
-  return r.json();
-}
-
 async function initBackendAuth(token: string, clientId: string, clientSecret: string): Promise<string> {
   const params = new URLSearchParams({ client_id: clientId, client_secret: clientSecret });
   const r = await fetch(`${BASE}/connect/backend/init?${params}`, {
@@ -188,8 +175,8 @@ export default function Connections() {
   const { isAuthenticated, isLoading, loginWithRedirect } = useAuth0();
   const { getToken } = useToken();
   const navigate = useNavigate();
-  const [status, setStatus] = useState<ConnectionStatus | null>(null);
-  const [fetching, setFetching] = useState(true);
+  const [status, setStatus] = useState<ConnectionStatus | null>(() => peekCache<ConnectionStatus>("connections"));
+  const [fetching, setFetching] = useState(!peekCache("connections"));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [token, setToken] = useState<string>("");
@@ -229,12 +216,13 @@ export default function Connections() {
     if (!isLoading && !isAuthenticated) loginWithRedirect();
   }, [isAuthenticated, isLoading, loginWithRedirect]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (invalidate = false) => {
+    if (invalidate) invalidateCache("connections");
     setFetching(true);
     try {
       const tok = await getToken();
       setToken(tok);
-      setStatus(await fetchConnections(tok));
+      setStatus(await getConnections(tok));
     } catch (e) {
       setError(String(e));
     } finally {
@@ -279,7 +267,7 @@ export default function Connections() {
       set(2, { status: "ok", detail: "Encrypted and stored" });
       await new Promise(r => setTimeout(r, 800));
       resetLlmForm();
-      await load();
+      await load(true);
     } catch (e) {
       const msg = String(e).replace(/^Error:\s*/, "");
       setLlmChecks(prev => {
@@ -303,7 +291,7 @@ export default function Connections() {
 
   const handleRemove = async (name: string) => {
     setBusy(true);
-    try { await removeConnection(await getToken(), name); await load(); }
+    try { await removeConnection(await getToken(), name); await load(true); }
     catch (e) { setError(String(e)); }
     finally { setBusy(false); }
   };
@@ -333,7 +321,7 @@ export default function Connections() {
       setGhChecks(prev => prev ? [...prev.slice(0, -1), { label: "Saving credentials", status: "ok", detail: "Encrypted and stored" }] : prev);
       await new Promise(r => setTimeout(r, 800));
       resetGhForm();
-      await load();
+      await load(true);
     } catch (e) {
       setGhChecks(prev => prev ? [...prev.slice(0, -1), { label: "Saving credentials", status: "fail", detail: String(e) }] : prev);
     }
@@ -342,7 +330,7 @@ export default function Connections() {
 
   const handleRemoveGhRepo = async (name: string) => {
     setBusy(true);
-    try { await removeGithubRepo(await getToken(), name); await load(); }
+    try { await removeGithubRepo(await getToken(), name); await load(true); }
     catch (e) { setError(String(e)); }
     finally { setBusy(false); }
   };

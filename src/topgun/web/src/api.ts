@@ -120,3 +120,61 @@ export async function removeGithubRepo(token: string, name: string): Promise<voi
   if (!r.ok) throw new Error("github repo remove failed");
   invalidateCache("intel-list", "intel-stats");
 }
+
+export interface LlmConfig { api_key: string; base_url?: string; proxy_header?: string; proxy_value?: string; }
+
+export async function fetchLlmConfig(token: string): Promise<LlmConfig> {
+  const r = await authFetch(`${BASE}/connect/llm`, token);
+  if (!r.ok) throw new Error("llm config fetch failed");
+  return r.json();
+}
+
+export async function verifyLlmConfig(token: string, config: LlmConfig): Promise<void> {
+  const r = await authFetch(`${BASE}/connect/llm/verify`, token, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(config),
+  });
+  if (!r.ok) {
+    const detail = (await r.json().catch(() => ({}))).detail ?? "Verification failed";
+    throw new Error(detail);
+  }
+}
+
+export async function saveLlmConfig(token: string, config: LlmConfig): Promise<void> {
+  const r = await authFetch(`${BASE}/connect/llm`, token, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(config),
+  });
+  if (!r.ok) throw new Error(`LLM config save failed: ${await r.text()}`);
+}
+
+export interface ChatMessage { role: "user" | "assistant"; content: string; }
+
+export async function askAssistant(token: string, messages: ChatMessage[], system?: string): Promise<string> {
+  const r = await authFetch(`${BASE}/ask`, token, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages, system: system ?? "" }),
+  });
+  if (!r.ok) throw new Error(`Ask failed: ${await r.text()}`);
+  return (await r.json()).response;
+}
+
+export interface GithubRepo { name: string; repo: string; authenticated: boolean; open_issues: number | null; open_prs: number | null; }
+export interface ConnectionStatus {
+  backend: { provider: string; connected: boolean; file_count: number | null };
+  llm: { connected: boolean };
+  services: { name: string; provider: string; account: string }[];
+  github_repos: GithubRepo[];
+}
+
+export async function getConnections(token: string): Promise<ConnectionStatus> {
+  return cached("connections", async () => {
+    const r = await authFetch(`${BASE}/connect`, token);
+    if (!r.ok) throw new Error("fetch failed");
+    return r.json();
+  });
+}
+
+export async function fetchDocs(slug: string): Promise<string> {
+  const r = await fetch(`${BASE}/docs/${encodeURIComponent(slug)}`);
+  if (!r.ok) throw new Error("doc not found");
+  return r.text();
+}

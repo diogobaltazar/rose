@@ -7,6 +7,7 @@ const BASE_NAV = [
   { label: "INTEL", path: "/deck/intel" },
   { label: "PILOTS", path: "/deck/pilots" },
   { label: "LOGBOOK", path: "/deck/logbook" },
+  { label: "DOCS", path: "/deck/docs" },
 ];
 
 export default function NavBar() {

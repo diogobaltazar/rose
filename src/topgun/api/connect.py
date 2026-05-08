@@ -12,6 +12,7 @@ encryption_key = HMAC(BACKEND_SECRET, auth0_sub)
 
 import json
 import os
+import re
 import secrets
 from typing import Any
 
@@ -39,6 +40,9 @@ GITHUB_REDIRECT_URI = os.environ.get(
 def _gdrive_key(sub: str) -> str:
     return f"user:gdrive:{sub}"
 
+def _llm_key(sub: str) -> str:
+    return f"user:llm:{sub}"
+
 def _cred_key(sub: str, name: str) -> str:
     return f"creds:{sub}:{name}"
 
@@ -60,6 +64,78 @@ def _get_token(sub: str, name: str) -> str | None:
     if not encrypted:
         return None
     return decrypt_token(encrypted, sub)
+
+
+# ── GitHub stats helpers ──────────────────────────────────────────────────────
+
+def _gh_count(pat: str, url: str) -> int | None:
+    try:
+        resp = httpx.get(url, headers={"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github+json"}, params={"state": "open", "per_page": 1}, timeout=8)
+        if not resp.is_success:
+            return None
+        link = resp.headers.get("link", "")
+        m = re.search(r'page=(\d+)>; rel="last"', link)
+        return int(m.group(1)) if m else len(resp.json())
+    except Exception:
+        return None
+
+
+def _gh_stats(pat: str, repo: str) -> dict:
+    base = f"https://api.github.com/repos/{repo}"
+    return {"open_issues": _gh_count(pat, f"{base}/issues"), "open_prs": _gh_count(pat, f"{base}/pulls")}
+
+
+# ── LLM provider ─────────────────────────────────────────────────────────────
+
+class LlmConfigBody(BaseModel):
+    api_key: str
+    base_url: str = ""
+    proxy_header: str = ""
+    proxy_value: str = ""
+
+
+@router.get("/llm")
+async def get_llm_config(auth: dict | None = Depends(require_auth)) -> dict:
+    if not auth:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    encrypted = get_redis().get(_llm_key(auth["sub"]))
+    if not encrypted:
+        raise HTTPException(status_code=404, detail="No LLM config found")
+    return json.loads(decrypt_token(encrypted, auth["sub"]))
+
+
+@router.post("/llm/verify")
+async def verify_llm(body: LlmConfigBody, auth: dict | None = Depends(require_auth)) -> dict[str, str]:
+    """Test LLM credentials without saving."""
+    if not auth:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    base_url = (body.base_url.strip() or "https://api.anthropic.com").rstrip("/")
+    headers: dict[str, str] = {
+        "authorization": f"Bearer {body.api_key}",
+        "content-type": "application/json",
+        "anthropic-version": "2023-06-01",
+    }
+    if body.proxy_header and body.proxy_value:
+        headers[body.proxy_header] = body.proxy_value
+    req_body = {"model": "claude-haiku-4-5-20251001", "max_tokens": 8, "messages": [{"role": "user", "content": "Hi"}]}
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(f"{base_url}/v1/messages", headers=headers, content=json.dumps(req_body).encode(), timeout=60)
+        resp.raise_for_status()
+    except httpx.ConnectError as e:
+        raise HTTPException(status_code=502, detail=f"Connection failed: {e}")
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=502, detail=e.response.text)
+    return {"status": "ok"}
+
+
+@router.post("/llm")
+async def connect_llm(body: LlmConfigBody, auth: dict | None = Depends(require_auth)) -> dict[str, str]:
+    if not auth:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    config = {"api_key": body.api_key, "base_url": body.base_url, "proxy_header": body.proxy_header, "proxy_value": body.proxy_value}
+    get_redis().set(_llm_key(auth["sub"]), encrypt_token(json.dumps(config), auth["sub"]))
+    return {"status": "connected"}
 
 
 # ── GitHub OAuth ──────────────────────────────────────────────────────────────
@@ -249,12 +325,15 @@ async def list_connections(
     sub = auth["sub"]
     r = get_redis()
     backend_connected = bool(r.get(_gdrive_key(sub)))
+    llm_connected = bool(r.get(_llm_key(sub)))
 
     services = []
     github_repos = []
+    file_count: int | None = None
     if backend_connected:
         try:
-            config = get_storage(auth).read_json("config.json")
+            storage = get_storage(auth)
+            config = storage.read_json("config.json")
             for name, conn in config.get("connections", {}).items():
                 services.append({
                     "name": name,
@@ -263,16 +342,21 @@ async def list_connections(
                     "authenticated": bool(_get_token(sub, name)),
                 })
             for name, repo_config in config.get("github_repos", {}).items():
-                github_repos.append({
-                    "name": name,
-                    "repo": repo_config.get("repo", ""),
-                    "authenticated": bool(r.get(_github_repo_key(sub, name))),
-                })
+                repo = repo_config.get("repo", "")
+                pat_enc = r.get(_github_repo_key(sub, name))
+                pat = decrypt_token(pat_enc, sub) if pat_enc else None
+                stats = _gh_stats(pat, repo) if pat else {"open_issues": None, "open_prs": None}
+                github_repos.append({"name": name, "repo": repo, "authenticated": bool(pat_enc), **stats})
+            try:
+                file_count = storage.file_count()
+            except Exception:
+                pass
         except Exception:
             pass
 
     return {
-        "backend": {"provider": "gdrive", "connected": backend_connected},
+        "backend": {"provider": "gdrive", "connected": backend_connected, "file_count": file_count},
+        "llm": {"connected": llm_connected},
         "services": services,
         "github_repos": github_repos,
     }
@@ -290,6 +374,9 @@ async def remove_connection(
     r = get_redis()
     if name == "backend":
         r.delete(_gdrive_key(sub))
+        return
+    if name == "llm":
+        r.delete(_llm_key(sub))
         return
     r.delete(_cred_key(sub, name))
     try:

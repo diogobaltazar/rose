@@ -4,7 +4,37 @@ import { useNavigate } from "react-router-dom";
 import { useToken } from "../hooks/useToken";
 import NavBar from "../components/NavBar";
 import HUDGrid from "../components/HUDGrid";
-import { addGithubRepo, removeGithubRepo } from "../api";
+import { addGithubRepo, removeGithubRepo, saveLlmConfig, fetchLlmConfig, verifyLlmConfig, getConnections, peekCache, invalidateCache } from "../api";
+import type { ConnectionStatus } from "../api";
+import ChatDialog from "../components/ChatDialog";
+import ProviderPicker from "../components/ProviderPicker";
+
+// ── Provider catalogues ───────────────────────────────────────────────────────
+
+const LLM_PROVIDERS = [
+  { id: "anthropic",  name: "Anthropic",     detail: "Claude Haiku · Sonnet · Opus",  available: true },
+  { id: "openai",     name: "OpenAI",        detail: "GPT-4o · o1 · o3",              available: false },
+  { id: "google",     name: "Google",        detail: "Gemini 2.5 Pro · Flash",         available: false },
+  { id: "mistral",    name: "Mistral",       detail: "Large · Codestral",              available: false },
+  { id: "av-llm",     name: "ALMA VICTORIA", detail: "Managed · Zero configuration",  available: false, enterprise: true },
+];
+
+const STORAGE_PROVIDERS = [
+  { id: "gdrive",     name: "Google Drive",  detail: "Per-user encrypted storage",    available: true },
+  { id: "icloud",     name: "iCloud Drive",  detail: "Apple CloudKit",                available: false },
+  { id: "s3",         name: "AWS S3",        detail: "Bucket-based storage",          available: false },
+  { id: "av-storage", name: "ALMA VICTORIA", detail: "Managed · Zero configuration",  available: false, enterprise: true },
+];
+
+const INTEL_SOURCES = [
+  { id: "github",    name: "GitHub",        detail: "Issues · PRs · Discussions",    available: true },
+  { id: "gdrive",    name: "Google Drive",  detail: "Docs · Sheets · Slides",        available: true },
+  { id: "mcp",       name: "MCP Server",    detail: "Any MCP-compatible data source",available: false },
+  { id: "gitlab",    name: "GitLab",        detail: "Issues · MRs",                  available: false },
+  { id: "notion",    name: "Notion",        detail: "Pages · Databases",             available: false },
+  { id: "icloud",    name: "iCloud",        detail: "Notes · Drive",                 available: false },
+  { id: "av-intel",  name: "ALMA VICTORIA", detail: "Managed · Zero configuration",  available: false, enterprise: true },
+];
 
 // ── GitHub token verification ─────────────────────────────────────────────────
 
@@ -93,17 +123,35 @@ function CheckRow({ check }: { check: Check }) {
 
 const BASE = "/api";
 
-interface GithubRepo { name: string; repo: string; authenticated: boolean; }
-interface ConnectionStatus {
-  backend: { provider: string; connected: boolean };
-  services: { name: string; provider: string; account: string }[];
-  github_repos: GithubRepo[];
+// ── Proxy header field ────────────────────────────────────────────────────────
+
+const KNOWN_PROXY_HEADERS = ["x-api-key", "x-goog-api-key", "api-key"];
+
+function ProxyHeaderField({ header, value, onHeaderChange, onValueChange }: { header: string; value: string; onHeaderChange: (v: string) => void; onValueChange: (v: string) => void; }) {
+  const isKnown = KNOWN_PROXY_HEADERS.includes(header);
+  const selectVal = header === "" ? "" : isKnown ? header : "__custom__";
+  const handleSelect = (v: string) => { if (v === "") onHeaderChange(""); else if (v === "__custom__") onHeaderChange(" "); else onHeaderChange(v); };
+  return (
+    <div className="space-y-2 pl-2 border-l border-border-dim">
+      <div className="font-mono text-xs text-text-muted">Proxy header name</div>
+      <select value={selectVal} onChange={e => handleSelect(e.target.value)} className="w-full bg-card border border-border-dim px-3 py-1.5 font-mono text-xs text-text-primary focus:outline-none focus:border-amber-tac">
+        <option value="">— none —</option>
+        {KNOWN_PROXY_HEADERS.map(h => <option key={h} value={h}>{h}</option>)}
+        <option value="__custom__">Custom…</option>
+      </select>
+      {!isKnown && header !== "" && <input type="text" placeholder="Custom header name" value={header.trim()} onChange={e => onHeaderChange(e.target.value)} className="w-full bg-card border border-border-dim px-3 py-1.5 font-mono text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-amber-tac" />}
+      <input type="text" placeholder="Header value (e.g. claude)" value={value} onChange={e => onValueChange(e.target.value)} className="w-full bg-card border border-border-dim px-3 py-1.5 font-mono text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-amber-tac" />
+    </div>
+  );
 }
 
-async function fetchConnections(token: string): Promise<ConnectionStatus> {
-  const r = await fetch(`${BASE}/connect`, { headers: { Authorization: `Bearer ${token}` } });
-  if (!r.ok) throw new Error("fetch failed");
-  return r.json();
+// ── Help icon ─────────────────────────────────────────────────────────────────
+function HelpIcon({ onClick }: { onClick: () => void }) {
+  return (
+    <button onClick={onClick}
+      className="font-mono text-xs w-5 h-5 border border-amber-tac/40 text-amber-tac/60 hover:border-amber-tac hover:text-amber-tac flex items-center justify-center transition-colors"
+      title="Ask AI assistant">?</button>
+  );
 }
 
 async function initBackendAuth(token: string, clientId: string, clientSecret: string): Promise<string> {
@@ -127,10 +175,29 @@ export default function Connections() {
   const { isAuthenticated, isLoading, loginWithRedirect } = useAuth0();
   const { getToken } = useToken();
   const navigate = useNavigate();
-  const [status, setStatus] = useState<ConnectionStatus | null>(null);
-  const [fetching, setFetching] = useState(true);
+  const [status, setStatus] = useState<ConnectionStatus | null>(() => peekCache<ConnectionStatus>("connections"));
+  const [fetching, setFetching] = useState(!peekCache("connections"));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [token, setToken] = useState<string>("");
+
+  // LLM form
+  const [showLlmForm, setShowLlmForm] = useState(false);
+  const [llmApiKey, setLlmApiKey] = useState("");
+  const [llmBaseUrl, setLlmBaseUrl] = useState("");
+  const [llmProxyHeader, setLlmProxyHeader] = useState("");
+  const [llmProxyValue, setLlmProxyValue] = useState("");
+  const [llmBusy, setLlmBusy] = useState(false);
+  const [llmChecks, setLlmChecks] = useState<Check[] | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // Provider selection
+  const [selectedLlm, setSelectedLlm] = useState("anthropic");
+  const [selectedBackend, setSelectedBackend] = useState("gdrive");
+  const [selectedIntelSource, setSelectedIntelSource] = useState("github");
+
+  // Chat dialog
+  const [chat, setChat] = useState<{ question: string; title: string } | null>(null);
 
   // GDrive form
   const [showGdriveForm, setShowGdriveForm] = useState(false);
@@ -149,11 +216,13 @@ export default function Connections() {
     if (!isLoading && !isAuthenticated) loginWithRedirect();
   }, [isAuthenticated, isLoading, loginWithRedirect]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (invalidate = false) => {
+    if (invalidate) invalidateCache("connections");
     setFetching(true);
     try {
-      const token = await getToken();
-      setStatus(await fetchConnections(token));
+      const tok = await getToken();
+      setToken(tok);
+      setStatus(await getConnections(tok));
     } catch (e) {
       setError(String(e));
     } finally {
@@ -171,6 +240,44 @@ export default function Connections() {
     }
   }, [load]);
 
+  const resetLlmForm = () => {
+    setShowLlmForm(false); setShowAdvanced(false); setLlmChecks(null);
+    setLlmApiKey(""); setLlmBaseUrl(""); setLlmProxyHeader(""); setLlmProxyValue("");
+  };
+
+  const handleSaveLlm = async () => {
+    if (!llmApiKey) return;
+    const cfg = { api_key: llmApiKey, base_url: llmBaseUrl, proxy_header: llmProxyHeader.trim(), proxy_value: llmProxyValue };
+    setLlmBusy(true); setError(null);
+    setLlmChecks([
+      { label: "Connecting to provider", status: "checking" },
+      { label: "Verifying credentials", status: "pending" },
+      { label: "Saving credentials", status: "pending" },
+    ]);
+    const set = (i: number, patch: Partial<Check>) =>
+      setLlmChecks(prev => prev ? prev.map((c, j) => j === i ? { ...c, ...patch } : c) : prev);
+    try {
+      const tok = await getToken();
+      set(0, { status: "ok", detail: cfg.base_url || "api.anthropic.com" });
+      set(1, { status: "checking" });
+      await verifyLlmConfig(tok, cfg);
+      set(1, { status: "ok", detail: "Authenticated" });
+      set(2, { status: "checking" });
+      await saveLlmConfig(tok, cfg);
+      set(2, { status: "ok", detail: "Encrypted and stored" });
+      await new Promise(r => setTimeout(r, 800));
+      resetLlmForm();
+      await load(true);
+    } catch (e) {
+      const msg = String(e).replace(/^Error:\s*/, "");
+      setLlmChecks(prev => {
+        if (!prev) return prev;
+        const idx = prev.findIndex(c => c.status === "checking" || c.status === "pending");
+        return prev.map((c, i) => i === (idx >= 0 ? idx : 1) ? { ...c, status: "fail", detail: msg } : c);
+      });
+    } finally { setLlmBusy(false); }
+  };
+
   const handleConnectBackend = async () => {
     if (!gdriveClientId || !gdriveClientSecret) { setShowGdriveForm(true); return; }
     setBusy(true); setError(null);
@@ -184,7 +291,7 @@ export default function Connections() {
 
   const handleRemove = async (name: string) => {
     setBusy(true);
-    try { await removeConnection(await getToken(), name); await load(); }
+    try { await removeConnection(await getToken(), name); await load(true); }
     catch (e) { setError(String(e)); }
     finally { setBusy(false); }
   };
@@ -214,7 +321,7 @@ export default function Connections() {
       setGhChecks(prev => prev ? [...prev.slice(0, -1), { label: "Saving credentials", status: "ok", detail: "Encrypted and stored" }] : prev);
       await new Promise(r => setTimeout(r, 800));
       resetGhForm();
-      await load();
+      await load(true);
     } catch (e) {
       setGhChecks(prev => prev ? [...prev.slice(0, -1), { label: "Saving credentials", status: "fail", detail: String(e) }] : prev);
     }
@@ -223,7 +330,7 @@ export default function Connections() {
 
   const handleRemoveGhRepo = async (name: string) => {
     setBusy(true);
-    try { await removeGithubRepo(await getToken(), name); await load(); }
+    try { await removeGithubRepo(await getToken(), name); await load(true); }
     catch (e) { setError(String(e)); }
     finally { setBusy(false); }
   };
@@ -259,9 +366,85 @@ export default function Connections() {
           </div>
         )}
 
+        {/* ── AI Provider ───────────────────────────────── */}
+        <section className="mb-8">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="font-mono text-xs text-text-muted tracking-widest uppercase">AI Provider</div>
+          </div>
+          <p className="font-mono text-xs text-text-muted/70 mb-4 leading-relaxed">
+            Powers the AI assistant available throughout the platform. Your API key is encrypted and stored per user.
+          </p>
+          <ProviderPicker providers={LLM_PROVIDERS} selected={selectedLlm} onSelect={setSelectedLlm} />
+          {fetching ? (
+            <div className="tac-border p-5 flex items-center justify-between">
+              <div><div className="font-mono text-xs text-amber-tac animate-pulse_amber tracking-widest">CHECKING…</div></div>
+              <span className="font-mono text-xs text-amber-tac animate-pulse_amber tracking-widest">···</span>
+            </div>
+          ) : (
+            <div className="tac-border p-5 flex items-center justify-between">
+              <div>
+                <div className="font-mono text-xs text-text-primary">{status?.llm?.connected ? "ANTHROPIC" : "NOT CONFIGURED"}</div>
+                <div className="font-mono text-xs text-text-muted mt-1">
+                  {status?.llm?.connected ? "AI assistant active — click ? on any section to ask questions" : "Configure an API key to enable the AI assistant"}
+                </div>
+              </div>
+              {status?.llm?.connected ? (
+                <div className="flex gap-2">
+                  <button onClick={async () => {
+                    setShowLlmForm(v => !v);
+                    if (!showLlmForm) {
+                      try {
+                        const cfg = await fetchLlmConfig(await getToken());
+                        setLlmApiKey(cfg.api_key ?? ""); setLlmBaseUrl(cfg.base_url ?? "");
+                        setLlmProxyHeader(cfg.proxy_header ?? ""); setLlmProxyValue(cfg.proxy_value ?? "");
+                        if (cfg.proxy_header || cfg.proxy_value) setShowAdvanced(true);
+                      } catch { /* leave blank */ }
+                    }
+                  }} disabled={busy} className="font-mono text-xs px-4 py-1.5 border border-amber-tac/40 text-amber-tac/60 hover:border-amber-tac hover:text-amber-tac tracking-widest">UPDATE</button>
+                  <button onClick={() => handleRemove("llm")} disabled={busy} className="font-mono text-xs px-4 py-1.5 border border-red-alert text-red-alert hover:bg-red-alert/10 tracking-widest">DISCONNECT</button>
+                </div>
+              ) : (
+                <button onClick={() => setShowLlmForm(true)} disabled={busy} className="font-mono text-xs px-4 py-1.5 border border-amber-tac text-amber-tac hover:bg-amber-tac/10 tracking-widest">CONNECT</button>
+              )}
+            </div>
+          )}
+          {showLlmForm && (
+            <div className="mt-4 space-y-3">
+              {llmChecks ? (
+                <>
+                  <p className="font-mono text-xs text-text-muted tracking-widest uppercase mb-1">Verifying</p>
+                  <div className="space-y-2">{llmChecks.map((c, i) => <CheckRow key={i} check={c} />)}</div>
+                  {!llmBusy && llmChecks.some(c => c.status === "fail") && (
+                    <button onClick={() => setLlmChecks(null)} className="font-mono text-xs px-3 py-1 border border-border-dim text-text-muted hover:text-amber-tac tracking-widest mt-2">← EDIT</button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p className="font-mono text-xs text-text-muted">Enter your API key. Credentials are verified before saving.</p>
+                  <input type="password" placeholder="API key (sk-ant-… or Bearer token)" value={llmApiKey} onChange={e => setLlmApiKey(e.target.value)} className="w-full bg-card border border-border-dim px-3 py-1.5 font-mono text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-amber-tac" />
+                  <input type="text" placeholder="Base URL (optional — leave blank for api.anthropic.com)" value={llmBaseUrl} onChange={e => setLlmBaseUrl(e.target.value)} className="w-full bg-card border border-border-dim px-3 py-1.5 font-mono text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-amber-tac" />
+                  <button onClick={() => setShowAdvanced(v => !v)} className="font-mono text-xs text-text-muted hover:text-amber-tac tracking-widest">{showAdvanced ? "▲ HIDE ADVANCED" : "▼ ADVANCED (proxy headers)"}</button>
+                  {showAdvanced && <ProxyHeaderField header={llmProxyHeader} value={llmProxyValue} onHeaderChange={setLlmProxyHeader} onValueChange={setLlmProxyValue} />}
+                  <div className="flex gap-2">
+                    <button onClick={handleSaveLlm} disabled={llmBusy || !llmApiKey} className="font-mono text-xs px-4 py-1.5 border border-amber-tac text-amber-tac hover:bg-amber-tac/10 tracking-widest disabled:opacity-40">VERIFY &amp; SAVE</button>
+                    <button onClick={resetLlmForm} className="font-mono text-xs px-4 py-1.5 border border-border-dim text-text-muted hover:text-text-secondary tracking-widest">CANCEL</button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </section>
+
         {/* ── Storage Backend ───────────────────────────── */}
         <section className="mb-8">
-          <div className="font-mono text-xs text-text-muted tracking-widest uppercase mb-4">Storage Backend</div>
+          <div className="flex items-center gap-2 mb-1">
+            <div className="font-mono text-xs text-text-muted tracking-widest uppercase">Storage Backend</div>
+            {status?.llm?.connected && !fetching && <HelpIcon onClick={() => setChat({ question: "How does the Storage Backend work in ALMA VICTORIA TOPGUN? What is Google Drive used for and how do I set it up?", title: "Storage Backend" })} />}
+          </div>
+          <p className="font-mono text-xs text-text-muted/70 mb-4 leading-relaxed">
+            Where all your data lives — missions, timers, configuration, and intel. You supply the OAuth credentials from your own cloud project so you remain in full control of your data.
+          </p>
+          <ProviderPicker providers={STORAGE_PROVIDERS} selected={selectedBackend} onSelect={setSelectedBackend} />
           {fetching ? (
             <div className="tac-border p-5 flex items-center justify-between">
               <div>
@@ -277,11 +460,14 @@ export default function Connections() {
           ) : (
           <div className="tac-border p-5 flex items-center justify-between">
             <div>
-              <div className="font-mono text-xs text-text-primary">
-                {status?.backend.connected ? "GOOGLE DRIVE" : "NOT CONFIGURED"}
+              <div className="flex items-center gap-2">
+                {status?.backend.connected && <span className="w-2 h-2 rounded-full bg-green-live shrink-0" />}
+                <span className="font-mono text-xs text-text-primary">{status?.backend.connected ? "GOOGLE DRIVE" : "NOT CONFIGURED"}</span>
               </div>
               <div className="font-mono text-xs text-text-muted mt-1">
-                {status?.backend.connected ? "Connected — all user data stored here" : "No storage backend connected"}
+                {status?.backend.connected
+                  ? status.backend.file_count != null ? `${status.backend.file_count} ${status.backend.file_count === 1 ? "file" : "files"}` : "Connected"
+                  : "No storage backend connected"}
               </div>
             </div>
             {status?.backend.connected ? (
@@ -324,38 +510,36 @@ export default function Connections() {
 
         {/* ── GitHub Repositories ───────────────────────── */}
         <section className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <div className="font-mono text-xs text-text-muted tracking-widest uppercase">GitHub Repositories</div>
-            {!fetching && status?.backend.connected && !showGhForm && (
-              <button onClick={() => setShowGhForm(true)}
-                className="font-mono text-xs px-3 py-1 border border-amber-tac/40 text-amber-tac/60 hover:border-amber-tac hover:text-amber-tac tracking-widest">
-                + ADD
-              </button>
-            )}
+          <div className="flex items-center gap-2 mb-1">
+            <div className="font-mono text-xs text-text-muted tracking-widest uppercase">Intel Knowledge Base Sources</div>
+            {status?.llm?.connected && !fetching && <HelpIcon onClick={() => setChat({ question: "What is the Intel Knowledge Base in ALMA VICTORIA TOPGUN? How do intel sources work and what gets imported?", title: "Intel Knowledge Base" })} />}
           </div>
+          <p className="font-mono text-xs text-text-muted/70 mb-4 leading-relaxed">
+            Connect the external sources that feed your Intel deck — issues, documents, and knowledge that the autonomous agents use as mission context.
+          </p>
+          <ProviderPicker providers={INTEL_SOURCES} selected={selectedIntelSource} onSelect={id => { setSelectedIntelSource(id); setShowGhForm(false); setGhChecks(null); }} />
+          {!fetching && status?.backend.connected && selectedIntelSource === "github" && !showGhForm && (
+            <div className="flex justify-end mb-2">
+              <button onClick={() => setShowGhForm(true)} className="font-mono text-xs px-3 py-1 border border-amber-tac/40 text-amber-tac/60 hover:border-amber-tac hover:text-amber-tac tracking-widest">+ ADD</button>
+            </div>
+          )}
 
           {fetching ? (
-            <div className="space-y-2">
-              {[
-                "github.com · checking repository access",
-                "github.com · verifying credentials",
-              ].map((hint, i) => (
-                <div key={i} className="tac-border p-4 flex items-center justify-between">
-                  <div>
-                    <div className="font-mono text-xs text-amber-tac animate-pulse_amber tracking-widest">
-                      LOADING REPOSITORIES…
-                    </div>
-                    <div className="font-mono text-xs text-text-muted mt-1">{hint}</div>
-                  </div>
-                  <span className="font-mono text-xs text-amber-tac animate-pulse_amber tracking-widest">···</span>
-                </div>
-              ))}
+            <div className="tac-border p-4 flex items-center justify-between">
+              <div className="font-mono text-xs text-amber-tac animate-pulse_amber tracking-widest">LOADING…</div>
+              <span className="font-mono text-xs text-amber-tac animate-pulse_amber tracking-widest">···</span>
             </div>
           ) : !status?.backend.connected ? (
-            <div className="tac-border p-6 text-center">
-              <p className="font-mono text-xs text-text-muted">Connect a storage backend first.</p>
+            <div className="tac-border p-6 text-center"><p className="font-mono text-xs text-text-muted">Connect a storage backend first.</p></div>
+          ) : selectedIntelSource === "gdrive" ? (
+            <div className="tac-border p-5 flex items-center justify-between">
+              <div>
+                <div className="font-mono text-xs text-text-primary">{status?.backend.connected ? "GOOGLE DRIVE" : "NOT CONNECTED"}</div>
+                <div className="font-mono text-xs text-text-muted mt-1">{status?.backend.connected ? "Documents in your topgun/ Drive folder are available as intel sources" : "Connect Google Drive as your storage backend first"}</div>
+              </div>
+              {status?.backend.connected && <span className="font-mono text-[10px] text-green-live border border-green-live/30 px-2 py-0.5 tracking-widest">ACTIVE</span>}
             </div>
-          ) : (
+          ) : selectedIntelSource === "github" ? (
             <>
               {showGhForm && (
                 <div className="tac-border p-4 mb-3 space-y-3">
@@ -412,9 +596,13 @@ export default function Connections() {
                       <div>
                         <div className="flex items-center gap-3">
                           <span className="font-mono text-xs px-2 py-0.5 border border-border-dim text-text-muted tracking-widest uppercase">GH</span>
+                          <span className="w-2 h-2 rounded-full bg-green-live shrink-0" />
                           <span className="font-mono text-xs text-text-primary">{r.repo}</span>
                         </div>
-                        <div className="font-mono text-xs text-text-muted mt-1">{r.name}</div>
+                        <div className="flex items-center gap-4 mt-1">
+                          {r.open_issues != null && <span className="font-mono text-xs text-text-muted">{r.open_issues} {r.open_issues === 1 ? "issue" : "issues"}</span>}
+                          {r.open_prs != null && <span className="font-mono text-xs text-text-muted">{r.open_prs} {r.open_prs === 1 ? "PR" : "PRs"}</span>}
+                        </div>
                       </div>
                       <button onClick={() => handleRemoveGhRepo(r.name)} disabled={busy}
                         className="font-mono text-xs px-3 py-1 border border-red-alert/40 text-red-alert/60 hover:border-red-alert hover:text-red-alert tracking-widest">
@@ -425,7 +613,7 @@ export default function Connections() {
                 </div>
               )}
             </>
-          )}
+          ) : null}
         </section>
 
         {/* ── Service Connections (legacy) ──────────────── */}
@@ -452,6 +640,10 @@ export default function Connections() {
           </section>
         )}
       </main>
+
+      {chat && token && (
+        <ChatDialog presetQuestion={chat.question} componentTitle={chat.title} token={token} onClose={() => setChat(null)} />
+      )}
     </div>
   );
 }

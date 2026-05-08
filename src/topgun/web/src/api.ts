@@ -120,3 +120,28 @@ export async function removeGithubRepo(token: string, name: string): Promise<voi
   if (!r.ok) throw new Error("github repo remove failed");
   invalidateCache("intel-list", "intel-stats");
 }
+
+export interface LlmConfig { api_key: string; base_url?: string; proxy_header?: string; proxy_value?: string; }
+
+export async function fetchLlmConfig(token: string): Promise<LlmConfig> {
+  const r = await authFetch(`${BASE}/connect/llm`, token);
+  if (!r.ok) throw new Error("llm config fetch failed");
+  return r.json();
+}
+
+export async function verifyLlmConfig(token: string, config: LlmConfig): Promise<void> {
+  const r = await authFetch(`${BASE}/connect/llm/verify`, token, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(config),
+  });
+  if (!r.ok) {
+    const detail = (await r.json().catch(() => ({}))).detail ?? "Verification failed";
+    throw new Error(detail);
+  }
+}
+
+export async function saveLlmConfig(token: string, config: LlmConfig): Promise<void> {
+  const r = await authFetch(`${BASE}/connect/llm`, token, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(config),
+  });
+  if (!r.ok) throw new Error(`LLM config save failed: ${await r.text()}`);
+}

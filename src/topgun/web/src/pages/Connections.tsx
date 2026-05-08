@@ -153,9 +153,9 @@ function HelpIcon({ onClick }: { onClick: () => void }) {
   );
 }
 
-interface GithubRepo { name: string; repo: string; authenticated: boolean; }
+interface GithubRepo { name: string; repo: string; authenticated: boolean; open_issues: number | null; open_prs: number | null; }
 interface ConnectionStatus {
-  backend: { provider: string; connected: boolean };
+  backend: { provider: string; connected: boolean; file_count: number | null };
   llm: { connected: boolean };
   services: { name: string; provider: string; account: string }[];
   github_repos: GithubRepo[];
@@ -472,11 +472,14 @@ export default function Connections() {
           ) : (
           <div className="tac-border p-5 flex items-center justify-between">
             <div>
-              <div className="font-mono text-xs text-text-primary">
-                {status?.backend.connected ? "GOOGLE DRIVE" : "NOT CONFIGURED"}
+              <div className="flex items-center gap-2">
+                {status?.backend.connected && <span className="w-2 h-2 rounded-full bg-green-live shrink-0" />}
+                <span className="font-mono text-xs text-text-primary">{status?.backend.connected ? "GOOGLE DRIVE" : "NOT CONFIGURED"}</span>
               </div>
               <div className="font-mono text-xs text-text-muted mt-1">
-                {status?.backend.connected ? "Connected — all user data stored here" : "No storage backend connected"}
+                {status?.backend.connected
+                  ? status.backend.file_count != null ? `${status.backend.file_count} ${status.backend.file_count === 1 ? "file" : "files"}` : "Connected"
+                  : "No storage backend connected"}
               </div>
             </div>
             {status?.backend.connected ? (
@@ -605,9 +608,13 @@ export default function Connections() {
                       <div>
                         <div className="flex items-center gap-3">
                           <span className="font-mono text-xs px-2 py-0.5 border border-border-dim text-text-muted tracking-widest uppercase">GH</span>
+                          <span className="w-2 h-2 rounded-full bg-green-live shrink-0" />
                           <span className="font-mono text-xs text-text-primary">{r.repo}</span>
                         </div>
-                        <div className="font-mono text-xs text-text-muted mt-1">{r.name}</div>
+                        <div className="flex items-center gap-4 mt-1">
+                          {r.open_issues != null && <span className="font-mono text-xs text-text-muted">{r.open_issues} {r.open_issues === 1 ? "issue" : "issues"}</span>}
+                          {r.open_prs != null && <span className="font-mono text-xs text-text-muted">{r.open_prs} {r.open_prs === 1 ? "PR" : "PRs"}</span>}
+                        </div>
                       </div>
                       <button onClick={() => handleRemoveGhRepo(r.name)} disabled={busy}
                         className="font-mono text-xs px-3 py-1 border border-red-alert/40 text-red-alert/60 hover:border-red-alert hover:text-red-alert tracking-widest">

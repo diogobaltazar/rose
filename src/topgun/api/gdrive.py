@@ -237,3 +237,11 @@ class DriveClient:
 
     def write_json(self, filename: str, data: dict) -> None:
         self.write_text(filename, json.dumps(data, indent=2, ensure_ascii=False))
+
+    def file_count(self) -> int:
+        folder_id = self._folder()
+        results = self._svc.files().list(
+            q=f"'{folder_id}' in parents and trashed=false",
+            spaces="drive", fields="files(id)", pageSize=1000,
+        ).execute()
+        return len(results.get("files", []))

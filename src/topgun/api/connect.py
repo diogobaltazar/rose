@@ -12,6 +12,7 @@ encryption_key = HMAC(BACKEND_SECRET, auth0_sub)
 
 import json
 import os
+import re
 import secrets
 from typing import Any
 
@@ -63,6 +64,25 @@ def _get_token(sub: str, name: str) -> str | None:
     if not encrypted:
         return None
     return decrypt_token(encrypted, sub)
+
+
+# ── GitHub stats helpers ──────────────────────────────────────────────────────
+
+def _gh_count(pat: str, url: str) -> int | None:
+    try:
+        resp = httpx.get(url, headers={"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github+json"}, params={"state": "open", "per_page": 1}, timeout=8)
+        if not resp.is_success:
+            return None
+        link = resp.headers.get("link", "")
+        m = re.search(r'page=(\d+)>; rel="last"', link)
+        return int(m.group(1)) if m else len(resp.json())
+    except Exception:
+        return None
+
+
+def _gh_stats(pat: str, repo: str) -> dict:
+    base = f"https://api.github.com/repos/{repo}"
+    return {"open_issues": _gh_count(pat, f"{base}/issues"), "open_prs": _gh_count(pat, f"{base}/pulls")}
 
 
 # ── LLM provider ─────────────────────────────────────────────────────────────
@@ -309,9 +329,11 @@ async def list_connections(
 
     services = []
     github_repos = []
+    file_count: int | None = None
     if backend_connected:
         try:
-            config = get_storage(auth).read_json("config.json")
+            storage = get_storage(auth)
+            config = storage.read_json("config.json")
             for name, conn in config.get("connections", {}).items():
                 services.append({
                     "name": name,
@@ -320,16 +342,20 @@ async def list_connections(
                     "authenticated": bool(_get_token(sub, name)),
                 })
             for name, repo_config in config.get("github_repos", {}).items():
-                github_repos.append({
-                    "name": name,
-                    "repo": repo_config.get("repo", ""),
-                    "authenticated": bool(r.get(_github_repo_key(sub, name))),
-                })
+                repo = repo_config.get("repo", "")
+                pat_enc = r.get(_github_repo_key(sub, name))
+                pat = decrypt_token(pat_enc, sub) if pat_enc else None
+                stats = _gh_stats(pat, repo) if pat else {"open_issues": None, "open_prs": None}
+                github_repos.append({"name": name, "repo": repo, "authenticated": bool(pat_enc), **stats})
+            try:
+                file_count = storage.file_count()
+            except Exception:
+                pass
         except Exception:
             pass
 
     return {
-        "backend": {"provider": "gdrive", "connected": backend_connected},
+        "backend": {"provider": "gdrive", "connected": backend_connected, "file_count": file_count},
         "llm": {"connected": llm_connected},
         "services": services,
         "github_repos": github_repos,

@@ -6,6 +6,34 @@ import NavBar from "../components/NavBar";
 import HUDGrid from "../components/HUDGrid";
 import { addGithubRepo, removeGithubRepo, saveLlmConfig, fetchLlmConfig, verifyLlmConfig } from "../api";
 import ChatDialog from "../components/ChatDialog";
+import ProviderPicker from "../components/ProviderPicker";
+
+// ── Provider catalogues ───────────────────────────────────────────────────────
+
+const LLM_PROVIDERS = [
+  { id: "anthropic",  name: "Anthropic",     detail: "Claude Haiku · Sonnet · Opus",  available: true },
+  { id: "openai",     name: "OpenAI",        detail: "GPT-4o · o1 · o3",              available: false },
+  { id: "google",     name: "Google",        detail: "Gemini 2.5 Pro · Flash",         available: false },
+  { id: "mistral",    name: "Mistral",       detail: "Large · Codestral",              available: false },
+  { id: "av-llm",     name: "ALMA VICTORIA", detail: "Managed · Zero configuration",  available: false, enterprise: true },
+];
+
+const STORAGE_PROVIDERS = [
+  { id: "gdrive",     name: "Google Drive",  detail: "Per-user encrypted storage",    available: true },
+  { id: "icloud",     name: "iCloud Drive",  detail: "Apple CloudKit",                available: false },
+  { id: "s3",         name: "AWS S3",        detail: "Bucket-based storage",          available: false },
+  { id: "av-storage", name: "ALMA VICTORIA", detail: "Managed · Zero configuration",  available: false, enterprise: true },
+];
+
+const INTEL_SOURCES = [
+  { id: "github",    name: "GitHub",        detail: "Issues · PRs · Discussions",    available: true },
+  { id: "gdrive",    name: "Google Drive",  detail: "Docs · Sheets · Slides",        available: true },
+  { id: "mcp",       name: "MCP Server",    detail: "Any MCP-compatible data source",available: false },
+  { id: "gitlab",    name: "GitLab",        detail: "Issues · MRs",                  available: false },
+  { id: "notion",    name: "Notion",        detail: "Pages · Databases",             available: false },
+  { id: "icloud",    name: "iCloud",        detail: "Notes · Drive",                 available: false },
+  { id: "av-intel",  name: "ALMA VICTORIA", detail: "Managed · Zero configuration",  available: false, enterprise: true },
+];
 
 // ── GitHub token verification ─────────────────────────────────────────────────
 
@@ -175,6 +203,11 @@ export default function Connections() {
   const [llmBusy, setLlmBusy] = useState(false);
   const [llmChecks, setLlmChecks] = useState<Check[] | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // Provider selection
+  const [selectedLlm, setSelectedLlm] = useState("anthropic");
+  const [selectedBackend, setSelectedBackend] = useState("gdrive");
+  const [selectedIntelSource, setSelectedIntelSource] = useState("github");
 
   // Chat dialog
   const [chat, setChat] = useState<{ question: string; title: string } | null>(null);
@@ -347,9 +380,13 @@ export default function Connections() {
 
         {/* ── AI Provider ───────────────────────────────── */}
         <section className="mb-8">
-          <div className="flex items-center gap-2 mb-4">
+          <div className="flex items-center gap-2 mb-1">
             <div className="font-mono text-xs text-text-muted tracking-widest uppercase">AI Provider</div>
           </div>
+          <p className="font-mono text-xs text-text-muted/70 mb-4 leading-relaxed">
+            Powers the AI assistant available throughout the platform. Your API key is encrypted and stored per user.
+          </p>
+          <ProviderPicker providers={LLM_PROVIDERS} selected={selectedLlm} onSelect={setSelectedLlm} />
           {fetching ? (
             <div className="tac-border p-5 flex items-center justify-between">
               <div><div className="font-mono text-xs text-amber-tac animate-pulse_amber tracking-widest">CHECKING…</div></div>
@@ -412,10 +449,14 @@ export default function Connections() {
 
         {/* ── Storage Backend ───────────────────────────── */}
         <section className="mb-8">
-          <div className="flex items-center gap-2 mb-4">
+          <div className="flex items-center gap-2 mb-1">
             <div className="font-mono text-xs text-text-muted tracking-widest uppercase">Storage Backend</div>
             {status?.llm?.connected && !fetching && <HelpIcon onClick={() => setChat({ question: "How does the Storage Backend work in ALMA VICTORIA TOPGUN? What is Google Drive used for and how do I set it up?", title: "Storage Backend" })} />}
           </div>
+          <p className="font-mono text-xs text-text-muted/70 mb-4 leading-relaxed">
+            Where all your data lives — missions, timers, configuration, and intel. You supply the OAuth credentials from your own cloud project so you remain in full control of your data.
+          </p>
+          <ProviderPicker providers={STORAGE_PROVIDERS} selected={selectedBackend} onSelect={setSelectedBackend} />
           {fetching ? (
             <div className="tac-border p-5 flex items-center justify-between">
               <div>
@@ -478,41 +519,36 @@ export default function Connections() {
 
         {/* ── GitHub Repositories ───────────────────────── */}
         <section className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <div className="font-mono text-xs text-text-muted tracking-widest uppercase">GitHub Repositories</div>
-              {status?.llm?.connected && !fetching && <HelpIcon onClick={() => setChat({ question: "How do GitHub Repository connections work in ALMA VICTORIA TOPGUN? What are they used for and what permissions does the token need?", title: "GitHub Repositories" })} />}
-            </div>
-            {!fetching && status?.backend.connected && !showGhForm && (
-              <button onClick={() => setShowGhForm(true)}
-                className="font-mono text-xs px-3 py-1 border border-amber-tac/40 text-amber-tac/60 hover:border-amber-tac hover:text-amber-tac tracking-widest">
-                + ADD
-              </button>
-            )}
+          <div className="flex items-center gap-2 mb-1">
+            <div className="font-mono text-xs text-text-muted tracking-widest uppercase">Intel Knowledge Base Sources</div>
+            {status?.llm?.connected && !fetching && <HelpIcon onClick={() => setChat({ question: "What is the Intel Knowledge Base in ALMA VICTORIA TOPGUN? How do intel sources work and what gets imported?", title: "Intel Knowledge Base" })} />}
           </div>
+          <p className="font-mono text-xs text-text-muted/70 mb-4 leading-relaxed">
+            Connect the external sources that feed your Intel deck — issues, documents, and knowledge that the autonomous agents use as mission context.
+          </p>
+          <ProviderPicker providers={INTEL_SOURCES} selected={selectedIntelSource} onSelect={id => { setSelectedIntelSource(id); setShowGhForm(false); setGhChecks(null); }} />
+          {!fetching && status?.backend.connected && selectedIntelSource === "github" && !showGhForm && (
+            <div className="flex justify-end mb-2">
+              <button onClick={() => setShowGhForm(true)} className="font-mono text-xs px-3 py-1 border border-amber-tac/40 text-amber-tac/60 hover:border-amber-tac hover:text-amber-tac tracking-widest">+ ADD</button>
+            </div>
+          )}
 
           {fetching ? (
-            <div className="space-y-2">
-              {[
-                "github.com · checking repository access",
-                "github.com · verifying credentials",
-              ].map((hint, i) => (
-                <div key={i} className="tac-border p-4 flex items-center justify-between">
-                  <div>
-                    <div className="font-mono text-xs text-amber-tac animate-pulse_amber tracking-widest">
-                      LOADING REPOSITORIES…
-                    </div>
-                    <div className="font-mono text-xs text-text-muted mt-1">{hint}</div>
-                  </div>
-                  <span className="font-mono text-xs text-amber-tac animate-pulse_amber tracking-widest">···</span>
-                </div>
-              ))}
+            <div className="tac-border p-4 flex items-center justify-between">
+              <div className="font-mono text-xs text-amber-tac animate-pulse_amber tracking-widest">LOADING…</div>
+              <span className="font-mono text-xs text-amber-tac animate-pulse_amber tracking-widest">···</span>
             </div>
           ) : !status?.backend.connected ? (
-            <div className="tac-border p-6 text-center">
-              <p className="font-mono text-xs text-text-muted">Connect a storage backend first.</p>
+            <div className="tac-border p-6 text-center"><p className="font-mono text-xs text-text-muted">Connect a storage backend first.</p></div>
+          ) : selectedIntelSource === "gdrive" ? (
+            <div className="tac-border p-5 flex items-center justify-between">
+              <div>
+                <div className="font-mono text-xs text-text-primary">{status?.backend.connected ? "GOOGLE DRIVE" : "NOT CONNECTED"}</div>
+                <div className="font-mono text-xs text-text-muted mt-1">{status?.backend.connected ? "Documents in your topgun/ Drive folder are available as intel sources" : "Connect Google Drive as your storage backend first"}</div>
+              </div>
+              {status?.backend.connected && <span className="font-mono text-[10px] text-green-live border border-green-live/30 px-2 py-0.5 tracking-widest">ACTIVE</span>}
             </div>
-          ) : (
+          ) : selectedIntelSource === "github" ? (
             <>
               {showGhForm && (
                 <div className="tac-border p-4 mb-3 space-y-3">
@@ -582,7 +618,7 @@ export default function Connections() {
                 </div>
               )}
             </>
-          )}
+          ) : null}
         </section>
 
         {/* ── Service Connections (legacy) ──────────────── */}

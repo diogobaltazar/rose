@@ -145,3 +145,20 @@ export async function saveLlmConfig(token: string, config: LlmConfig): Promise<v
   });
   if (!r.ok) throw new Error(`LLM config save failed: ${await r.text()}`);
 }
+
+export interface ChatMessage { role: "user" | "assistant"; content: string; }
+
+export async function askAssistant(token: string, messages: ChatMessage[], system?: string): Promise<string> {
+  const r = await authFetch(`${BASE}/ask`, token, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages, system: system ?? "" }),
+  });
+  if (!r.ok) throw new Error(`Ask failed: ${await r.text()}`);
+  return (await r.json()).response;
+}
+
+export async function fetchDocs(slug: string): Promise<string> {
+  const r = await fetch(`${BASE}/docs/${encodeURIComponent(slug)}`);
+  if (!r.ok) throw new Error("doc not found");
+  return r.text();
+}

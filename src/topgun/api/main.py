@@ -22,6 +22,7 @@ from fastapi import FastAPI, WebSocket, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 from watchfiles import awatch
 
 from deps import require_auth, AUTH0_DOMAIN, AUTH0_CLIENT_ID, AUTH0_AUDIENCE
@@ -1168,6 +1169,62 @@ async def get_mission_engagements(
 
     pattern = re.compile(rf"^feat(?:ure)?/{re.escape(issue_number)}[-/]")
     return [s for s in sessions if s.get("branch") and pattern.match(s["branch"])]
+
+
+# ── AI assistant ─────────────────────────────────────────────────────────────
+
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class AskBody(BaseModel):
+    messages: list[ChatMessage]
+    system: str = ""
+
+
+@app.post("/ask")
+async def ask(body: AskBody, auth: dict | None = Depends(require_auth)) -> dict[str, str]:
+    """Multi-turn inference using the user's stored LLM config."""
+    if not auth:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    from deps import get_redis
+    from gdrive import decrypt_token
+    r = get_redis()
+    encrypted = r.get(f"user:llm:{auth['sub']}")
+    if not encrypted:
+        raise HTTPException(status_code=503, detail="No LLM provider configured")
+    config = json.loads(decrypt_token(encrypted, auth["sub"]))
+    api_key = config.get("api_key", "")
+    base_url = (config.get("base_url", "").strip() or "https://api.anthropic.com").rstrip("/")
+    proxy_header = config.get("proxy_header", "").strip()
+    proxy_value = config.get("proxy_value", "").strip()
+    if not api_key:
+        raise HTTPException(status_code=503, detail="No LLM provider configured")
+    headers: dict[str, str] = {
+        "authorization": f"Bearer {api_key}",
+        "content-type": "application/json",
+        "anthropic-version": "2023-06-01",
+    }
+    if proxy_header and proxy_value:
+        headers[proxy_header] = proxy_value
+    req_body: dict = {
+        "model": "claude-haiku-4-5-20251001",
+        "max_tokens": 2048,
+        "messages": [{"role": m.role, "content": m.content} for m in body.messages],
+    }
+    if body.system:
+        req_body["system"] = body.system
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(f"{base_url}/v1/messages", headers=headers, content=json.dumps(req_body).encode(), timeout=60)
+        resp.raise_for_status()
+    except httpx.ConnectError as e:
+        raise HTTPException(status_code=502, detail=f"LLM connection error: {e}")
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=502, detail=f"LLM API error: {e.response.text}")
+    return {"response": resp.json()["content"][0]["text"]}
 
 
 # ── Docs ─────────────────────────────────────────────────────────────────────

@@ -4,7 +4,8 @@ import { useNavigate } from "react-router-dom";
 import { useToken } from "../hooks/useToken";
 import NavBar from "../components/NavBar";
 import HUDGrid from "../components/HUDGrid";
-import { addGithubRepo, removeGithubRepo } from "../api";
+import { addGithubRepo, removeGithubRepo, saveLlmConfig, fetchLlmConfig, verifyLlmConfig } from "../api";
+import ChatDialog from "../components/ChatDialog";
 
 // ── GitHub token verification ─────────────────────────────────────────────────
 
@@ -93,9 +94,41 @@ function CheckRow({ check }: { check: Check }) {
 
 const BASE = "/api";
 
+// ── Proxy header field ────────────────────────────────────────────────────────
+
+const KNOWN_PROXY_HEADERS = ["x-api-key", "x-goog-api-key", "api-key"];
+
+function ProxyHeaderField({ header, value, onHeaderChange, onValueChange }: { header: string; value: string; onHeaderChange: (v: string) => void; onValueChange: (v: string) => void; }) {
+  const isKnown = KNOWN_PROXY_HEADERS.includes(header);
+  const selectVal = header === "" ? "" : isKnown ? header : "__custom__";
+  const handleSelect = (v: string) => { if (v === "") onHeaderChange(""); else if (v === "__custom__") onHeaderChange(" "); else onHeaderChange(v); };
+  return (
+    <div className="space-y-2 pl-2 border-l border-border-dim">
+      <div className="font-mono text-xs text-text-muted">Proxy header name</div>
+      <select value={selectVal} onChange={e => handleSelect(e.target.value)} className="w-full bg-card border border-border-dim px-3 py-1.5 font-mono text-xs text-text-primary focus:outline-none focus:border-amber-tac">
+        <option value="">— none —</option>
+        {KNOWN_PROXY_HEADERS.map(h => <option key={h} value={h}>{h}</option>)}
+        <option value="__custom__">Custom…</option>
+      </select>
+      {!isKnown && header !== "" && <input type="text" placeholder="Custom header name" value={header.trim()} onChange={e => onHeaderChange(e.target.value)} className="w-full bg-card border border-border-dim px-3 py-1.5 font-mono text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-amber-tac" />}
+      <input type="text" placeholder="Header value (e.g. claude)" value={value} onChange={e => onValueChange(e.target.value)} className="w-full bg-card border border-border-dim px-3 py-1.5 font-mono text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-amber-tac" />
+    </div>
+  );
+}
+
+// ── Help icon ─────────────────────────────────────────────────────────────────
+function HelpIcon({ onClick }: { onClick: () => void }) {
+  return (
+    <button onClick={onClick}
+      className="font-mono text-xs w-5 h-5 border border-amber-tac/40 text-amber-tac/60 hover:border-amber-tac hover:text-amber-tac flex items-center justify-center transition-colors"
+      title="Ask AI assistant">?</button>
+  );
+}
+
 interface GithubRepo { name: string; repo: string; authenticated: boolean; }
 interface ConnectionStatus {
   backend: { provider: string; connected: boolean };
+  llm: { connected: boolean };
   services: { name: string; provider: string; account: string }[];
   github_repos: GithubRepo[];
 }
@@ -131,6 +164,20 @@ export default function Connections() {
   const [fetching, setFetching] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [token, setToken] = useState<string>("");
+
+  // LLM form
+  const [showLlmForm, setShowLlmForm] = useState(false);
+  const [llmApiKey, setLlmApiKey] = useState("");
+  const [llmBaseUrl, setLlmBaseUrl] = useState("");
+  const [llmProxyHeader, setLlmProxyHeader] = useState("");
+  const [llmProxyValue, setLlmProxyValue] = useState("");
+  const [llmBusy, setLlmBusy] = useState(false);
+  const [llmChecks, setLlmChecks] = useState<Check[] | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // Chat dialog
+  const [chat, setChat] = useState<{ question: string; title: string } | null>(null);
 
   // GDrive form
   const [showGdriveForm, setShowGdriveForm] = useState(false);
@@ -152,8 +199,9 @@ export default function Connections() {
   const load = useCallback(async () => {
     setFetching(true);
     try {
-      const token = await getToken();
-      setStatus(await fetchConnections(token));
+      const tok = await getToken();
+      setToken(tok);
+      setStatus(await fetchConnections(tok));
     } catch (e) {
       setError(String(e));
     } finally {
@@ -170,6 +218,44 @@ export default function Connections() {
       load();
     }
   }, [load]);
+
+  const resetLlmForm = () => {
+    setShowLlmForm(false); setShowAdvanced(false); setLlmChecks(null);
+    setLlmApiKey(""); setLlmBaseUrl(""); setLlmProxyHeader(""); setLlmProxyValue("");
+  };
+
+  const handleSaveLlm = async () => {
+    if (!llmApiKey) return;
+    const cfg = { api_key: llmApiKey, base_url: llmBaseUrl, proxy_header: llmProxyHeader.trim(), proxy_value: llmProxyValue };
+    setLlmBusy(true); setError(null);
+    setLlmChecks([
+      { label: "Connecting to provider", status: "checking" },
+      { label: "Verifying credentials", status: "pending" },
+      { label: "Saving credentials", status: "pending" },
+    ]);
+    const set = (i: number, patch: Partial<Check>) =>
+      setLlmChecks(prev => prev ? prev.map((c, j) => j === i ? { ...c, ...patch } : c) : prev);
+    try {
+      const tok = await getToken();
+      set(0, { status: "ok", detail: cfg.base_url || "api.anthropic.com" });
+      set(1, { status: "checking" });
+      await verifyLlmConfig(tok, cfg);
+      set(1, { status: "ok", detail: "Authenticated" });
+      set(2, { status: "checking" });
+      await saveLlmConfig(tok, cfg);
+      set(2, { status: "ok", detail: "Encrypted and stored" });
+      await new Promise(r => setTimeout(r, 800));
+      resetLlmForm();
+      await load();
+    } catch (e) {
+      const msg = String(e).replace(/^Error:\s*/, "");
+      setLlmChecks(prev => {
+        if (!prev) return prev;
+        const idx = prev.findIndex(c => c.status === "checking" || c.status === "pending");
+        return prev.map((c, i) => i === (idx >= 0 ? idx : 1) ? { ...c, status: "fail", detail: msg } : c);
+      });
+    } finally { setLlmBusy(false); }
+  };
 
   const handleConnectBackend = async () => {
     if (!gdriveClientId || !gdriveClientSecret) { setShowGdriveForm(true); return; }
@@ -259,9 +345,77 @@ export default function Connections() {
           </div>
         )}
 
+        {/* ── AI Provider ───────────────────────────────── */}
+        <section className="mb-8">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="font-mono text-xs text-text-muted tracking-widest uppercase">AI Provider</div>
+          </div>
+          {fetching ? (
+            <div className="tac-border p-5 flex items-center justify-between">
+              <div><div className="font-mono text-xs text-amber-tac animate-pulse_amber tracking-widest">CHECKING…</div></div>
+              <span className="font-mono text-xs text-amber-tac animate-pulse_amber tracking-widest">···</span>
+            </div>
+          ) : (
+            <div className="tac-border p-5 flex items-center justify-between">
+              <div>
+                <div className="font-mono text-xs text-text-primary">{status?.llm?.connected ? "ANTHROPIC" : "NOT CONFIGURED"}</div>
+                <div className="font-mono text-xs text-text-muted mt-1">
+                  {status?.llm?.connected ? "AI assistant active — click ? on any section to ask questions" : "Configure an API key to enable the AI assistant"}
+                </div>
+              </div>
+              {status?.llm?.connected ? (
+                <div className="flex gap-2">
+                  <button onClick={async () => {
+                    setShowLlmForm(v => !v);
+                    if (!showLlmForm) {
+                      try {
+                        const cfg = await fetchLlmConfig(await getToken());
+                        setLlmApiKey(cfg.api_key ?? ""); setLlmBaseUrl(cfg.base_url ?? "");
+                        setLlmProxyHeader(cfg.proxy_header ?? ""); setLlmProxyValue(cfg.proxy_value ?? "");
+                        if (cfg.proxy_header || cfg.proxy_value) setShowAdvanced(true);
+                      } catch { /* leave blank */ }
+                    }
+                  }} disabled={busy} className="font-mono text-xs px-4 py-1.5 border border-amber-tac/40 text-amber-tac/60 hover:border-amber-tac hover:text-amber-tac tracking-widest">UPDATE</button>
+                  <button onClick={() => handleRemove("llm")} disabled={busy} className="font-mono text-xs px-4 py-1.5 border border-red-alert text-red-alert hover:bg-red-alert/10 tracking-widest">DISCONNECT</button>
+                </div>
+              ) : (
+                <button onClick={() => setShowLlmForm(true)} disabled={busy} className="font-mono text-xs px-4 py-1.5 border border-amber-tac text-amber-tac hover:bg-amber-tac/10 tracking-widest">CONNECT</button>
+              )}
+            </div>
+          )}
+          {showLlmForm && (
+            <div className="mt-4 space-y-3">
+              {llmChecks ? (
+                <>
+                  <p className="font-mono text-xs text-text-muted tracking-widest uppercase mb-1">Verifying</p>
+                  <div className="space-y-2">{llmChecks.map((c, i) => <CheckRow key={i} check={c} />)}</div>
+                  {!llmBusy && llmChecks.some(c => c.status === "fail") && (
+                    <button onClick={() => setLlmChecks(null)} className="font-mono text-xs px-3 py-1 border border-border-dim text-text-muted hover:text-amber-tac tracking-widest mt-2">← EDIT</button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p className="font-mono text-xs text-text-muted">Enter your API key. Credentials are verified before saving.</p>
+                  <input type="password" placeholder="API key (sk-ant-… or Bearer token)" value={llmApiKey} onChange={e => setLlmApiKey(e.target.value)} className="w-full bg-card border border-border-dim px-3 py-1.5 font-mono text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-amber-tac" />
+                  <input type="text" placeholder="Base URL (optional — leave blank for api.anthropic.com)" value={llmBaseUrl} onChange={e => setLlmBaseUrl(e.target.value)} className="w-full bg-card border border-border-dim px-3 py-1.5 font-mono text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-amber-tac" />
+                  <button onClick={() => setShowAdvanced(v => !v)} className="font-mono text-xs text-text-muted hover:text-amber-tac tracking-widest">{showAdvanced ? "▲ HIDE ADVANCED" : "▼ ADVANCED (proxy headers)"}</button>
+                  {showAdvanced && <ProxyHeaderField header={llmProxyHeader} value={llmProxyValue} onHeaderChange={setLlmProxyHeader} onValueChange={setLlmProxyValue} />}
+                  <div className="flex gap-2">
+                    <button onClick={handleSaveLlm} disabled={llmBusy || !llmApiKey} className="font-mono text-xs px-4 py-1.5 border border-amber-tac text-amber-tac hover:bg-amber-tac/10 tracking-widest disabled:opacity-40">VERIFY &amp; SAVE</button>
+                    <button onClick={resetLlmForm} className="font-mono text-xs px-4 py-1.5 border border-border-dim text-text-muted hover:text-text-secondary tracking-widest">CANCEL</button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </section>
+
         {/* ── Storage Backend ───────────────────────────── */}
         <section className="mb-8">
-          <div className="font-mono text-xs text-text-muted tracking-widest uppercase mb-4">Storage Backend</div>
+          <div className="flex items-center gap-2 mb-4">
+            <div className="font-mono text-xs text-text-muted tracking-widest uppercase">Storage Backend</div>
+            {status?.llm?.connected && !fetching && <HelpIcon onClick={() => setChat({ question: "How does the Storage Backend work in ALMA VICTORIA TOPGUN? What is Google Drive used for and how do I set it up?", title: "Storage Backend" })} />}
+          </div>
           {fetching ? (
             <div className="tac-border p-5 flex items-center justify-between">
               <div>
@@ -325,7 +479,10 @@ export default function Connections() {
         {/* ── GitHub Repositories ───────────────────────── */}
         <section className="mb-8">
           <div className="flex items-center justify-between mb-4">
-            <div className="font-mono text-xs text-text-muted tracking-widest uppercase">GitHub Repositories</div>
+            <div className="flex items-center gap-2">
+              <div className="font-mono text-xs text-text-muted tracking-widest uppercase">GitHub Repositories</div>
+              {status?.llm?.connected && !fetching && <HelpIcon onClick={() => setChat({ question: "How do GitHub Repository connections work in ALMA VICTORIA TOPGUN? What are they used for and what permissions does the token need?", title: "GitHub Repositories" })} />}
+            </div>
             {!fetching && status?.backend.connected && !showGhForm && (
               <button onClick={() => setShowGhForm(true)}
                 className="font-mono text-xs px-3 py-1 border border-amber-tac/40 text-amber-tac/60 hover:border-amber-tac hover:text-amber-tac tracking-widest">
@@ -452,6 +609,10 @@ export default function Connections() {
           </section>
         )}
       </main>
+
+      {chat && token && (
+        <ChatDialog presetQuestion={chat.question} componentTitle={chat.title} token={token} onClose={() => setChat(null)} />
+      )}
     </div>
   );
 }

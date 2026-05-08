@@ -383,7 +383,10 @@ export default function Connections() {
           ) : (
             <div className="tac-border p-5 flex items-center justify-between">
               <div>
-                <div className="font-mono text-xs text-text-primary">{status?.llm?.connected ? "ANTHROPIC" : "NOT CONFIGURED"}</div>
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${status?.llm?.working ? "bg-green-live" : status?.llm?.connected ? "bg-red-alert" : "bg-border-dim"}`} />
+                  <span className="font-mono text-xs text-text-primary">{status?.llm?.connected ? "ANTHROPIC" : "NOT CONFIGURED"}</span>
+                </div>
                 <div className="font-mono text-xs text-text-muted mt-1">
                   {status?.llm?.connected ? "AI assistant active — click ? on any section to ask questions" : "Configure an API key to enable the AI assistant"}
                 </div>
@@ -401,7 +404,7 @@ export default function Connections() {
                       } catch { /* leave blank */ }
                     }
                   }} disabled={busy} className="font-mono text-xs px-4 py-1.5 border border-amber-tac/40 text-amber-tac/60 hover:border-amber-tac hover:text-amber-tac tracking-widest">UPDATE</button>
-                  <button onClick={() => handleRemove("llm")} disabled={busy} className="font-mono text-xs px-4 py-1.5 border border-red-alert text-red-alert hover:bg-red-alert/10 tracking-widest">DISCONNECT</button>
+                  <button onClick={() => handleRemove("llm")} disabled={busy} className="font-mono text-xs px-4 py-1.5 border border-red-alert/40 text-red-alert/60 hover:border-red-alert hover:text-red-alert tracking-widest">DISCONNECT</button>
                 </div>
               ) : (
                 <button onClick={() => setShowLlmForm(true)} disabled={busy} className="font-mono text-xs px-4 py-1.5 border border-amber-tac text-amber-tac hover:bg-amber-tac/10 tracking-widest">CONNECT</button>
@@ -472,7 +475,7 @@ export default function Connections() {
             </div>
             {status?.backend.connected ? (
               <button onClick={() => handleRemove("backend")} disabled={busy}
-                className="font-mono text-xs px-4 py-1.5 border border-red-alert text-red-alert hover:bg-red-alert/10 tracking-widest">
+                className="font-mono text-xs px-4 py-1.5 border border-red-alert/40 text-red-alert/60 hover:border-red-alert hover:text-red-alert tracking-widest">
                 DISCONNECT
               </button>
             ) : (
@@ -596,16 +599,17 @@ export default function Connections() {
                       <div>
                         <div className="flex items-center gap-3">
                           <span className="font-mono text-xs px-2 py-0.5 border border-border-dim text-text-muted tracking-widest uppercase">GH</span>
-                          <span className="w-2 h-2 rounded-full bg-green-live shrink-0" />
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${r.authenticated ? "bg-green-live" : "bg-red-alert"}`} />
                           <span className="font-mono text-xs text-text-primary">{r.repo}</span>
                         </div>
                         <div className="flex items-center gap-4 mt-1">
-                          {r.open_issues != null && <span className="font-mono text-xs text-text-muted">{r.open_issues} {r.open_issues === 1 ? "issue" : "issues"}</span>}
-                          {r.open_prs != null && <span className="font-mono text-xs text-text-muted">{r.open_prs} {r.open_prs === 1 ? "PR" : "PRs"}</span>}
+                          {!r.authenticated && <span className="font-mono text-xs text-red-alert tracking-widest">TOKEN MISSING — RECONNECT</span>}
+                          {r.authenticated && r.open_issues != null && <span className="font-mono text-xs text-text-muted">{r.open_issues} {r.open_issues === 1 ? "issue" : "issues"}</span>}
+                          {r.authenticated && r.open_prs != null && <span className="font-mono text-xs text-text-muted">{r.open_prs} {r.open_prs === 1 ? "PR" : "PRs"}</span>}
                         </div>
                       </div>
                       <button onClick={() => handleRemoveGhRepo(r.name)} disabled={busy}
-                        className="font-mono text-xs px-3 py-1 border border-red-alert/40 text-red-alert/60 hover:border-red-alert hover:text-red-alert tracking-widest">
+                        className="font-mono text-xs px-4 py-1.5 border border-red-alert/40 text-red-alert/60 hover:border-red-alert hover:text-red-alert tracking-widest">
                         DISCONNECT
                       </button>
                     </div>
@@ -631,7 +635,7 @@ export default function Connections() {
                     {svc.account && <div className="font-mono text-xs text-text-muted mt-1">{svc.account}</div>}
                   </div>
                   <button onClick={() => handleRemove(svc.name)} disabled={busy}
-                    className="font-mono text-xs px-3 py-1 border border-red-alert/40 text-red-alert/60 hover:border-red-alert hover:text-red-alert tracking-widest">
+                    className="font-mono text-xs px-4 py-1.5 border border-red-alert/40 text-red-alert/60 hover:border-red-alert hover:text-red-alert tracking-widest">
                     REMOVE
                   </button>
                 </div>

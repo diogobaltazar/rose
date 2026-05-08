@@ -20,6 +20,7 @@ import httpx
 
 from fastapi import FastAPI, WebSocket, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from watchfiles import awatch
 
@@ -30,6 +31,7 @@ from intel import router as intel_router
 from timer import router as timer_router
 from connect import router as connect_router
 
+DOCS_DIR = Path(os.environ.get("DOCS_DIR", Path(__file__).parent.parent.parent.parent / "docs"))
 LOG_DIR = Path(os.environ.get("LOG_DIR", Path.home() / ".claude" / "logs"))
 PROJECTS_DIR = Path(os.environ.get("PROJECTS_DIR", Path.home() / ".claude" / "projects"))
 SESSIONS_DIR = Path(os.environ.get("SESSIONS_DIR", Path.home() / ".claude" / "sessions"))
@@ -1166,6 +1168,17 @@ async def get_mission_engagements(
 
     pattern = re.compile(rf"^feat(?:ure)?/{re.escape(issue_number)}[-/]")
     return [s for s in sessions if s.get("branch") and pattern.match(s["branch"])]
+
+
+# ── Docs ─────────────────────────────────────────────────────────────────────
+
+
+@app.get("/docs/{slug}", response_class=PlainTextResponse)
+async def get_doc(slug: str) -> str:
+    path = DOCS_DIR / f"{slug}.md"
+    if not path.exists() or not path.is_relative_to(DOCS_DIR):
+        raise HTTPException(status_code=404, detail="Doc not found")
+    return path.read_text()
 
 
 # Mount static files last so API routes take priority

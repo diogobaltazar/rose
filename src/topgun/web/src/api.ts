@@ -160,7 +160,7 @@ export async function askAssistant(token: string, messages: ChatMessage[], syste
 export interface GithubRepo { name: string; repo: string; authenticated: boolean; open_issues: number | null; open_prs: number | null; }
 export interface ConnectionStatus {
   backend: { provider: string; connected: boolean; file_count: number | null };
-  llm: { connected: boolean };
+  llm: { connected: boolean; working: boolean };
   services: { name: string; provider: string; account: string }[];
   github_repos: GithubRepo[];
 }
@@ -171,6 +171,28 @@ export async function getConnections(token: string): Promise<ConnectionStatus> {
     if (!r.ok) throw new Error("fetch failed");
     return r.json();
   });
+}
+
+export interface MissionIssue { repo: string; url: string; number: number; }
+export interface MissionPlanResult { vault_file: string; github_issues: MissionIssue[]; }
+
+export async function createMissionPlan(
+  token: string,
+  title: string,
+  body: string,
+  source_urls: string[],
+): Promise<MissionPlanResult> {
+  const r = await authFetch(`${BASE}/missions/plan`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title, body, source_urls }),
+  });
+  if (!r.ok) {
+    const detail = (await r.json().catch(() => ({}))).detail ?? "Mission creation failed";
+    throw new Error(detail);
+  }
+  invalidateCache("intel-list", "intel-stats");
+  return r.json();
 }
 
 export async function fetchDocs(slug: string): Promise<string> {

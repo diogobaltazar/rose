@@ -39,12 +39,6 @@ export default function MissionDeck() {
 
   const { missions: engaged } = useEngagement();
   const missionDocs = docs.filter(d => d.labels?.includes("topgun-mission"));
-  const missionStats = stats ? {
-    total: stats.missions,
-    drafts: stats.drafts,
-    ready: stats.ready,
-    engaged: engaged.length,
-  } : null;
 
   return (
     <div className="min-h-screen bg-base text-text-primary">
@@ -57,7 +51,7 @@ export default function MissionDeck() {
           <p className="font-mono text-xs text-text-muted mt-1">Active missions and campaign status</p>
         </div>
         {error && <ErrorBox msg={error} />}
-        <MissionStats stats={missionStats} loading={loading} />
+        <MissionPipeline stats={stats} engagedCount={engaged.length} loading={loading} />
         {!loading && (
           <div className="mt-8">
             {missionDocs.length === 0 ? (
@@ -75,24 +69,74 @@ export default function MissionDeck() {
   );
 }
 
-function MissionStats({ stats, loading }: { stats: { total: number; drafts: number; ready: number; engaged: number } | null; loading: boolean }) {
+function MissionPipeline({
+  stats,
+  engagedCount,
+  loading,
+}: {
+  stats: IntelStats | null;
+  engagedCount: number;
+  loading: boolean;
+}) {
   if (loading) return <Spinner />;
   if (!stats) return null;
-  const items = [
-    { label: "TOTAL", value: stats.total },
-    { label: "DRAFTS", value: stats.drafts },
-    { label: "READY", value: stats.ready },
-    { label: "ENGAGED", value: stats.engaged },
+
+  const intel = stats.total;
+  const missions = stats.missions;
+  const engaged = engagedCount;
+  const backlog = intel - missions;
+
+  const missionPct = intel > 0 ? Math.round((missions / intel) * 100) : 0;
+  const engagePct = missions > 0 ? Math.round((engaged / missions) * 100) : 0;
+
+  const stages = [
+    { label: "INTEL", sub: "sources indexed", value: intel, pct: null as number | null, color: "text-text-secondary", bar: "bg-text-muted/40" },
+    { label: "MISSIONS", sub: "tagged for ops", value: missions, pct: missionPct, color: "text-amber-tac", bar: "bg-amber-tac" },
+    { label: "ENGAGED", sub: "active sorties", value: engaged, pct: engagePct, color: "text-green-live", bar: "bg-green-live" },
   ];
+  const maxVal = Math.max(intel, 1);
+
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-      {items.map((s, i) => <StatCard key={s.label} label={s.label} value={s.value} index={i} />)}
+    <div className="tac-border p-5 animate-fadeIn">
+      <div className="flex items-center justify-between mb-5">
+        <div className="font-mono text-xs text-text-muted tracking-widest uppercase">Ops Pipeline</div>
+        {backlog > 0 && (
+          <div className="font-mono text-xs text-text-muted/50">
+            {backlog} source{backlog !== 1 ? "s" : ""} untagged
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-end gap-3">
+        {stages.map((s, i) => (
+          <div key={s.label} className="contents">
+            {i > 0 && (
+              <div className="flex-none self-center pb-8 font-mono text-xs text-border-dim">──►</div>
+            )}
+            <div className="flex-1 min-w-0">
+              <div className={`font-mono text-3xl font-bold tabular-nums ${s.color}`}>{s.value}</div>
+              {s.pct !== null && (
+                <div className="font-mono text-xs text-text-muted/60 tabular-nums mt-0.5">
+                  {s.pct}%
+                </div>
+              )}
+              <div className={`font-mono text-xs tracking-widest uppercase mt-2 ${s.color}`}>{s.label}</div>
+              <div className="font-mono text-[10px] text-text-muted/50 mt-0.5">{s.sub}</div>
+              <div className="h-px bg-border-dim mt-3">
+                <div
+                  className={`h-px ${s.bar} transition-all duration-700`}
+                  style={{ width: `${(s.value / maxVal) * 100}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
 // ── Shared components ─────────────────────────────────────────────────────────
-
 
 export function StatCard({ label, value, index = 0 }: { label: string; value: number; index?: number }) {
   return (
@@ -106,7 +150,17 @@ export function StatCard({ label, value, index = 0 }: { label: string; value: nu
   );
 }
 
-export function IntelGrid({ docs, onTagged }: { docs: IntelDocument[]; onTagged?: () => void }) {
+export function IntelGrid({
+  docs,
+  onTagged,
+  selectedUids,
+  onToggle,
+}: {
+  docs: IntelDocument[];
+  onTagged?: () => void;
+  selectedUids?: Set<string>;
+  onToggle?: (uid: string) => void;
+}) {
   if (docs.length === 0) return (
     <div className="tac-border p-12 text-center bracket-corners">
       <p className="font-mono text-xs text-text-muted tracking-widest">NO DOCUMENTS</p>
@@ -114,7 +168,16 @@ export function IntelGrid({ docs, onTagged }: { docs: IntelDocument[]; onTagged?
   );
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-      {docs.map((doc, i) => <IntelCard key={doc.uid} doc={doc} index={i} onTagged={onTagged} />)}
+      {docs.map((doc, i) => (
+        <IntelCard
+          key={doc.uid}
+          doc={doc}
+          index={i}
+          onTagged={onTagged}
+          selected={selectedUids?.has(doc.uid) ?? false}
+          onToggle={onToggle}
+        />
+      ))}
     </div>
   );
 }
@@ -172,7 +235,19 @@ function makeTermLines(uid: string, title: string): { lines: string[]; question:
   };
 }
 
-function IntelCard({ doc, index = 0, onTagged }: { doc: IntelDocument; index?: number; onTagged?: () => void }) {
+function IntelCard({
+  doc,
+  index = 0,
+  onTagged,
+  selected = false,
+  onToggle,
+}: {
+  doc: IntelDocument;
+  index?: number;
+  onTagged?: () => void;
+  selected?: boolean;
+  onToggle?: (uid: string) => void;
+}) {
   const { uid, source, source_url: sourceUrl } = doc;
   const title = doc.title || sourceUrl?.split("/").pop()?.replace(".md", "") || uid;
   const labels = doc.labels ?? [];
@@ -269,9 +344,24 @@ function IntelCard({ doc, index = 0, onTagged }: { doc: IntelDocument; index?: n
       >
         {/* Top row */}
         <div className="flex items-center justify-between mb-3">
-          <span className={`font-mono text-xs px-1.5 py-0.5 border tracking-widest ${
-            source === "github" ? "border-green-live text-green-live" : "border-cyan-hud text-cyan-hud"
-          }`}>{source === "github" ? "GH" : "OBS"}</span>
+          <div className="flex items-center gap-2">
+            {onToggle && (
+              <button
+                onClick={e => { e.stopPropagation(); onToggle(uid); }}
+                title={selected ? "Remove from KB context" : "Add to KB context"}
+                className={`w-4 h-4 border flex items-center justify-center shrink-0 transition-colors ${
+                  selected
+                    ? "border-amber-tac bg-amber-tac/20 text-amber-tac"
+                    : "border-border-dim text-transparent hover:border-text-muted"
+                }`}
+              >
+                <span className="text-[8px] leading-none">{selected ? "✓" : ""}</span>
+              </button>
+            )}
+            <span className={`font-mono text-xs px-1.5 py-0.5 border tracking-widest ${
+              source === "github" ? "border-green-live text-green-live" : "border-cyan-hud text-cyan-hud"
+            }`}>{source === "github" ? "GH" : "OBS"}</span>
+          </div>
 
           <div className="flex items-center gap-2">
             {onaState === "warming" && (

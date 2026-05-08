@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { askAssistant } from "../api";
 import type { ChatMessage } from "../api";
+import { renderMarkdown } from "../utils/markdown";
 
 const SYSTEM =
   "You are a helpful assistant for ALMA VICTORIA TOPGUN — an autonomous software development platform. " +
@@ -81,8 +82,8 @@ export default function ChatDialog({ presetQuestion, componentTitle, token, onCl
               ) : (
                 <div className="max-w-[95%]">
                   <div className="font-mono text-xs text-text-muted tracking-widest mb-1">TOPGUN AI</div>
-                  <div className="font-mono text-xs text-text-primary whitespace-pre-wrap leading-relaxed">
-                    {m.content}
+                  <div className="space-y-0.5">
+                    {renderMarkdown(m.content)}
                   </div>
                 </div>
               )}

@@ -129,12 +129,56 @@ async def verify_llm(body: LlmConfigBody, auth: dict | None = Depends(require_au
     return {"status": "ok"}
 
 
+_LLM_CHECK_TTL = 600  # 10 minutes
+
+
+async def _check_llm_key(sub: str, r) -> bool:
+    """Probe the stored LLM key; result cached in Redis for 10 min."""
+    cache_key = f"user:llm:{sub}:check"
+    cached = r.get(cache_key)
+    if cached is not None:
+        return cached == "1"
+    try:
+        encrypted = r.get(_llm_key(sub))
+        if not encrypted:
+            return False
+        config = json.loads(decrypt_token(encrypted, sub))
+        api_key = config.get("api_key", "")
+        base_url = (config.get("base_url", "") or "https://api.anthropic.com").rstrip("/")
+        proxy_header = config.get("proxy_header", "")
+        proxy_value = config.get("proxy_value", "")
+        headers: dict[str, str] = {
+            "authorization": f"Bearer {api_key}",
+            "content-type": "application/json",
+            "anthropic-version": "2023-06-01",
+        }
+        if proxy_header and proxy_value:
+            headers[proxy_header] = proxy_value
+        req_body = {"model": "claude-haiku-4-5-20251001", "max_tokens": 8,
+                    "messages": [{"role": "user", "content": "Hi"}]}
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{base_url}/v1/messages",
+                headers=headers,
+                content=json.dumps(req_body).encode(),
+                timeout=8,
+            )
+        working = resp.is_success
+    except Exception:
+        working = False
+    r.setex(cache_key, _LLM_CHECK_TTL, "1" if working else "0")
+    return working
+
+
 @router.post("/llm")
 async def connect_llm(body: LlmConfigBody, auth: dict | None = Depends(require_auth)) -> dict[str, str]:
     if not auth:
         raise HTTPException(status_code=401, detail="Authentication required")
+    sub = auth["sub"]
     config = {"api_key": body.api_key, "base_url": body.base_url, "proxy_header": body.proxy_header, "proxy_value": body.proxy_value}
-    get_redis().set(_llm_key(auth["sub"]), encrypt_token(json.dumps(config), auth["sub"]))
+    r = get_redis()
+    r.set(_llm_key(sub), encrypt_token(json.dumps(config), sub))
+    r.delete(f"user:llm:{sub}:check")  # force re-probe on next load
     return {"status": "connected"}
 
 
@@ -290,6 +334,11 @@ async def add_github_repo(
     config = storage.read_json("config.json")
     config.setdefault("github_repos", {})[body.name] = {"repo": body.repo}
     storage.write_json("config.json", config)
+    # Invalidate the Drive stats cache so INTEL reflects the new repo immediately.
+    try:
+        storage.write_json("registry_stats_cache.json", {})
+    except Exception:
+        pass
     return {"status": "connected", "name": body.name, "repo": body.repo}
 
 
@@ -326,6 +375,7 @@ async def list_connections(
     r = get_redis()
     backend_connected = bool(r.get(_gdrive_key(sub)))
     llm_connected = bool(r.get(_llm_key(sub)))
+    llm_working = await _check_llm_key(sub, r) if llm_connected else False
 
     services = []
     github_repos = []
@@ -356,7 +406,7 @@ async def list_connections(
 
     return {
         "backend": {"provider": "gdrive", "connected": backend_connected, "file_count": file_count},
-        "llm": {"connected": llm_connected},
+        "llm": {"connected": llm_connected, "working": llm_working},
         "services": services,
         "github_repos": github_repos,
     }

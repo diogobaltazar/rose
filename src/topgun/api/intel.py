@@ -8,10 +8,13 @@ Tags and content live at the source — never stored here.
 
 import hashlib
 import json
+import logging
 import os
 import re
 import uuid
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -89,7 +92,8 @@ def _get_github_repo_issues(
     sub = auth["sub"]
     try:
         config = client.read_json("config.json")
-    except Exception:
+    except Exception as exc:
+        logger.warning("intel: failed to read config.json from Drive: %s", exc)
         return []
     repos = config.get("github_repos", {})
     if not repos:
@@ -100,6 +104,7 @@ def _get_github_repo_issues(
         repo = repo_config.get("repo", "")
         encrypted_pat = r.get(f"creds:{sub}:github_repo:{name}")
         if not repo or not encrypted_pat:
+            logger.warning("intel: GitHub repo %r (%s) has no token in Redis — reconnect via Settings", name, repo)
             continue
         try:
             pat = decrypt_token(encrypted_pat, sub)
@@ -125,7 +130,8 @@ def _get_github_repo_issues(
                     "labels": [lb["name"] for lb in issue.get("labels", [])],
                     "auto_discovered": True,
                 })
-        except Exception:
+        except Exception as exc:
+            logger.warning("intel: failed to fetch issues for GitHub repo %r (%s): %s", name, repo, exc)
             continue
     return issues
 

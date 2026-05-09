@@ -186,14 +186,14 @@ def _login_backend():
     storage = cfg.get("storage", {})
     backend = storage.get("provider", "")
     if not backend:
-        console.print(f"[{ERR}]No backend configured. Run: topgun config set backend gdrive[/{ERR}]")
+        console.print(f"[{ERR}]No backend configured. Run: topgun connection set backend gdrive[/{ERR}]")
         raise typer.Exit(1)
 
     client_id = storage.get("client_id", "")
     client_secret = storage.get("client_secret", "")
     if not client_id or not client_secret:
         console.print(f"[{ERR}]Missing OAuth credentials. Run:[/{ERR}]")
-        console.print(f"  topgun config set backend {backend} --client-id <id> --client-secret <secret>")
+        console.print(f"  topgun connection set backend {backend} --client-id <id> --client-secret <secret>")
         raise typer.Exit(1)
 
     try:
@@ -222,7 +222,7 @@ def _login_service(name: str):
     cfg = _load_config()
     connections = cfg.get("connections", {})
     if name not in connections:
-        console.print(f"[{ERR}]No connection named '{name}'. Run: topgun config set github --name {name}[/{ERR}]")
+        console.print(f"[{ERR}]No connection named '{name}'. Run: topgun connection set github --name {name}[/{ERR}]")
         raise typer.Exit(1)
 
     provider = connections[name].get("provider", "")
@@ -346,7 +346,7 @@ def auth_status():
     table.add_row(
         f"backend ({backend or '—'})",
         f"[{SMOKE}]configured[/{SMOKE}]" if backend else f"[{ERR}]not set[/{ERR}]",
-        "run: topgun config set backend gdrive" if not backend else "run: topgun auth login backend",
+        "run: topgun connection set backend gdrive" if not backend else "run: topgun auth login backend",
     )
 
     for name, conn in cfg.get("connections", {}).items():

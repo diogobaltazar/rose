@@ -1,11 +1,11 @@
 import os
-import time
 import typer
 from pathlib import Path
 from topgun.cli.install import install
 from topgun.cli.upgrade import upgrade
 from topgun.cli.auth import app as auth_app
 from topgun.cli.config import app as config_app
+from topgun.cli.connection import app as connection_app
 from topgun.cli.intel import app as intel_app
 from topgun.cli.mission import app as mission_app
 from topgun.cli.notes import app as notes_app
@@ -13,7 +13,7 @@ from topgun.cli.observe import app as observe_app
 from topgun.cli.pilot import app as pilot_app
 from topgun.cli.session import app as session_app
 from topgun.cli.task import app as task_app
-from topgun.cli.theme import console, SMOKE
+from topgun.cli.theme import console, WARN
 
 app = typer.Typer(
     name="topgun",
@@ -29,13 +29,7 @@ def _warn_if_no_api_key() -> None:
     for var in ("TOPGUN_ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY"):
         if os.environ.get(var, "").strip():
             return
-    with console.status(
-        f"[{SMOKE}]no api key found — some operations unavailable  "
-        f"(set TOPGUN_ANTHROPIC_API_KEY)[/{SMOKE}]",
-        spinner="dots",
-        spinner_style=SMOKE,
-    ):
-        time.sleep(1.2)
+    console.print(f"[{WARN}]⚠ no api keys detected for llm inference[/{WARN}]")
 
 
 @app.callback()
@@ -49,6 +43,7 @@ app.command()(install)
 app.command()(upgrade)
 app.add_typer(auth_app)
 app.add_typer(config_app)
+app.add_typer(connection_app)
 app.add_typer(intel_app)
 app.add_typer(mission_app)
 app.add_typer(notes_app)

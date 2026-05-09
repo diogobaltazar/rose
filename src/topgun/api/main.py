@@ -23,6 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from prometheus_fastapi_instrumentator import Instrumentator
 from watchfiles import awatch
 
 from deps import require_auth, AUTH0_DOMAIN, AUTH0_CLIENT_ID, AUTH0_AUDIENCE
@@ -667,6 +668,8 @@ def _scan_sessions() -> list[dict]:
 # ── FastAPI app ──────────────────────────────────────────────────────────────
 
 app = FastAPI()
+
+Instrumentator().instrument(app).expose(app)
 
 app.add_middleware(
     CORSMiddleware,

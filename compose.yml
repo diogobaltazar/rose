@@ -1,4 +1,7 @@
 services:
+
+  # ── Application ──────────────────────────────────────────────────────────────
+
   api:
     container_name: topgun-api
     build:
@@ -11,7 +14,6 @@ services:
       - "${HOME}/.claude/teams:/teams:ro"
       - "${HOME}/.config/topgun:/topgun-config:ro"
       - "${HOME}:/user-home:ro"
-      - redis-data:/data
     environment:
       - LOG_DIR=/logs
       - PROJECTS_DIR=/projects
@@ -21,7 +23,7 @@ services:
       - WATCHFILES_FORCE_POLLING=true
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
       - USER_HOME=/user-home
-      - REDIS_URL=redis://localhost:6379
+      - REDIS_URL=redis://redis:6379
       - AUTH0_DOMAIN=${AUTH0_DOMAIN:-}
       - AUTH0_CLIENT_ID=${AUTH0_CLIENT_ID:-}
       - AUTH0_CLI_CLIENT_ID=${AUTH0_CLI_CLIENT_ID:-}
@@ -33,6 +35,8 @@ services:
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5100}
     ports:
       - "5101:8000"
+    depends_on:
+      - redis
 
   web:
     container_name: topgun-web
@@ -42,5 +46,124 @@ services:
     depends_on:
       - api
 
+  # ── Data stores ───────────────────────────────────────────────────────────────
+
+  redis:
+    container_name: topgun-redis
+    image: redis:7-alpine
+    command: redis-server --loglevel warning --appendonly yes --dir /data
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+
+  # ── Observability: metrics ────────────────────────────────────────────────────
+
+  prometheus:
+    container_name: topgun-prometheus
+    image: prom/prometheus:v2.51.2
+    volumes:
+      - ./src/topgun/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+    ports:
+      - "9090:9090"
+    depends_on:
+      - api
+
+  node-exporter:
+    container_name: topgun-node-exporter
+    image: prom/node-exporter:v1.7.0
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - --path.procfs=/host/proc
+      - --path.rootfs=/rootfs
+      - --path.sysfs=/host/sys
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+    ports:
+      - "9100:9100"
+    pid: host
+
+  cadvisor:
+    container_name: topgun-cadvisor
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+    ports:
+      - "8080:8080"
+    privileged: true
+    devices:
+      - /dev/kmsg
+
+  redis-exporter:
+    container_name: topgun-redis-exporter
+    image: oliver006/redis_exporter:v1.59.0
+    environment:
+      - REDIS_ADDR=redis://redis:6379
+    ports:
+      - "9121:9121"
+    depends_on:
+      - redis
+
+  # ── Observability: logs ───────────────────────────────────────────────────────
+
+  loki:
+    container_name: topgun-loki
+    image: grafana/loki:2.9.7
+    volumes:
+      - ./src/topgun/observability/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/loki
+    command: -config.file=/etc/loki/loki-config.yml
+    ports:
+      - "3100:3100"
+
+  promtail:
+    container_name: topgun-promtail
+    image: grafana/promtail:2.9.7
+    volumes:
+      - ./src/topgun/observability/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/log:/var/log:ro
+      - "${HOME}/.claude/logs:/claude-logs:ro"
+    command: -config.file=/etc/promtail/promtail-config.yml
+    ports:
+      - "9080:9080"
+    depends_on:
+      - loki
+
+  # ── Observability: dashboards ─────────────────────────────────────────────────
+
+  grafana:
+    container_name: topgun-grafana
+    image: grafana/grafana:10.4.2
+    volumes:
+      - ./src/topgun/observability/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+      - ./src/topgun/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./src/topgun/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=topgun
+      - GF_USERS_ALLOW_SIGN_UP=false
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+      - loki
+
 volumes:
   redis-data:
+  prometheus-data:
+  loki-data:
+  grafana-data:

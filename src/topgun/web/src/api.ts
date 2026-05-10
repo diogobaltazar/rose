@@ -163,6 +163,7 @@ export interface ConnectionStatus {
   llm: { connected: boolean; working: boolean };
   services: { name: string; provider: string; account: string }[];
   github_repos: GithubRepo[];
+  gitpod?: { connected: boolean; host: string; class_id: string };
 }
 
 export async function getConnections(token: string): Promise<ConnectionStatus> {
@@ -193,6 +194,37 @@ export async function createMissionPlan(
   }
   invalidateCache("intel-list", "intel-stats");
   return r.json();
+}
+
+export async function verifyGitpodToken(
+  token: string,
+  host: string,
+  gitpodToken: string,
+  devcontainer: string,
+  classId: string,
+): Promise<void> {
+  const r = await authFetch(`${BASE}/connect/gitpod/verify`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ host, token: gitpodToken, devcontainer, class_id: classId }),
+  });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail ?? "Verification failed");
+}
+
+export async function saveGitpodConnection(
+  token: string,
+  host: string,
+  gitpodToken: string,
+  devcontainer: string,
+  classId: string,
+): Promise<void> {
+  const r = await authFetch(`${BASE}/connect/gitpod`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ host, token: gitpodToken, devcontainer, class_id: classId }),
+  });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail ?? "Save failed");
+  invalidateCache("connections");
 }
 
 export async function fetchDocs(slug: string): Promise<string> {

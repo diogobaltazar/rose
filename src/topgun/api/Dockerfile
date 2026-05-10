@@ -15,6 +15,7 @@ COPY src/topgun/api/intel.py .
 COPY src/topgun/api/timer.py .
 COPY src/topgun/api/connect.py .
 COPY src/topgun/api/missions.py .
+COPY src/topgun/api/environments.py .
 COPY src/topgun/api/entrypoint.sh .
 RUN chmod +x entrypoint.sh
 CMD ["./entrypoint.sh"]

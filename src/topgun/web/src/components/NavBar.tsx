@@ -22,10 +22,10 @@ export default function NavBar() {
   ];
 
   return (
-    <nav className="relative z-20 flex items-center justify-between px-6 py-3 border-b border-border-dim bg-base/80 backdrop-blur-sm">
+    <nav className="relative z-20 flex items-center justify-between px-6 py-3 border-b border-border-DEFAULT bg-base">
       {/* Brand */}
-      <Link to="/deck/missions" className="font-mono text-sm font-bold tracking-[0.3em] hover:opacity-80 transition-opacity shrink-0">
-        <span className="text-white/70">ALMA VICTORIA</span>{" "}
+      <Link to="/deck/missions" className="font-mono text-sm font-bold tracking-[0.3em] hover:opacity-70 transition-opacity shrink-0">
+        <span className="text-text-secondary">ALMA VICTORIA</span>{" "}
         <span className="text-amber-tac">TOPGUN</span>
       </Link>
 
@@ -43,7 +43,7 @@ export default function NavBar() {
           >
             {item.label}
             {"badge" in item && item.badge > 0 && (
-              <span className="font-mono text-xs bg-amber-tac text-base px-1.5 py-0.5 leading-none rounded-sm">
+              <span className="font-mono text-xs bg-amber-tac text-white px-1.5 py-0.5 leading-none rounded-sm">
                 {item.badge}
               </span>
             )}

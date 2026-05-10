@@ -33,6 +33,7 @@ from intel import router as intel_router
 from timer import router as timer_router
 from connect import router as connect_router
 from missions import router as missions_router
+from environments import router as environments_router
 
 DOCS_DIR = Path(os.environ.get("DOCS_DIR", Path(__file__).parent.parent.parent.parent / "docs"))
 LOG_DIR = Path(os.environ.get("LOG_DIR", Path.home() / ".claude" / "logs"))
@@ -682,6 +683,7 @@ app.include_router(intel_router)
 app.include_router(timer_router)
 app.include_router(connect_router)
 app.include_router(missions_router)
+app.include_router(environments_router)
 
 
 @app.get("/config")

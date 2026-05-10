@@ -25,6 +25,10 @@ import httpx
 from deps import require_auth, get_redis, get_storage
 from gdrive import encrypt_token, decrypt_token, get_auth_url, exchange_code
 
+
+def _gitpod_key(sub: str) -> str:
+    return f"user:gitpod:{sub}"
+
 router = APIRouter(prefix="/connect", tags=["connect"])
 
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5100")
@@ -404,12 +408,84 @@ async def list_connections(
         except Exception:
             pass
 
+    gitpod_enc = get_redis().get(_gitpod_key(sub))
+    gitpod_config = json.loads(decrypt_token(gitpod_enc, sub)) if gitpod_enc else None
+
     return {
         "backend": {"provider": "gdrive", "connected": backend_connected, "file_count": file_count},
         "llm": {"connected": llm_connected, "working": llm_working},
         "services": services,
         "github_repos": github_repos,
+        "gitpod": {
+            "connected": bool(gitpod_enc),
+            "host": gitpod_config.get("host", "") if gitpod_config else "",
+            "class_id": gitpod_config.get("class_id", "") if gitpod_config else "",
+        },
     }
+
+
+# ── Gitpod / Ona connection ───────────────────────────────────────────────────
+
+class GitpodConnectionBody(BaseModel):
+    host: str           # e.g. https://flexdev.roche.com
+    token: str          # personal access token
+    devcontainer: str   # JSON string — image + features, user-defined
+    class_id: str       # environment class/size ID
+
+
+@router.post("/gitpod/verify")
+async def verify_gitpod(
+    body: GitpodConnectionBody,
+    auth: dict | None = Depends(require_auth),
+) -> dict[str, str]:
+    """Test a Gitpod token without saving."""
+    if not auth:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    host = body.host.rstrip("/")
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"{host}/api/v1/user",
+                headers={"Authorization": f"Bearer {body.token}"},
+                timeout=10,
+            )
+        if resp.status_code == 401:
+            raise HTTPException(status_code=502, detail="Invalid token")
+        resp.raise_for_status()
+    except HTTPException:
+        raise
+    except httpx.ConnectError as e:
+        raise HTTPException(status_code=502, detail=f"Cannot reach {host}: {e}")
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=502, detail=f"Gitpod error: {e.response.status_code}")
+    return {"status": "ok"}
+
+
+@router.post("/gitpod")
+async def connect_gitpod(
+    body: GitpodConnectionBody,
+    auth: dict | None = Depends(require_auth),
+) -> dict[str, str]:
+    """Store encrypted Gitpod connection credentials."""
+    if not auth:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    sub = auth["sub"]
+    payload = {
+        "host": body.host.rstrip("/"),
+        "token": body.token,
+        "devcontainer": body.devcontainer,
+        "class_id": body.class_id,
+    }
+    get_redis().set(_gitpod_key(sub), encrypt_token(json.dumps(payload), sub))
+    return {"status": "connected"}
+
+
+def get_gitpod_config(sub: str) -> dict | None:
+    """Return decrypted Gitpod config for sub, or None."""
+    enc = get_redis().get(_gitpod_key(sub))
+    if not enc:
+        return None
+    return json.loads(decrypt_token(enc, sub))
 
 
 @router.delete("/{name}", status_code=204)
@@ -427,6 +503,9 @@ async def remove_connection(
         return
     if name == "llm":
         r.delete(_llm_key(sub))
+        return
+    if name == "gitpod":
+        r.delete(_gitpod_key(sub))
         return
     r.delete(_cred_key(sub, name))
     try:

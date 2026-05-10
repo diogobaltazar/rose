@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useToken } from "../hooks/useToken";
 import NavBar from "../components/NavBar";
 import HUDGrid from "../components/HUDGrid";
-import { addGithubRepo, removeGithubRepo, saveLlmConfig, fetchLlmConfig, verifyLlmConfig, getConnections, peekCache, invalidateCache } from "../api";
+import { addGithubRepo, removeGithubRepo, saveLlmConfig, fetchLlmConfig, verifyLlmConfig, getConnections, peekCache, invalidateCache, verifyGitpodToken, saveGitpodConnection } from "../api";
 import type { ConnectionStatus } from "../api";
 import ChatDialog from "../components/ChatDialog";
 import ProviderPicker from "../components/ProviderPicker";
@@ -211,6 +211,16 @@ export default function Connections() {
   const [ghPat, setGhPat] = useState("");
   const [ghChecks, setGhChecks] = useState<Check[] | null>(null);
   const [ghVerifying, setGhVerifying] = useState(false);
+
+  // Gitpod form
+  const [showGitpodForm, setShowGitpodForm] = useState(false);
+  const [gpHost, setGpHost] = useState("https://flexdev.roche.com");
+  const [gpToken, setGpToken] = useState("");
+  const [gpDevcontainer, setGpDevcontainer] = useState('{\n  "image": "",\n  "features": {}\n}');
+  const [gpClassId, setGpClassId] = useState("");
+  const [gpBusy, setGpBusy] = useState(false);
+  const [gpError, setGpError] = useState<string | null>(null);
+  const [gpVerified, setGpVerified] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) loginWithRedirect();
@@ -618,6 +628,114 @@ export default function Connections() {
               )}
             </>
           ) : null}
+        </section>
+
+        {/* ── Gitpod / Ona Environment ─────────────────── */}
+        <section className="mb-8">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="font-mono text-xs text-text-muted tracking-widest uppercase">Environment Runner</div>
+          </div>
+          <p className="font-mono text-xs text-text-muted/70 mb-4 leading-relaxed">
+            Connects to your Gitpod / Ona instance to provision cloud development environments for mission execution. Your token and devcontainer config are encrypted and stored per user.
+          </p>
+
+          {fetching ? (
+            <div className="tac-border p-5 flex items-center justify-between">
+              <div className="font-mono text-xs text-amber-tac animate-pulse_amber tracking-widest">CHECKING…</div>
+              <span className="font-mono text-xs text-amber-tac animate-pulse_amber tracking-widest">···</span>
+            </div>
+          ) : (
+            <div className="tac-border p-5 flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${status?.gitpod?.connected ? "bg-green-live" : "bg-border-dim"}`} />
+                  <span className="font-mono text-xs text-text-primary">
+                    {status?.gitpod?.connected ? status.gitpod.host : "NOT CONFIGURED"}
+                  </span>
+                </div>
+                <div className="font-mono text-xs text-text-muted mt-1">
+                  {status?.gitpod?.connected
+                    ? `Class: ${status.gitpod.class_id || "—"} · Token-authenticated`
+                    : "Configure a Gitpod token to enable mission environments"}
+                </div>
+              </div>
+              {status?.gitpod?.connected ? (
+                <div className="flex gap-2">
+                  <button onClick={() => setShowGitpodForm(v => !v)} disabled={busy}
+                    className="font-mono text-xs px-4 py-1.5 border border-amber-tac/40 text-amber-tac/60 hover:border-amber-tac hover:text-amber-tac tracking-widest">
+                    UPDATE
+                  </button>
+                  <button onClick={async () => { setBusy(true); try { const t = await getToken(); await fetch("/api/connect/gitpod", { method: "DELETE", headers: { Authorization: `Bearer ${t}` } }); invalidateCache("connections"); await load(true); } finally { setBusy(false); } }} disabled={busy}
+                    className="font-mono text-xs px-4 py-1.5 border border-red-alert/40 text-red-alert/60 hover:border-red-alert hover:text-red-alert tracking-widest">
+                    DISCONNECT
+                  </button>
+                </div>
+              ) : (
+                <button onClick={() => setShowGitpodForm(true)} disabled={busy}
+                  className="font-mono text-xs px-4 py-1.5 border border-amber-tac text-amber-tac hover:bg-amber-tac/10 tracking-widest">
+                  CONNECT
+                </button>
+              )}
+            </div>
+          )}
+
+          {showGitpodForm && (
+            <div className="mt-4 space-y-3">
+              {gpError && <p className="font-mono text-xs text-red-alert">{gpError}</p>}
+              <p className="font-mono text-xs text-text-muted">
+                Token and devcontainer config are encrypted and never shared. The image and features you define here control what runs in each environment.
+              </p>
+              <input type="text" placeholder="Gitpod host (e.g. https://flexdev.roche.com)"
+                value={gpHost} onChange={e => setGpHost(e.target.value)}
+                className="w-full bg-card border border-border-dim px-3 py-1.5 font-mono text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-amber-tac" />
+              <input type="password" placeholder="Personal Access Token"
+                value={gpToken} onChange={e => { setGpToken(e.target.value); setGpVerified(false); }}
+                className="w-full bg-card border border-border-dim px-3 py-1.5 font-mono text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-amber-tac" />
+              <input type="text" placeholder="Environment class ID (from gitpod environment list-classes)"
+                value={gpClassId} onChange={e => setGpClassId(e.target.value)}
+                className="w-full bg-card border border-border-dim px-3 py-1.5 font-mono text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-amber-tac" />
+              <div>
+                <div className="font-mono text-xs text-text-muted mb-1 tracking-widest">DEVCONTAINER CONFIG</div>
+                <textarea
+                  value={gpDevcontainer}
+                  onChange={e => setGpDevcontainer(e.target.value)}
+                  rows={6}
+                  spellCheck={false}
+                  className="w-full bg-card border border-border-dim px-3 py-2 font-mono text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-amber-tac resize-y"
+                  placeholder={'{\n  "image": "eu.repository.roche.com/...",\n  "features": {}\n}'}
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  disabled={gpBusy || !gpHost || !gpToken || !gpClassId}
+                  onClick={async () => {
+                    setGpBusy(true); setGpError(null); setGpVerified(false);
+                    try {
+                      const t = await getToken();
+                      await verifyGitpodToken(t, gpHost, gpToken, gpDevcontainer, gpClassId);
+                      setGpVerified(true);
+                      await saveGitpodConnection(t, gpHost, gpToken, gpDevcontainer, gpClassId);
+                      invalidateCache("connections");
+                      await load(true);
+                      setShowGitpodForm(false);
+                      setGpToken("");
+                    } catch (e) {
+                      setGpError(String(e));
+                    } finally {
+                      setGpBusy(false);
+                    }
+                  }}
+                  className="font-mono text-xs px-4 py-1.5 border border-amber-tac text-amber-tac hover:bg-amber-tac/10 tracking-widest disabled:opacity-40"
+                >
+                  {gpBusy ? "VERIFYING…" : gpVerified ? "✓ SAVED" : "VERIFY & SAVE"}
+                </button>
+                <button onClick={() => { setShowGitpodForm(false); setGpError(null); setGpToken(""); setGpVerified(false); }}
+                  className="font-mono text-xs px-4 py-1.5 border border-border-dim text-text-muted hover:text-text-secondary tracking-widest">
+                  CANCEL
+                </button>
+              </div>
+            </div>
+          )}
         </section>
 
         {/* ── Service Connections (legacy) ──────────────── */}
